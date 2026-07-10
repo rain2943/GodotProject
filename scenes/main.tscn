@@ -1,18 +1,307 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
-[ext_resource type="FontFile" path="res://assets/fonts/Pretendard-Regular.otf" id="2_font"]
+[ext_resource type="Texture2D" path="res://assets/environment/ruined_seoul.png" id="2_bg"]
+[ext_resource type="Texture2D" path="res://assets/characters/survivor.png" id="3_survivor"]
+[ext_resource type="FontFile" path="res://assets/fonts/Pretendard-Regular.otf" id="4_font"]
 
-[node name="Main" type="Control"]
-layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+[sub_resource type="BoxShape3D" id="BoxShape_player"]
+size = Vector3(0.48, 0.72, 0.2)
+
+[sub_resource type="StandardMaterial3D" id="Material_smoke"]
+transparency = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(0.22, 0.25, 0.27, 0.2)
+billboard_mode = 1
+
+[sub_resource type="QuadMesh" id="Mesh_smoke"]
+material = SubResource("Material_smoke")
+size = Vector2(0.72, 0.72)
+
+[sub_resource type="ParticleProcessMaterial" id="Particles_smoke"]
+emission_shape = 3
+emission_box_extents = Vector3(0.34, 0.08, 0.08)
+direction = Vector3(0.12, 1, 0)
+spread = 22.0
+gravity = Vector3(0.03, 0.08, 0)
+initial_velocity_min = 0.22
+initial_velocity_max = 0.55
+scale_min = 0.45
+scale_max = 1.2
+color = Color(0.43, 0.46, 0.48, 0.28)
+
+[sub_resource type="StandardMaterial3D" id="Material_rain"]
+transparency = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(0.62, 0.72, 0.78, 0.34)
+billboard_mode = 1
+
+[sub_resource type="QuadMesh" id="Mesh_rain"]
+material = SubResource("Material_rain")
+size = Vector2(0.012, 0.24)
+
+[sub_resource type="ParticleProcessMaterial" id="Particles_rain"]
+emission_shape = 3
+emission_box_extents = Vector3(7.2, 4.2, 0.2)
+direction = Vector3(-0.18, -1, 0)
+spread = 3.0
+gravity = Vector3(-0.05, -1.8, 0)
+initial_velocity_min = 2.8
+initial_velocity_max = 4.2
+scale_min = 0.7
+scale_max = 1.25
+color = Color(0.62, 0.72, 0.78, 0.4)
+
+[sub_resource type="StandardMaterial3D" id="Material_embers"]
+transparency = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(1, 0.36, 0.08, 0.75)
+billboard_mode = 1
+
+[sub_resource type="QuadMesh" id="Mesh_embers"]
+material = SubResource("Material_embers")
+size = Vector2(0.04, 0.04)
+
+[sub_resource type="ParticleProcessMaterial" id="Particles_embers"]
+emission_shape = 3
+emission_box_extents = Vector3(0.22, 0.08, 0.04)
+direction = Vector3(0.25, 1, 0)
+spread = 38.0
+gravity = Vector3(0, 0.18, 0)
+initial_velocity_min = 0.35
+initial_velocity_max = 0.85
+scale_min = 0.35
+scale_max = 1.0
+color = Color(1, 0.34, 0.06, 0.82)
+
+[sub_resource type="StyleBoxFlat" id="Panel_dark"]
+bg_color = Color(0.02, 0.025, 0.03, 0.78)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.42, 0.48, 0.46, 0.34)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="Slot_style"]
+bg_color = Color(0.025, 0.03, 0.035, 0.88)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.65, 0.7, 0.66, 0.42)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[node name="Main" type="Node3D"]
 script = ExtResource("1_main")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 10)
+projection = 1
+size = 8.0
+current = true
+
+[node name="Background" type="Sprite3D" parent="."]
+texture = ExtResource("2_bg")
+pixel_size = 0.00852
+position = Vector3(0, 0, -1)
+shaded = false
+
+[node name="SmokeLeft" type="GPUParticles3D" parent="."]
+position = Vector3(-2.8, 0.95, 0.2)
+amount = 20
+lifetime = 4.2
+randomness = 0.7
+process_material = SubResource("Particles_smoke")
+draw_pass_1 = SubResource("Mesh_smoke")
+
+[node name="SmokeRight" type="GPUParticles3D" parent="."]
+position = Vector3(2.8, -0.2, 0.18)
+amount = 14
+lifetime = 3.6
+randomness = 0.8
+process_material = SubResource("Particles_smoke")
+draw_pass_1 = SubResource("Mesh_smoke")
+
+[node name="Rain" type="GPUParticles3D" parent="."]
+position = Vector3(0, 0, 3)
+amount = 240
+lifetime = 2.0
+randomness = 1.0
+process_material = SubResource("Particles_rain")
+draw_pass_1 = SubResource("Mesh_rain")
+
+[node name="Embers" type="GPUParticles3D" parent="."]
+position = Vector3(2.65, -1.12, 2.15)
+amount = 18
+lifetime = 2.2
+randomness = 0.9
+process_material = SubResource("Particles_embers")
+draw_pass_1 = SubResource("Mesh_embers")
+
+[node name="Player" type="CharacterBody3D" parent="."]
+position = Vector3(0.2, -1.42, 2)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+shape = SubResource("BoxShape_player")
+
+[node name="Survivor" type="Sprite3D" parent="Player"]
+texture = ExtResource("3_survivor")
+pixel_size = 0.0023
+position = Vector3(0, 0.55, 0)
+shaded = false
+alpha_cut = 1
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="TopLeft" type="PanelContainer" parent="HUD"]
+offset_left = 18.0
+offset_top = 18.0
+offset_right = 350.0
+offset_bottom = 120.0
+theme_override_styles/panel = SubResource("Panel_dark")
+
+[node name="Margin" type="MarginContainer" parent="HUD/TopLeft"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 10
+
+[node name="VBox" type="VBoxContainer" parent="HUD/TopLeft/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="Name" type="Label" parent="HUD/TopLeft/Margin/VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("4_font")
+theme_override_font_sizes/font_size = 18
+text = "윤서  ·  Lv. 01"
+
+[node name="Health" type="ProgressBar" parent="HUD/TopLeft/Margin/VBox"]
+custom_minimum_size = Vector2(290, 10)
+layout_mode = 2
+value = 82.0
+show_percentage = false
+
+[node name="Stats" type="Label" parent="HUD/TopLeft/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.78, 0.74, 1)
+theme_override_fonts/font = ExtResource("4_font")
+theme_override_font_sizes/font_size = 13
+text = "체력  82/100     수분  74     탄약  28"
+
+[node name="Objective" type="PanelContainer" parent="HUD"]
+offset_left = 18.0
+offset_top = 132.0
+offset_right = 352.0
+offset_bottom = 204.0
+theme_override_styles/panel = SubResource("Panel_dark")
+
+[node name="Text" type="Label" parent="HUD/Objective"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.76, 0.32, 1)
+theme_override_fonts/font = ExtResource("4_font")
+theme_override_font_sizes/font_size = 15
+text = "  남산 터널로 이동\n  · 생존 물자를 확보하십시오"
+vertical_alignment = 1
+
+[node name="TopRight" type="VBoxContainer" parent="HUD"]
+offset_left = 1010.0
+offset_top = 18.0
+offset_right = 1262.0
+offset_bottom = 100.0
+alignment = 2
+
+[node name="Location" type="Label" parent="HUD/TopRight"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("4_font")
+theme_override_font_sizes/font_size = 15
+text = "종로구  ·  125-7 구역"
+horizontal_alignment = 2
+
+[node name="Time" type="Label" parent="HUD/TopRight"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.84, 0.78, 0.58, 1)
+theme_override_fonts/font = ExtResource("4_font")
+theme_override_font_sizes/font_size = 14
+text = "흐림  09:42"
+horizontal_alignment = 2
+
+[node name="QuickSlots" type="HBoxContainer" parent="HUD"]
+offset_left = 22.0
+offset_top = 636.0
+offset_right = 416.0
+offset_bottom = 700.0
+theme_override_constants/separation = 7
+
+[node name="Slot1" type="PanelContainer" parent="HUD/QuickSlots"]
+custom_minimum_size = Vector2(62, 62)
+layout_mode = 2
+theme_override_styles/panel = SubResource("Slot_style")
+[node name="Label" type="Label" parent="HUD/QuickSlots/Slot1"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("4_font")
+theme_override_font_sizes/font_size = 12
+text = "소총\n28"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Slot2" type="PanelContainer" parent="HUD/QuickSlots"]
+custom_minimum_size = Vector2(62, 62)
+layout_mode = 2
+theme_override_styles/panel = SubResource("Slot_style")
+[node name="Label" type="Label" parent="HUD/QuickSlots/Slot2"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("4_font")
+theme_override_font_sizes/font_size = 12
+text = "물\n2"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Slot3" type="PanelContainer" parent="HUD/QuickSlots"]
+custom_minimum_size = Vector2(62, 62)
+layout_mode = 2
+theme_override_styles/panel = SubResource("Slot_style")
+[node name="Label" type="Label" parent="HUD/QuickSlots/Slot3"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("4_font")
+theme_override_font_sizes/font_size = 12
+text = "붕대\n3"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Slot4" type="PanelContainer" parent="HUD/QuickSlots"]
+custom_minimum_size = Vector2(62, 62)
+layout_mode = 2
+theme_override_styles/panel = SubResource("Slot_style")
+[node name="Label" type="Label" parent="HUD/QuickSlots/Slot4"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("4_font")
+theme_override_font_sizes/font_size = 12
+text = "통조림\n1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="TouchStick" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 0
+offset_left = 74.0
+offset_top = 520.0
+offset_right = 202.0
+offset_bottom = 648.0
+mouse_filter = 2
+
+[node name="Ring" type="ColorRect" parent="HUD/TouchStick"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -20,32 +309,12 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-color = Color(0.035, 0.043, 0.063, 1)
+color = Color(0.25, 0.28, 0.3, 0.25)
 
-[node name="Center" type="CenterContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-
-[node name="Stack" type="VBoxContainer" parent="Center"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Title" type="Label" parent="Center/Stack"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.88, 0.92, 1, 1)
-theme_override_fonts/font = ExtResource("2_font")
-theme_override_font_sizes/font_size = 64
-text = "안녕하세요"
-horizontal_alignment = 1
-
-[node name="Status" type="Label" parent="Center/Stack"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.52, 0.82, 0.68, 1)
-theme_override_fonts/font = ExtResource("2_font")
-theme_override_font_sizes/font_size = 18
-text = "Godot Web preview is live"
-horizontal_alignment = 1
+[node name="Knob" type="ColorRect" parent="HUD/TouchStick"]
+offset_left = 40.0
+offset_top = 40.0
+offset_right = 88.0
+offset_bottom = 88.0
+mouse_filter = 2
+color = Color(0.72, 0.76, 0.73, 0.48)

@@ -1,6 +1,7 @@
 # Godot generated files
 .godot/
 addons/godot_mcp/cache/
+.codex-remote-attachments/
 .import/
 
 # Local exports and build output
