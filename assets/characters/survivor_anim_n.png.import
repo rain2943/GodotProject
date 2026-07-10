@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://2solbign5dnj"
-path="res://.godot/imported/survivor.png-16a47c6a3a0312676b20db646c4334e6.ctex"
+uid="uid://x6fbnnvn1jdl"
+path="res://.godot/imported/survivor_anim_n.png-b3d1bd7738fe273ea621304618cf6bbc.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/survivor.png"
-dest_files=["res://.godot/imported/survivor.png-16a47c6a3a0312676b20db646c4334e6.ctex"]
+source_file="res://assets/characters/survivor_anim_n.png"
+dest_files=["res://.godot/imported/survivor_anim_n.png-b3d1bd7738fe273ea621304618cf6bbc.ctex"]
 
 [params]
 

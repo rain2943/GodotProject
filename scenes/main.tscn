@@ -1,8 +1,7 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/isometric_map.gd" id="2_map"]
-[ext_resource type="Texture2D" path="res://assets/characters/survivor_s.png" id="3_survivor"]
 [ext_resource type="FontFile" path="res://assets/fonts/Pretendard-Regular.otf" id="4_font"]
 
 [sub_resource type="Environment" id="Environment_city"]
@@ -164,10 +163,9 @@ shape = SubResource("Capsule_player")
 position = Vector3(0, -0.7, 0)
 mesh = SubResource("Mesh_shadow")
 
-[node name="Survivor" type="Sprite3D" parent="Player"]
-position = Vector3(0, 1.18, 0)
-texture = ExtResource("3_survivor")
-pixel_size = 0.00205
+[node name="Survivor" type="AnimatedSprite3D" parent="Player"]
+position = Vector3(0, 0.3, 0)
+pixel_size = 0.0068
 billboard = 1
 shaded = false
 alpha_cut = 1

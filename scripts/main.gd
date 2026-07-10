@@ -2,17 +2,18 @@ extends Node3D
 
 const MOVE_SPEED := 5.2
 const MAP_LIMIT := 30.5
-const DIRECTION_TEXTURES := {
-	"s": preload("res://assets/characters/survivor_s.png"),
-	"se": preload("res://assets/characters/survivor.png"),
-	"e": preload("res://assets/characters/survivor_e.png"),
-	"ne": preload("res://assets/characters/survivor_ne.png"),
-	"n": preload("res://assets/characters/survivor_n.png"),
+const ANIMATION_SHEETS := {
+	"s": preload("res://assets/characters/survivor_anim_s.png"),
+	"se": preload("res://assets/characters/survivor_anim_se.png"),
+	"e": preload("res://assets/characters/survivor_anim_e.png"),
+	"ne": preload("res://assets/characters/survivor_anim_ne.png"),
+	"n": preload("res://assets/characters/survivor_anim_n.png"),
 }
 const DIRECTION_NAMES := ["s", "se", "e", "ne", "n", "nw", "w", "sw"]
+const FRAME_SIZE := Vector2(384, 384)
 
 @onready var player: CharacterBody3D = $Player
-@onready var survivor: Sprite3D = $Player/Survivor
+@onready var survivor: AnimatedSprite3D = $Player/Survivor
 @onready var camera_rig: Node3D = $CameraRig
 @onready var camera: Camera3D = $CameraRig/Camera3D
 @onready var touch_stick: Control = $HUD/TouchStick
@@ -23,14 +24,15 @@ const DIRECTION_NAMES := ["s", "se", "e", "ne", "n", "nw", "w", "sw"]
 var touch_id := -1
 var touch_origin := Vector2.ZERO
 var touch_vector := Vector2.ZERO
-var idle_phase := 0.0
 var facing := "s"
+var motion_state := "idle"
 
 
 func _ready() -> void:
 	camera.position = Vector3(10.5, 12.5, 10.5)
 	camera.look_at(Vector3.ZERO)
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
+	_build_sprite_frames()
 	_set_facing("s")
 
 
@@ -49,15 +51,11 @@ func _physics_process(delta: float) -> void:
 		world_direction = world_direction.normalized()
 		player.velocity = world_direction * MOVE_SPEED
 		_update_facing(world_direction)
-		idle_phase += delta * 9.5
-		survivor.position.y = 1.18 + absf(sin(idle_phase)) * 0.045
-		survivor.rotation.z = sin(idle_phase) * 0.008
+		_set_motion_state("walk")
 		state_label.text = "이동 중"
 	else:
 		player.velocity = Vector3.ZERO
-		idle_phase += delta * 2.2
-		survivor.position.y = 1.18 + sin(idle_phase) * 0.022
-		survivor.rotation.z = sin(idle_phase * 0.5) * 0.006
+		_set_motion_state("idle")
 		state_label.text = "경계 중"
 
 	player.move_and_slide()
@@ -76,17 +74,51 @@ func _update_facing(direction: Vector3) -> void:
 
 
 func _set_facing(direction_name: String) -> void:
-	if facing == direction_name and survivor.texture != null:
+	if facing == direction_name and survivor.is_playing():
 		return
 	facing = direction_name
-	var source := direction_name
+	_play_directional_animation()
+
+
+func _set_motion_state(next_state: String) -> void:
+	if motion_state == next_state:
+		return
+	motion_state = next_state
+	_play_directional_animation()
+
+
+func _play_directional_animation() -> void:
+	var source := facing
 	var flipped := false
-	match direction_name:
+	match facing:
 		"sw": source = "se"; flipped = true
 		"w": source = "e"; flipped = true
 		"nw": source = "ne"; flipped = true
-	survivor.texture = DIRECTION_TEXTURES[source]
 	survivor.flip_h = flipped
+	survivor.play("%s_%s" % [motion_state, source])
+
+
+func _build_sprite_frames() -> void:
+	var frames := SpriteFrames.new()
+	frames.remove_animation("default")
+	for direction_name in ANIMATION_SHEETS:
+		for state in ["idle", "walk"]:
+			var animation_name := "%s_%s" % [state, direction_name]
+			frames.add_animation(animation_name)
+			frames.set_animation_loop(animation_name, true)
+			frames.set_animation_speed(animation_name, 7.0 if state == "idle" else 10.0)
+			var first_frame := 0 if state == "idle" else 8
+			for frame_index in range(first_frame, first_frame + 8):
+				var atlas := AtlasTexture.new()
+				atlas.atlas = ANIMATION_SHEETS[direction_name]
+				atlas.region = Rect2(
+					(frame_index % 4) * FRAME_SIZE.x,
+					(frame_index / 4) * FRAME_SIZE.y,
+					FRAME_SIZE.x,
+					FRAME_SIZE.y
+				)
+				frames.add_frame(animation_name, atlas)
+	survivor.sprite_frames = frames
 
 
 func _update_camera_occluders() -> void:
