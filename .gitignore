@@ -1,0 +1,13 @@
+# Godot generated files
+.godot/
+.import/
+
+# Local exports and build output
+build/
+dist/
+export/
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+*.tmp
