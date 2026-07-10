@@ -8,6 +8,19 @@ Minimal Godot 4 project with automatic Windows and Web exports.
 2. Open this folder in Godot.
 3. Run the project with F6/F5.
 
+## Godot MCP
+
+The Godot MCP editor plugin is included in `addons/godot_mcp` and enabled for this project.
+Codex should register the local server with:
+
+```powershell
+codex mcp add godot -- cmd /c npx -y godot-mcp-server
+```
+
+Restart Codex after registering the server. With this project open in Godot, the editor toolbar
+shows the MCP connection state. Runtime inspection and screenshots are enabled for debug runs and
+disabled in release exports.
+
 ## Automatic build
 
 Pushing to `main` starts `.github/workflows/build.yml`.
