@@ -28,6 +28,9 @@ jobs:
       - name: Validate project
         run: godot --headless --path . --editor --quit
 
+      - name: Prepare export directories
+        run: mkdir -p build/windows build/web
+
       - name: Export Windows build
         run: godot --headless --path . --export-release "Windows Desktop"
 
