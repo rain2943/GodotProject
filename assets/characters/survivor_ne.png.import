@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://iwrivs5rgbma"
-path="res://.godot/imported/ruined_seoul.png-8521810a020c1a09574883bd43b0f2e6.ctex"
+uid="uid://cqdx68g418fnp"
+path="res://.godot/imported/survivor_ne.png-78e422e4b70bed93daa97dff102ef33e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/environment/ruined_seoul.png"
-dest_files=["res://.godot/imported/ruined_seoul.png-8521810a020c1a09574883bd43b0f2e6.ctex"]
+source_file="res://assets/characters/survivor_ne.png"
+dest_files=["res://.godot/imported/survivor_ne.png-78e422e4b70bed93daa97dff102ef33e.ctex"]
 
 [params]
 

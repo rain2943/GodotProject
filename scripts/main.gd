@@ -1,56 +1,103 @@
 extends Node3D
 
-const MOVE_SPEED := 2.45
-const WORLD_MIN := Vector2(-3.1, -2.65)
-const WORLD_MAX := Vector2(2.85, 0.55)
+const MOVE_SPEED := 5.2
+const MAP_LIMIT := 30.5
+const DIRECTION_TEXTURES := {
+	"s": preload("res://assets/characters/survivor_s.png"),
+	"se": preload("res://assets/characters/survivor.png"),
+	"e": preload("res://assets/characters/survivor_e.png"),
+	"ne": preload("res://assets/characters/survivor_ne.png"),
+	"n": preload("res://assets/characters/survivor_n.png"),
+}
+const DIRECTION_NAMES := ["s", "se", "e", "ne", "n", "nw", "w", "sw"]
 
 @onready var player: CharacterBody3D = $Player
-@onready var player_sprite: Sprite3D = $Player/Survivor
+@onready var survivor: Sprite3D = $Player/Survivor
+@onready var camera_rig: Node3D = $CameraRig
+@onready var camera: Camera3D = $CameraRig/Camera3D
 @onready var touch_stick: Control = $HUD/TouchStick
 @onready var touch_knob: Control = $HUD/TouchStick/Knob
 @onready var location_label: Label = $HUD/TopRight/Location
+@onready var state_label: Label = $HUD/TopRight/State
 
 var touch_id := -1
 var touch_origin := Vector2.ZERO
 var touch_vector := Vector2.ZERO
-var elapsed := 0.0
+var idle_phase := 0.0
+var facing := "s"
 
 
 func _ready() -> void:
+	camera.position = Vector3(10.5, 12.5, 10.5)
+	camera.look_at(Vector3.ZERO)
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
+	_set_facing("s")
 
 
 func _physics_process(delta: float) -> void:
-	elapsed += delta
-	var keyboard := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
-	if Input.is_key_pressed(KEY_A):
-		keyboard.x -= 1.0
-	if Input.is_key_pressed(KEY_D):
-		keyboard.x += 1.0
-	if Input.is_key_pressed(KEY_W):
-		keyboard.y -= 1.0
-	if Input.is_key_pressed(KEY_S):
-		keyboard.y += 1.0
-
-	var input_vector := keyboard.limit_length(1.0)
+	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	if Input.is_key_pressed(KEY_A): input_vector.x -= 1.0
+	if Input.is_key_pressed(KEY_D): input_vector.x += 1.0
+	if Input.is_key_pressed(KEY_W): input_vector.y -= 1.0
+	if Input.is_key_pressed(KEY_S): input_vector.y += 1.0
+	input_vector = input_vector.limit_length(1.0)
 	if touch_vector.length_squared() > input_vector.length_squared():
 		input_vector = touch_vector
 
-	player.velocity = Vector3(input_vector.x, -input_vector.y, 0.0) * MOVE_SPEED
+	var world_direction := Vector3(input_vector.x + input_vector.y, 0, -input_vector.x + input_vector.y)
+	if world_direction.length_squared() > 0.01:
+		world_direction = world_direction.normalized()
+		player.velocity = world_direction * MOVE_SPEED
+		_update_facing(world_direction)
+		idle_phase += delta * 9.5
+		survivor.position.y = 1.18 + absf(sin(idle_phase)) * 0.045
+		survivor.rotation.z = sin(idle_phase) * 0.008
+		state_label.text = "이동 중"
+	else:
+		player.velocity = Vector3.ZERO
+		idle_phase += delta * 2.2
+		survivor.position.y = 1.18 + sin(idle_phase) * 0.022
+		survivor.rotation.z = sin(idle_phase * 0.5) * 0.006
+		state_label.text = "경계 중"
+
 	player.move_and_slide()
-	player.position.x = clampf(player.position.x, WORLD_MIN.x, WORLD_MAX.x)
-	player.position.y = clampf(player.position.y, WORLD_MIN.y, WORLD_MAX.y)
+	player.position.x = clampf(player.position.x, -MAP_LIMIT, MAP_LIMIT)
+	player.position.z = clampf(player.position.z, -MAP_LIMIT, MAP_LIMIT)
+	_update_camera_occluders()
+	camera_rig.position = camera_rig.position.lerp(Vector3(player.position.x, 0, player.position.z), 1.0 - exp(-7.0 * delta))
+	$CameraRig/Rain.position.y = 8.0
+	location_label.text = "종로 생존구역  ·  %02d / %02d" % [roundi(player.position.x + 32), roundi(player.position.z + 32)]
 
-	var depth_ratio := inverse_lerp(WORLD_MIN.y, WORLD_MAX.y, player.position.y)
-	var depth_scale := lerpf(1.0, 0.72, depth_ratio)
-	var bob := sin(elapsed * (9.0 if input_vector.length() > 0.05 else 2.0)) * 0.018
-	player_sprite.scale = Vector3.ONE * depth_scale
-	player_sprite.position.y = bob
-	if absf(input_vector.x) > 0.05:
-		player_sprite.flip_h = input_vector.x < 0.0
 
-	var district_x := roundi(remap(player.position.x, WORLD_MIN.x, WORLD_MAX.x, 118, 132))
-	location_label.text = "종로구  ·  %d-7 구역" % district_x
+func _update_facing(direction: Vector3) -> void:
+	var angle := fposmod(rad_to_deg(atan2(direction.x, direction.z)), 360.0)
+	var index := int(round(angle / 45.0)) % 8
+	_set_facing(DIRECTION_NAMES[index])
+
+
+func _set_facing(direction_name: String) -> void:
+	if facing == direction_name and survivor.texture != null:
+		return
+	facing = direction_name
+	var source := direction_name
+	var flipped := false
+	match direction_name:
+		"sw": source = "se"; flipped = true
+		"w": source = "e"; flipped = true
+		"nw": source = "ne"; flipped = true
+	survivor.texture = DIRECTION_TEXTURES[source]
+	survivor.flip_h = flipped
+
+
+func _update_camera_occluders() -> void:
+	var camera_direction := Vector2(1, 1).normalized()
+	var player_position := Vector2(player.position.x, player.position.z)
+	for node in get_tree().get_nodes_in_group("camera_occluder"):
+		var building := node as Node3D
+		var offset := Vector2(building.global_position.x, building.global_position.z) - player_position
+		var depth := offset.dot(camera_direction)
+		var lateral := absf(offset.cross(camera_direction))
+		building.visible = not (depth > 1.5 and depth < 16.0 and lateral < 5.8)
 
 
 func _input(event: InputEvent) -> void:
