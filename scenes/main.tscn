@@ -123,17 +123,17 @@ directional_shadow_max_distance = 45.0
 
 [node name="Camera3D" type="Camera3D" parent="CameraRig"]
 projection = 1
-size = 10.5
+size = 17.5
 near = 0.1
 far = 100.0
 current = true
 
 [node name="Rain" type="GPUParticles3D" parent="CameraRig"]
 position = Vector3(0, 8, 0)
-amount = 320
+amount = 480
 lifetime = 2.4
 randomness = 1.0
-visibility_aabb = AABB(-12, -10, -12, 24, 20, 24)
+visibility_aabb = AABB(-20, -10, -20, 40, 20, 40)
 process_material = SubResource("Particles_rain")
 draw_pass_1 = SubResource("Mesh_rain")
 

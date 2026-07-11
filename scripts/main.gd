@@ -9,7 +9,7 @@ const ANIMATION_SHEETS := {
 	"ne": preload("res://assets/characters/survivor_anim_ne.png"),
 	"n": preload("res://assets/characters/survivor_anim_n.png"),
 }
-const DIRECTION_NAMES := ["s", "se", "e", "ne", "n", "nw", "w", "sw"]
+const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const FRAME_SIZE := Vector2(384, 384)
 
 @onready var player: CharacterBody3D = $Player
@@ -50,7 +50,7 @@ func _physics_process(delta: float) -> void:
 	if world_direction.length_squared() > 0.01:
 		world_direction = world_direction.normalized()
 		player.velocity = world_direction * MOVE_SPEED
-		_update_facing(world_direction)
+		_update_facing(input_vector)
 		_set_motion_state("walk")
 		state_label.text = "이동 중"
 	else:
@@ -67,10 +67,10 @@ func _physics_process(delta: float) -> void:
 	location_label.text = "종로 생존구역  ·  %02d / %02d" % [roundi(player.position.x + 32), roundi(player.position.z + 32)]
 
 
-func _update_facing(direction: Vector3) -> void:
-	var angle := fposmod(rad_to_deg(atan2(direction.x, direction.z)), 360.0)
+func _update_facing(screen_direction: Vector2) -> void:
+	var angle := fposmod(rad_to_deg(atan2(screen_direction.x, -screen_direction.y)), 360.0)
 	var index := int(round(angle / 45.0)) % 8
-	_set_facing(DIRECTION_NAMES[index])
+	_set_facing(SCREEN_DIRECTION_NAMES[index])
 
 
 func _set_facing(direction_name: String) -> void:
@@ -129,7 +129,7 @@ func _update_camera_occluders() -> void:
 		var offset := Vector2(building.global_position.x, building.global_position.z) - player_position
 		var depth := offset.dot(camera_direction)
 		var lateral := absf(offset.cross(camera_direction))
-		building.visible = not (depth > 1.5 and depth < 16.0 and lateral < 5.8)
+		building.visible = not (depth > 1.5 and depth < 26.0 and lateral < 9.5)
 
 
 func _input(event: InputEvent) -> void:
