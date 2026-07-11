@@ -215,17 +215,16 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	var wall_inset: Vector2 = definition["wall_inset_modules"] * BUILDING_CATALOG.MODULE_SIZE
-	var wall_size := footprint_world - wall_inset * 2.0
 	var height := float(definition["height_world"])
-	shape.size = Vector3(wall_size.x, height, wall_size.y)
+	shape.size = Vector3(footprint_world.x, height, footprint_world.y)
 	collision.position.y = height * 0.5
 	collision.shape = shape
 	body.add_child(collision)
 
 	body.set_meta("footprint_modules", footprint_modules)
+	body.set_meta("collision_footprint_world", footprint_world)
 	body.set_meta("footprint_corners_px", footprint_corners)
-	body.set_meta("occlusion_lateral_limit", (wall_size.x + wall_size.y) / (2.0 * sqrt(2.0)))
+	body.set_meta("occlusion_lateral_limit", (footprint_world.x + footprint_world.y) / (2.0 * sqrt(2.0)))
 	body.set_meta("occlusion_depth_limit", float(definition["occlusion_depth"]))
 
 

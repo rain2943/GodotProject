@@ -9,7 +9,6 @@ const DEFINITIONS := {
 		"node_name": "HanbitBuilding",
 		"texture_path": "res://assets/buildings/hanbit_building.png",
 		"footprint_modules": Vector2i(8, 8),
-		"wall_inset_modules": Vector2(1.0, 1.0),
 		"height_world": 14.5,
 		"footprint_corners_px": [
 			Vector2(132, 940),
