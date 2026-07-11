@@ -1,7 +1,7 @@
 extends Node3D
 
 const MOVE_SPEED := 5.2
-const MAP_LIMIT := 30.5
+const MAP_LIMIT := 43.5
 const ANIMATION_SHEETS := {
 	"s": preload("res://assets/characters/survivor_anim_s.png"),
 	"se": preload("res://assets/characters/survivor_anim_se.png"),
@@ -29,8 +29,10 @@ var motion_state := "idle"
 
 
 func _ready() -> void:
-	camera.position = Vector3(10.5, 12.5, 10.5)
+	camera.position = Vector3(10.5, 10.5, 10.5)
 	camera.look_at(Vector3.ZERO)
+	$SmokeA.emitting = false
+	$SmokeB.emitting = false
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
 	_build_sprite_frames()
 	_set_facing("s")
@@ -106,7 +108,7 @@ func _build_sprite_frames() -> void:
 			var animation_name := "%s_%s" % [state, direction_name]
 			frames.add_animation(animation_name)
 			frames.set_animation_loop(animation_name, true)
-			frames.set_animation_speed(animation_name, 7.0 if state == "idle" else 10.0)
+			frames.set_animation_speed(animation_name, 7.0 if state == "idle" else 8.5)
 			var first_frame := 0 if state == "idle" else 8
 			for frame_index in range(first_frame, first_frame + 8):
 				var atlas := AtlasTexture.new()
