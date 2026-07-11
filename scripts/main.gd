@@ -64,9 +64,14 @@ var magazine_ammo := 30
 var reserve_ammo := 90
 var gunshot_players: Array[AudioStreamPlayer3D] = []
 var gunshot_index := 0
+var building_canvas: CanvasLayer
+var building_overlays := {}
+var survivor_overlay: Sprite2D
+var weapon_overlay: Sprite2D
 
 
 func _ready() -> void:
+	camera.size = 28.0
 	camera.position = Vector3(10.5, 10.5, 10.5)
 	camera.look_at(Vector3.ZERO)
 	$SmokeA.emitting = false
@@ -80,6 +85,7 @@ func _ready() -> void:
 	_spawn_ak_pickup()
 	_build_weapon_hud()
 	_build_gunshot_audio()
+	_setup_building_overlays()
 	_set_facing("s")
 
 
@@ -112,6 +118,7 @@ func _physics_process(delta: float) -> void:
 	_update_firing(delta)
 	_update_camera_occluders(delta)
 	camera_rig.position = camera_rig.position.lerp(Vector3(player.position.x, 0, player.position.z), 1.0 - exp(-7.0 * delta))
+	_update_building_overlays()
 	$CameraRig/Rain.position.y = 8.0
 	location_label.text = "종로 생존구역  ·  %02d / %02d" % [roundi(player.position.x + 32), roundi(player.position.z + 32)]
 
@@ -360,7 +367,7 @@ func _equip_ak47() -> void:
 	pickup_panel.visible = false
 	if is_instance_valid(ak_pickup):
 		ak_pickup.queue_free()
-	weapon_sprite.visible = true
+	weapon_sprite.visible = false
 	weapon_sprite.play("idle_%s" % facing)
 	equipment_panel.visible = true
 	fire_button.visible = true
@@ -466,6 +473,76 @@ func _play_gunshot() -> void:
 	audio.play()
 
 
+func _setup_building_overlays() -> void:
+	building_canvas = CanvasLayer.new()
+	building_canvas.name = "BuildingOverlay"
+	building_canvas.layer = 0
+	add_child(building_canvas)
+	for node in get_tree().get_nodes_in_group("camera_occluder"):
+		var building := node as Node3D
+		var source := building.get_node_or_null("BuildingSprite") as Sprite3D
+		if source == null or source.texture == null:
+			continue
+		var overlay := Sprite2D.new()
+		overlay.name = "%sOverlay" % building.name
+		overlay.texture = source.texture
+		overlay.centered = true
+		overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+		overlay.z_index = roundi((building.global_position.x + building.global_position.z) * 10.0)
+		building_canvas.add_child(overlay)
+		building_overlays[building] = overlay
+		source.visible = false
+	survivor_overlay = Sprite2D.new()
+	survivor_overlay.name = "SurvivorOverlay"
+	survivor_overlay.centered = true
+	survivor_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	building_canvas.add_child(survivor_overlay)
+	weapon_overlay = Sprite2D.new()
+	weapon_overlay.name = "WeaponOverlay"
+	weapon_overlay.centered = true
+	weapon_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	building_canvas.add_child(weapon_overlay)
+	survivor.visible = false
+	weapon_sprite.visible = false
+	_update_building_overlays()
+
+
+func _update_building_overlays() -> void:
+	if building_canvas == null:
+		return
+	var viewport_height := get_viewport().get_visible_rect().size.y
+	var screen_scale := viewport_height / camera.size
+	for building in building_overlays:
+		if not is_instance_valid(building):
+			continue
+		var source := building.get_node_or_null("BuildingSprite") as Sprite3D
+		var overlay := building_overlays[building] as Sprite2D
+		if source == null or overlay == null:
+			continue
+		overlay.position = camera.unproject_position(source.global_position)
+		overlay.scale = Vector2.ONE * source.pixel_size * screen_scale
+		overlay.modulate = source.modulate
+	var player_depth := roundi((player.global_position.x + player.global_position.z) * 10.0)
+	var survivor_texture := survivor.sprite_frames.get_frame_texture(survivor.animation, survivor.frame)
+	if survivor_texture:
+		survivor_overlay.texture = survivor_texture
+	survivor_overlay.position = camera.unproject_position(survivor.global_position)
+	survivor_overlay.scale = Vector2.ONE * survivor.pixel_size * screen_scale
+	survivor_overlay.flip_h = survivor.flip_h
+	survivor_overlay.modulate = survivor.modulate
+	survivor_overlay.z_index = player_depth
+	weapon_overlay.visible = has_ak
+	if has_ak:
+		var weapon_texture := weapon_sprite.sprite_frames.get_frame_texture(weapon_sprite.animation, weapon_sprite.frame)
+		if weapon_texture:
+			weapon_overlay.texture = weapon_texture
+		weapon_overlay.position = camera.unproject_position(weapon_sprite.global_position)
+		weapon_overlay.scale = Vector2.ONE * weapon_sprite.pixel_size * screen_scale
+		weapon_overlay.offset = weapon_sprite.offset
+		weapon_overlay.modulate = weapon_sprite.modulate
+		weapon_overlay.z_index = player_depth + 1
+
+
 func _update_camera_occluders(delta: float) -> void:
 	var camera_direction := Vector2(1, 1).normalized()
 	var player_position := Vector2(player.position.x, player.position.z)
@@ -488,7 +565,8 @@ func _update_camera_occluders(delta: float) -> void:
 		player_is_occluded = player_is_occluded or is_occluding
 		if sprite:
 			var color := sprite.modulate
-			color.a = 1.0
+			var target_alpha := 0.52 if is_occluding else 1.0
+			color.a = move_toward(color.a, target_alpha, delta * 5.5)
 			sprite.modulate = color
 	var target_player_color := SILHOUETTE_COLOR if player_is_occluded else Color.WHITE
 	survivor.modulate = survivor.modulate.lerp(target_player_color, 1.0 - exp(-10.0 * delta))
