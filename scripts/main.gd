@@ -136,9 +136,9 @@ func _update_camera_occluders(delta: float) -> void:
 	var player_is_occluded := false
 	for node in get_tree().get_nodes_in_group("camera_occluder"):
 		var building := node as Node3D
-		var offset := Vector2(building.global_position.x, building.global_position.z) - player_position
-		var depth := offset.dot(camera_direction)
-		var lateral := absf(offset.cross(camera_direction))
+		var player_offset := player_position - Vector2(building.global_position.x, building.global_position.z)
+		var depth := player_offset.dot(camera_direction)
+		var lateral := absf(player_offset.cross(camera_direction))
 		var lateral_limit := float(building.get_meta("occlusion_lateral_limit", OCCLUSION_LATERAL_LIMIT))
 		var depth_limit := float(building.get_meta("occlusion_depth_limit", OCCLUSION_DEPTH_LIMIT))
 		var is_occluding := depth > 0.8 and depth < depth_limit and lateral < lateral_limit

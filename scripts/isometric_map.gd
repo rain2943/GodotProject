@@ -194,9 +194,14 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	var sprite := Sprite3D.new()
 	sprite.name = "BuildingSprite"
 	sprite.texture = texture
+	var footprint_corners: Array = definition["footprint_corners_px"]
+	var left_corner: Vector2 = footprint_corners[0]
+	var right_corner: Vector2 = footprint_corners[2]
+	var front_corner: Vector2 = footprint_corners[3]
+	var base_pixel_width := absf(right_corner.x - left_corner.x)
 	var projected_footprint_width := (footprint_world.x + footprint_world.y) / sqrt(2.0)
-	sprite.pixel_size = projected_footprint_width / float(definition["base_pixel_width"])
-	sprite.position.y = (float(definition["ground_pixel_y"]) - texture.get_height() * 0.5) * sprite.pixel_size
+	sprite.pixel_size = projected_footprint_width / base_pixel_width
+	sprite.position.y = (front_corner.y - texture.get_height() * 0.5) * sprite.pixel_size
 	sprite.billboard = 1
 	sprite.transparent = true
 	sprite.shaded = false
@@ -217,6 +222,7 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	body.add_child(collision)
 
 	body.set_meta("footprint_modules", footprint_modules)
+	body.set_meta("footprint_corners_px", footprint_corners)
 	body.set_meta("occlusion_lateral_limit", (wall_size.x + wall_size.y) / (2.0 * sqrt(2.0)))
 	body.set_meta("occlusion_depth_limit", float(definition["occlusion_depth"]))
 
