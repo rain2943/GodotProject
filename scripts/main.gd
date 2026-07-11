@@ -14,6 +14,24 @@ const ANIMATION_SHEETS := {
 }
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const FRAME_SIZE := Vector2(384, 384)
+const WEAPON_FRAME_SIZE := Vector2(192, 192)
+const AK_DROP_TEXTURE := preload("res://assets/weapons/ak47_drop.png")
+const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
+const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
+const AK_PICKUP_POSITION := Vector3(1.15, 0.32, 0.7)
+const PICKUP_DISTANCE := 1.75
+const PICKUP_HOLD_DURATION := 0.9
+const FIRE_INTERVAL := 0.12
+const DIRECTION_VECTORS := {
+	"n": Vector2(0, -1),
+	"ne": Vector2(1, -1),
+	"e": Vector2(1, 0),
+	"se": Vector2(1, 1),
+	"s": Vector2(0, 1),
+	"sw": Vector2(-1, 1),
+	"w": Vector2(-1, 0),
+	"nw": Vector2(-1, -1),
+}
 
 @onready var player: CharacterBody3D = $Player
 @onready var survivor: AnimatedSprite3D = $Player/Survivor
@@ -30,6 +48,22 @@ var touch_vector := Vector2.ZERO
 var facing := "s"
 var motion_state := "idle"
 var occlusion_masks := {}
+var weapon_sprite: AnimatedSprite3D
+var ak_pickup: Node3D
+var pickup_panel: PanelContainer
+var pickup_progress: ProgressBar
+var pickup_touch_held := false
+var pickup_keyboard_held := false
+var pickup_hold_time := 0.0
+var equipment_panel: PanelContainer
+var equipment_label: Label
+var fire_button: Button
+var fire_cooldown := 0.0
+var has_ak := false
+var magazine_ammo := 30
+var reserve_ammo := 90
+var gunshot_players: Array[AudioStreamPlayer3D] = []
+var gunshot_index := 0
 
 
 func _ready() -> void:
@@ -42,6 +76,10 @@ func _ready() -> void:
 	survivor.no_depth_test = true
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
 	_build_sprite_frames()
+	_setup_weapon_layer()
+	_spawn_ak_pickup()
+	_build_weapon_hud()
+	_build_gunshot_audio()
 	_set_facing("s")
 
 
@@ -70,6 +108,8 @@ func _physics_process(delta: float) -> void:
 	player.move_and_slide()
 	player.position.x = clampf(player.position.x, -MAP_LIMIT, MAP_LIMIT)
 	player.position.z = clampf(player.position.z, -MAP_LIMIT, MAP_LIMIT)
+	_update_pickup(delta)
+	_update_firing(delta)
 	_update_camera_occluders(delta)
 	camera_rig.position = camera_rig.position.lerp(Vector3(player.position.x, 0, player.position.z), 1.0 - exp(-7.0 * delta))
 	$CameraRig/Rain.position.y = 8.0
@@ -105,6 +145,8 @@ func _play_directional_animation() -> void:
 		"nw": source = "ne"; flipped = true
 	survivor.flip_h = flipped
 	survivor.play("%s_%s" % [motion_state, source])
+	if weapon_sprite and has_ak and not weapon_sprite.animation.begins_with("fire_"):
+		weapon_sprite.play("idle_%s" % facing)
 
 
 func _build_sprite_frames() -> void:
@@ -130,6 +172,298 @@ func _build_sprite_frames() -> void:
 				var duration := 1.6 if state == "walk" and direction_name == "ne" and cycle_index in [2, 6] else 1.0
 				frames.add_frame(animation_name, atlas, duration)
 	survivor.sprite_frames = frames
+
+
+func _setup_weapon_layer() -> void:
+	weapon_sprite = AnimatedSprite3D.new()
+	weapon_sprite.name = "EquippedAK47"
+	weapon_sprite.position = Vector3(0, 0.32, 0)
+	weapon_sprite.pixel_size = 0.0072
+	weapon_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	weapon_sprite.shaded = false
+	weapon_sprite.transparent = true
+	weapon_sprite.no_depth_test = true
+	weapon_sprite.render_priority = 128
+	weapon_sprite.offset = Vector2(0, -28)
+	weapon_sprite.visible = false
+	player.add_child(weapon_sprite)
+
+	var frames := SpriteFrames.new()
+	frames.remove_animation("default")
+	for direction_index in SCREEN_DIRECTION_NAMES.size():
+		var direction_name: String = SCREEN_DIRECTION_NAMES[direction_index]
+		var idle_name := "idle_%s" % direction_name
+		var fire_name := "fire_%s" % direction_name
+		frames.add_animation(idle_name)
+		frames.set_animation_loop(idle_name, true)
+		frames.add_frame(idle_name, _weapon_atlas_frame(direction_index, 0))
+		frames.add_animation(fire_name)
+		frames.set_animation_loop(fire_name, false)
+		frames.set_animation_speed(fire_name, 18.0)
+		frames.add_frame(fire_name, _weapon_atlas_frame(direction_index, 1), 1.0)
+		frames.add_frame(fire_name, _weapon_atlas_frame(direction_index, 0), 1.0)
+	weapon_sprite.sprite_frames = frames
+	weapon_sprite.animation_finished.connect(_on_weapon_animation_finished)
+
+
+func _weapon_atlas_frame(direction_index: int, row: int) -> AtlasTexture:
+	var atlas := AtlasTexture.new()
+	atlas.atlas = AK_DIRECTIONAL_TEXTURE
+	atlas.region = Rect2(
+		direction_index * WEAPON_FRAME_SIZE.x,
+		row * WEAPON_FRAME_SIZE.y,
+		WEAPON_FRAME_SIZE.x,
+		WEAPON_FRAME_SIZE.y
+	)
+	return atlas
+
+
+func _on_weapon_animation_finished() -> void:
+	if has_ak:
+		weapon_sprite.play("idle_%s" % facing)
+
+
+func _spawn_ak_pickup() -> void:
+	ak_pickup = Node3D.new()
+	ak_pickup.name = "AK47Pickup"
+	ak_pickup.position = AK_PICKUP_POSITION
+	add_child(ak_pickup)
+
+	var sprite := Sprite3D.new()
+	sprite.name = "DropSprite"
+	sprite.texture = AK_DROP_TEXTURE
+	sprite.pixel_size = 0.0034
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.shaded = false
+	sprite.transparent = true
+	sprite.no_depth_test = true
+	sprite.render_priority = 90
+	ak_pickup.add_child(sprite)
+
+	var shadow_material := StandardMaterial3D.new()
+	shadow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	shadow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	shadow_material.albedo_color = Color(0, 0, 0, 0.32)
+	var shadow_mesh := CylinderMesh.new()
+	shadow_mesh.top_radius = 0.46
+	shadow_mesh.bottom_radius = 0.46
+	shadow_mesh.height = 0.012
+	shadow_mesh.radial_segments = 20
+	shadow_mesh.material = shadow_material
+	var shadow := MeshInstance3D.new()
+	shadow.name = "DropShadow"
+	shadow.position.y = -0.29
+	shadow.mesh = shadow_mesh
+	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ak_pickup.add_child(shadow)
+
+
+func _build_weapon_hud() -> void:
+	var font := load("res://assets/fonts/Pretendard-Regular.otf") as Font
+	pickup_panel = PanelContainer.new()
+	pickup_panel.name = "PickupPrompt"
+	pickup_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	pickup_panel.offset_left = -170
+	pickup_panel.offset_top = -116
+	pickup_panel.offset_right = 170
+	pickup_panel.offset_bottom = -48
+	pickup_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.02, 0.025, 0.028, 0.94), Color("#d5b45b")))
+	pickup_panel.visible = false
+	$HUD.add_child(pickup_panel)
+
+	var pickup_box := VBoxContainer.new()
+	pickup_box.add_theme_constant_override("separation", 5)
+	pickup_panel.add_child(pickup_box)
+	var pickup_button := Button.new()
+	pickup_button.custom_minimum_size = Vector2(330, 40)
+	pickup_button.text = "AK-47  길게 눌러 줍기  [E]"
+	pickup_button.add_theme_font_override("font", font)
+	pickup_button.add_theme_font_size_override("font_size", 15)
+	pickup_button.button_down.connect(func() -> void: pickup_touch_held = true)
+	pickup_button.button_up.connect(func() -> void: pickup_touch_held = false)
+	pickup_box.add_child(pickup_button)
+	pickup_progress = ProgressBar.new()
+	pickup_progress.custom_minimum_size = Vector2(330, 8)
+	pickup_progress.max_value = PICKUP_HOLD_DURATION
+	pickup_progress.show_percentage = false
+	pickup_box.add_child(pickup_progress)
+
+	equipment_panel = PanelContainer.new()
+	equipment_panel.name = "EquipmentPanel"
+	equipment_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	equipment_panel.offset_left = -244
+	equipment_panel.offset_top = -176
+	equipment_panel.offset_right = -22
+	equipment_panel.offset_bottom = -116
+	equipment_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.02, 0.025, 0.028, 0.94), Color("#83a68f")))
+	equipment_panel.visible = false
+	$HUD.add_child(equipment_panel)
+	equipment_label = Label.new()
+	equipment_label.custom_minimum_size = Vector2(220, 58)
+	equipment_label.text = "AK-47\n30 / 90"
+	equipment_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	equipment_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	equipment_label.add_theme_font_override("font", font)
+	equipment_label.add_theme_font_size_override("font_size", 16)
+	equipment_panel.add_child(equipment_label)
+
+	fire_button = Button.new()
+	fire_button.name = "FireButton"
+	fire_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	fire_button.offset_left = -108
+	fire_button.offset_top = -104
+	fire_button.offset_right = -28
+	fire_button.offset_bottom = -24
+	fire_button.text = "발사"
+	fire_button.tooltip_text = "AK-47 발사"
+	fire_button.focus_mode = Control.FOCUS_NONE
+	fire_button.add_theme_font_override("font", font)
+	fire_button.add_theme_font_size_override("font_size", 17)
+	fire_button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.16, 0.055, 0.04, 0.92), Color("#d98155"), 40))
+	fire_button.add_theme_stylebox_override("hover", _make_panel_style(Color(0.24, 0.075, 0.045, 0.94), Color("#e99a67"), 40))
+	fire_button.add_theme_stylebox_override("pressed", _make_panel_style(Color(0.42, 0.12, 0.055, 0.96), Color("#ffc078"), 40))
+	fire_button.button_down.connect(_try_fire_ak47)
+	fire_button.visible = false
+	$HUD.add_child(fire_button)
+
+
+func _make_panel_style(background: Color, border: Color, radius: int = 4) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = background
+	style.border_color = border
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(radius)
+	return style
+
+
+func _update_pickup(delta: float) -> void:
+	if has_ak or not is_instance_valid(ak_pickup):
+		return
+	ak_pickup.position.y = AK_PICKUP_POSITION.y + sin(Time.get_ticks_msec() * 0.004) * 0.045
+	var player_ground := Vector2(player.position.x, player.position.z)
+	var pickup_ground := Vector2(ak_pickup.position.x, ak_pickup.position.z)
+	var is_near := player_ground.distance_to(pickup_ground) <= PICKUP_DISTANCE
+	pickup_panel.visible = is_near
+	var holding := pickup_touch_held or pickup_keyboard_held
+	if is_near and holding:
+		pickup_hold_time = minf(pickup_hold_time + delta, PICKUP_HOLD_DURATION)
+		if pickup_hold_time >= PICKUP_HOLD_DURATION:
+			_equip_ak47()
+	else:
+		pickup_hold_time = 0.0
+	pickup_progress.value = pickup_hold_time
+
+
+func _equip_ak47() -> void:
+	has_ak = true
+	pickup_touch_held = false
+	pickup_panel.visible = false
+	if is_instance_valid(ak_pickup):
+		ak_pickup.queue_free()
+	weapon_sprite.visible = true
+	weapon_sprite.play("idle_%s" % facing)
+	equipment_panel.visible = true
+	fire_button.visible = true
+	var slot_label := get_node_or_null("HUD/QuickSlots/Slot1/Label") as Label
+	if slot_label:
+		slot_label.text = "AK-47\n30"
+	_update_equipment_ui()
+
+
+func _update_firing(delta: float) -> void:
+	fire_cooldown = maxf(0.0, fire_cooldown - delta)
+
+
+func _try_fire_ak47() -> void:
+	if has_ak and fire_cooldown <= 0.0:
+		_fire_ak47()
+
+
+func _fire_ak47() -> void:
+	if magazine_ammo <= 0:
+		fire_cooldown = 0.25
+		return
+	magazine_ammo -= 1
+	fire_cooldown = FIRE_INTERVAL
+	weapon_sprite.play("fire_%s" % facing)
+	var screen_direction: Vector2 = DIRECTION_VECTORS[facing]
+	var world_direction := Vector3(
+		screen_direction.x + screen_direction.y,
+		0,
+		-screen_direction.x + screen_direction.y
+	).normalized()
+	var projectile := Area3D.new()
+	projectile.name = "AK47Bullet"
+	projectile.set_script(BULLET_PROJECTILE)
+	projectile.set("direction", world_direction)
+	projectile.set("source_body", player)
+	projectile.position = player.position + world_direction * 0.82 + Vector3(0, 0.05, 0)
+	add_child(projectile)
+	_play_gunshot()
+	_spawn_muzzle_light(world_direction)
+	_update_equipment_ui()
+
+
+func _update_equipment_ui() -> void:
+	equipment_label.text = "AK-47  장착\n%02d / %02d" % [magazine_ammo, reserve_ammo]
+	var slot_label := get_node_or_null("HUD/QuickSlots/Slot1/Label") as Label
+	if slot_label:
+		slot_label.text = "AK-47\n%d" % magazine_ammo
+
+
+func _spawn_muzzle_light(direction: Vector3) -> void:
+	var flash := OmniLight3D.new()
+	flash.light_color = Color("#ffb347")
+	flash.light_energy = 3.0
+	flash.omni_range = 2.2
+	flash.position = player.position + direction * 0.8 + Vector3(0, 0.2, 0)
+	add_child(flash)
+	get_tree().create_timer(0.045).timeout.connect(flash.queue_free)
+
+
+func _build_gunshot_audio() -> void:
+	var stream := _create_gunshot_stream()
+	for index in 4:
+		var audio := AudioStreamPlayer3D.new()
+		audio.name = "Gunshot%d" % index
+		audio.stream = stream
+		audio.unit_size = 7.0
+		audio.max_distance = 42.0
+		audio.volume_db = -3.0
+		player.add_child(audio)
+		gunshot_players.append(audio)
+
+
+func _create_gunshot_stream() -> AudioStreamWAV:
+	var mix_rate := 22050
+	var sample_count := int(mix_rate * 0.16)
+	var data := PackedByteArray()
+	data.resize(sample_count * 2)
+	var random := RandomNumberGenerator.new()
+	random.seed = 47047
+	for index in sample_count:
+		var time := float(index) / mix_rate
+		var envelope := exp(-time * 27.0)
+		var crack := random.randf_range(-1.0, 1.0) * envelope
+		var body := sin(TAU * 118.0 * time) * exp(-time * 18.0)
+		var sample := clampf(crack * 0.72 + body * 0.42, -1.0, 1.0)
+		var encoded := int(sample * 32767.0)
+		data[index * 2] = encoded & 0xff
+		data[index * 2 + 1] = (encoded >> 8) & 0xff
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = mix_rate
+	stream.stereo = false
+	stream.data = data
+	return stream
+
+
+func _play_gunshot() -> void:
+	if gunshot_players.is_empty():
+		return
+	var audio := gunshot_players[gunshot_index]
+	gunshot_index = (gunshot_index + 1) % gunshot_players.size()
+	audio.play()
 
 
 func _update_camera_occluders(delta: float) -> void:
@@ -158,6 +492,8 @@ func _update_camera_occluders(delta: float) -> void:
 			sprite.modulate = color
 	var target_player_color := SILHOUETTE_COLOR if player_is_occluded else Color.WHITE
 	survivor.modulate = survivor.modulate.lerp(target_player_color, 1.0 - exp(-10.0 * delta))
+	if weapon_sprite:
+		weapon_sprite.modulate = weapon_sprite.modulate.lerp(target_player_color, 1.0 - exp(-10.0 * delta))
 
 
 func _is_player_inside_sprite_screen_rect(sprite: Sprite3D) -> bool:
@@ -185,7 +521,14 @@ func _is_player_inside_sprite_screen_rect(sprite: Sprite3D) -> bool:
 
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch:
+	if event is InputEventKey and not event.echo:
+		var key_event := event as InputEventKey
+		var key := key_event.keycode if key_event.keycode != 0 else key_event.physical_keycode
+		if key == KEY_E:
+			pickup_keyboard_held = key_event.pressed
+		elif key == KEY_SPACE and key_event.pressed:
+			_try_fire_ak47()
+	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed and touch.position.x < get_viewport().get_visible_rect().size.x * 0.55:
 			touch_id = touch.index
@@ -203,3 +546,5 @@ func _input(event: InputEvent) -> void:
 		var offset := (drag.position - touch_origin).limit_length(radius)
 		touch_vector = offset / radius
 		touch_knob.position = (touch_stick.size - touch_knob.size) * 0.5 + offset
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and has_ak:
+		_try_fire_ak47()
