@@ -11,7 +11,15 @@ const ASPHALT_TEXTURE := preload("res://assets/tiles/asphalt.png")
 const CONCRETE_TEXTURE := preload("res://assets/tiles/concrete.png")
 const MAP_MODULES := 90
 const SIDEWALK_CLEARANCE_MODULES := 2
+const ALLEY_SEGMENTS := [
+	Rect2i(48, 30, 2, 30),
+	Rect2i(30, 38, 18, 2),
+]
 const BUILDING_LAYOUT := [
+	{
+		"building_id": "academy_8x8",
+		"module_origin": Vector2i(40, 50),
+	},
 	{
 		"building_id": "hanbit_8x8",
 		"module_origin": Vector2i(50, 50),
@@ -30,6 +38,7 @@ func _ready() -> void:
 	_build_materials()
 	_build_floor_collision()
 	_build_tile_grid()
+	_build_alleys()
 	_build_buildings()
 
 
@@ -87,6 +96,24 @@ func _build_road_cell(center: Vector3, vertical: bool, horizontal: bool) -> void
 		_add_lane_dash(center, true)
 	else:
 		_add_lane_dash(center, false)
+
+
+func _build_alleys() -> void:
+	for segment in ALLEY_SEGMENTS:
+		var center_modules := Vector2(segment.position) + Vector2(segment.size) * 0.5
+		var center := Vector3(
+			-MAP_SIZE * 0.5 + center_modules.x * BUILDING_CATALOG.MODULE_SIZE,
+			0,
+			-MAP_SIZE * 0.5 + center_modules.y * BUILDING_CATALOG.MODULE_SIZE
+		)
+		var size := Vector2(segment.size) * BUILDING_CATALOG.MODULE_SIZE
+		_add_plane("AlleyAsphalt", center, size, asphalt_material, 0.041)
+		if segment.size.x < segment.size.y:
+			_add_plane("AlleyGutter", center + Vector3(-size.x * 0.5 + 0.08, 0, 0), Vector2(0.16, size.y), curb_material, 0.045)
+			_add_plane("AlleyGutter", center + Vector3(size.x * 0.5 - 0.08, 0, 0), Vector2(0.16, size.y), curb_material, 0.045)
+		else:
+			_add_plane("AlleyGutter", center + Vector3(0, 0, -size.y * 0.5 + 0.08), Vector2(size.x, 0.16), curb_material, 0.045)
+			_add_plane("AlleyGutter", center + Vector3(0, 0, size.y * 0.5 - 0.08), Vector2(size.x, 0.16), curb_material, 0.045)
 
 
 func _add_lane_dash(center: Vector3, vertical: bool) -> void:
@@ -162,6 +189,8 @@ func _validate_building_placement(definition: Dictionary, module_origin: Vector2
 			var cell_z := floori(float(module_z) / BUILDING_CATALOG.MODULES_PER_CELL)
 			if ROAD_INDICES.has(cell_x) or ROAD_INDICES.has(cell_z):
 				return "footprint overlaps a road cell"
+			if _is_alley_module(module_position):
+				return "footprint overlaps an alley"
 			var local_x := module_x % BUILDING_CATALOG.MODULES_PER_CELL
 			var local_z := module_z % BUILDING_CATALOG.MODULES_PER_CELL
 			if ROAD_INDICES.has(cell_x - 1) and local_x < SIDEWALK_CLEARANCE_MODULES:
@@ -173,6 +202,13 @@ func _validate_building_placement(definition: Dictionary, module_origin: Vector2
 			if ROAD_INDICES.has(cell_z + 1) and local_z >= BUILDING_CATALOG.MODULES_PER_CELL - SIDEWALK_CLEARANCE_MODULES:
 				return "footprint overlaps the lower sidewalk reserve"
 	return ""
+
+
+func _is_alley_module(module_position: Vector2i) -> bool:
+	for segment in ALLEY_SEGMENTS:
+		if segment.has_point(module_position):
+			return true
+	return false
 
 
 func _spawn_building(building_id: String, definition: Dictionary, module_origin: Vector2i) -> void:

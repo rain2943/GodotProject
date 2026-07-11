@@ -154,8 +154,7 @@ func _update_camera_occluders(delta: float) -> void:
 		player_is_occluded = player_is_occluded or is_occluding
 		if sprite:
 			var color := sprite.modulate
-			var target_alpha := 0.38 if is_occluding else 1.0
-			color.a = move_toward(color.a, target_alpha, delta * 3.8)
+			color.a = 1.0
 			sprite.modulate = color
 	var target_player_color := SILHOUETTE_COLOR if player_is_occluded else Color.WHITE
 	survivor.modulate = survivor.modulate.lerp(target_player_color, 1.0 - exp(-10.0 * delta))
