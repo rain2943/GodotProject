@@ -141,7 +141,7 @@ func _build_sprite_building(origin: Vector3) -> void:
 
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(8.2, 14.5, 8.2)
+	shape.size = Vector3(7.2, 14.5, 7.2)
 	collision.position.y = 7.25
 	collision.shape = shape
 	body.add_child(collision)
@@ -163,6 +163,7 @@ func _texture_material(texture: Texture2D, tint: Color = Color.WHITE) -> Standar
 	var material := StandardMaterial3D.new()
 	material.albedo_texture = texture
 	material.albedo_color = tint
+	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	material.roughness = 0.96
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	return material

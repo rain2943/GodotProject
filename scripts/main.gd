@@ -2,6 +2,8 @@ extends Node3D
 
 const MOVE_SPEED := 5.2
 const MAP_LIMIT := 43.5
+const OCCLUSION_LATERAL_LIMIT := 5.1
+const OCCLUSION_DEPTH_LIMIT := 14.0
 const ANIMATION_SHEETS := {
 	"s": preload("res://assets/characters/survivor_anim_s.png"),
 	"se": preload("res://assets/characters/survivor_anim_se.png"),
@@ -133,7 +135,7 @@ func _update_camera_occluders(delta: float) -> void:
 		var offset := Vector2(building.global_position.x, building.global_position.z) - player_position
 		var depth := offset.dot(camera_direction)
 		var lateral := absf(offset.cross(camera_direction))
-		var is_occluding := depth > 1.5 and depth < 26.0 and lateral < 9.5
+		var is_occluding := depth > 0.8 and depth < OCCLUSION_DEPTH_LIMIT and lateral < OCCLUSION_LATERAL_LIMIT
 		player_is_occluded = player_is_occluded or is_occluding
 		var sprite := building.get_node_or_null("BuildingSprite") as Sprite3D
 		if sprite:
