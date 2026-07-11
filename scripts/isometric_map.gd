@@ -4,12 +4,15 @@ const GRID_SIZE := 9
 const CELL_SIZE := 10.0
 const ROAD_INDICES := [2, 6]
 const MAP_SIZE := GRID_SIZE * CELL_SIZE
+const SIDEWALK_WIDTH := 1.4
 const HANBIT_BUILDING := preload("res://assets/buildings/hanbit_building.png")
 const ASPHALT_TEXTURE := preload("res://assets/tiles/asphalt.png")
 const CONCRETE_TEXTURE := preload("res://assets/tiles/concrete.png")
 
 var asphalt_material: StandardMaterial3D
-var concrete_material: StandardMaterial3D
+var lot_material: StandardMaterial3D
+var sidewalk_material: StandardMaterial3D
+var sidewalk_edge_material: StandardMaterial3D
 var marking_material: StandardMaterial3D
 var curb_material: StandardMaterial3D
 
@@ -23,9 +26,11 @@ func _ready() -> void:
 
 func _build_materials() -> void:
 	asphalt_material = _texture_material(ASPHALT_TEXTURE)
-	concrete_material = _texture_material(CONCRETE_TEXTURE)
+	lot_material = _texture_material(CONCRETE_TEXTURE, Color("#77756f"))
+	sidewalk_material = _texture_material(CONCRETE_TEXTURE, Color("#aaa79e"))
+	sidewalk_edge_material = _color_material(Color("#64645f"))
 	marking_material = _color_material(Color("#c8bd78"))
-	curb_material = _color_material(Color("#77766e"))
+	curb_material = _color_material(Color("#8b8981"))
 
 
 func _build_floor_collision() -> void:
@@ -50,12 +55,19 @@ func _build_tile_grid() -> void:
 			if vertical_road or horizontal_road:
 				_build_road_cell(center, vertical_road, horizontal_road)
 			else:
-				_build_lot_cell(center)
+				_build_lot_cell(center, grid_x, grid_z)
 
 
-func _build_lot_cell(center: Vector3) -> void:
-	_add_plane("ConcreteLot", center, Vector2(CELL_SIZE, CELL_SIZE), concrete_material, 0.0)
-	_add_curb_edges(center)
+func _build_lot_cell(center: Vector3, grid_x: int, grid_z: int) -> void:
+	_add_plane("LotPaving", center, Vector2(CELL_SIZE, CELL_SIZE), lot_material, 0.0)
+	if grid_x > 0 and ROAD_INDICES.has(grid_x - 1):
+		_add_lot_sidewalk(center, Vector3.LEFT)
+	if grid_x < GRID_SIZE - 1 and ROAD_INDICES.has(grid_x + 1):
+		_add_lot_sidewalk(center, Vector3.RIGHT)
+	if grid_z > 0 and ROAD_INDICES.has(grid_z - 1):
+		_add_lot_sidewalk(center, Vector3.FORWARD)
+	if grid_z < GRID_SIZE - 1 and ROAD_INDICES.has(grid_z + 1):
+		_add_lot_sidewalk(center, Vector3.BACK)
 
 
 func _build_road_cell(center: Vector3, vertical: bool, horizontal: bool) -> void:
@@ -64,12 +76,8 @@ func _build_road_cell(center: Vector3, vertical: bool, horizontal: bool) -> void
 		_add_crosswalks(center)
 	elif vertical:
 		_add_lane_dash(center, true)
-		_add_sidewalk_strip(center + Vector3(-4.55, 0, 0), Vector2(0.9, CELL_SIZE))
-		_add_sidewalk_strip(center + Vector3(4.55, 0, 0), Vector2(0.9, CELL_SIZE))
 	else:
 		_add_lane_dash(center, false)
-		_add_sidewalk_strip(center + Vector3(0, 0, -4.55), Vector2(CELL_SIZE, 0.9))
-		_add_sidewalk_strip(center + Vector3(0, 0, 4.55), Vector2(CELL_SIZE, 0.9))
 
 
 func _add_lane_dash(center: Vector3, vertical: bool) -> void:
@@ -92,15 +100,23 @@ func _add_crosswalks(center: Vector3) -> void:
 		_add_plane("Crosswalk", center + Vector3(3.65, 0, offset), Vector2(1.35, 0.28), marking_material, 0.034)
 
 
-func _add_sidewalk_strip(center: Vector3, size: Vector2) -> void:
-	_add_plane("Sidewalk", center, size, concrete_material, 0.018)
-
-
-func _add_curb_edges(center: Vector3) -> void:
-	_add_plane("Curb", center + Vector3(-4.93, 0, 0), Vector2(0.14, CELL_SIZE), curb_material, 0.026)
-	_add_plane("Curb", center + Vector3(4.93, 0, 0), Vector2(0.14, CELL_SIZE), curb_material, 0.026)
-	_add_plane("Curb", center + Vector3(0, 0, -4.93), Vector2(CELL_SIZE, 0.14), curb_material, 0.026)
-	_add_plane("Curb", center + Vector3(0, 0, 4.93), Vector2(CELL_SIZE, 0.14), curb_material, 0.026)
+func _add_lot_sidewalk(center: Vector3, direction: Vector3) -> void:
+	var edge_offset := CELL_SIZE * 0.5 - SIDEWALK_WIDTH * 0.5
+	var sidewalk_center := center + direction * edge_offset
+	var inner_edge := center + direction * (CELL_SIZE * 0.5 - SIDEWALK_WIDTH)
+	var curb_center := center + direction * (CELL_SIZE * 0.5 - 0.07)
+	if abs(direction.x) > 0.5:
+		_add_plane("Sidewalk", sidewalk_center, Vector2(SIDEWALK_WIDTH, CELL_SIZE), sidewalk_material, 0.022)
+		_add_plane("SidewalkEdge", inner_edge, Vector2(0.08, CELL_SIZE), sidewalk_edge_material, 0.03)
+		_add_plane("Curb", curb_center, Vector2(0.14, CELL_SIZE), curb_material, 0.034)
+		for offset in [-3.75, -1.25, 1.25, 3.75]:
+			_add_plane("PavingJoint", sidewalk_center + Vector3(0, 0, offset), Vector2(SIDEWALK_WIDTH, 0.035), sidewalk_edge_material, 0.031)
+	else:
+		_add_plane("Sidewalk", sidewalk_center, Vector2(CELL_SIZE, SIDEWALK_WIDTH), sidewalk_material, 0.022)
+		_add_plane("SidewalkEdge", inner_edge, Vector2(CELL_SIZE, 0.08), sidewalk_edge_material, 0.03)
+		_add_plane("Curb", curb_center, Vector2(CELL_SIZE, 0.14), curb_material, 0.034)
+		for offset in [-3.75, -1.25, 1.25, 3.75]:
+			_add_plane("PavingJoint", sidewalk_center + Vector3(offset, 0, 0), Vector2(0.035, SIDEWALK_WIDTH), sidewalk_edge_material, 0.031)
 
 
 func _build_sprite_building(origin: Vector3) -> void:
@@ -113,8 +129,8 @@ func _build_sprite_building(origin: Vector3) -> void:
 	var sprite := Sprite3D.new()
 	sprite.name = "BuildingSprite"
 	sprite.texture = HANBIT_BUILDING
-	sprite.position.y = 7.15
-	sprite.pixel_size = 0.0115
+	sprite.position.y = 7.05
+	sprite.pixel_size = 0.0118
 	sprite.billboard = 1
 	sprite.transparent = true
 	sprite.shaded = false
@@ -125,8 +141,8 @@ func _build_sprite_building(origin: Vector3) -> void:
 
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(9.4, 12.0, 9.4)
-	collision.position.y = 6.0
+	shape.size = Vector3(8.2, 14.5, 8.2)
+	collision.position.y = 7.25
 	collision.shape = shape
 	body.add_child(collision)
 
@@ -143,9 +159,10 @@ func _add_plane(node_name: String, position: Vector3, size: Vector2, material: S
 	add_child(instance)
 
 
-func _texture_material(texture: Texture2D) -> StandardMaterial3D:
+func _texture_material(texture: Texture2D, tint: Color = Color.WHITE) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_texture = texture
+	material.albedo_color = tint
 	material.roughness = 0.96
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	return material
