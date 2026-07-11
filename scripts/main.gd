@@ -122,7 +122,9 @@ func _build_sprite_frames() -> void:
 					FRAME_SIZE.x,
 					FRAME_SIZE.y
 				)
-				frames.add_frame(animation_name, atlas)
+				var cycle_index := frame_index - first_frame
+				var duration := 1.6 if state == "walk" and direction_name == "ne" and cycle_index in [2, 6] else 1.0
+				frames.add_frame(animation_name, atlas, duration)
 	survivor.sprite_frames = frames
 
 
