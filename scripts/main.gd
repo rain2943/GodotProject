@@ -29,6 +29,7 @@ var touch_origin := Vector2.ZERO
 var touch_vector := Vector2.ZERO
 var facing := "s"
 var motion_state := "idle"
+var occlusion_masks := {}
 
 
 func _ready() -> void:
@@ -36,7 +37,8 @@ func _ready() -> void:
 	camera.look_at(Vector3.ZERO)
 	$SmokeA.emitting = false
 	$SmokeB.emitting = false
-	survivor.render_priority = 2
+	survivor.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+	survivor.render_priority = 127
 	survivor.no_depth_test = true
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
 	_build_sprite_frames()
@@ -136,14 +138,20 @@ func _update_camera_occluders(delta: float) -> void:
 	var player_is_occluded := false
 	for node in get_tree().get_nodes_in_group("camera_occluder"):
 		var building := node as Node3D
-		var player_offset := player_position - Vector2(building.global_position.x, building.global_position.z)
+		var player_offset := Vector2(building.global_position.x, building.global_position.z) - player_position
 		var depth := player_offset.dot(camera_direction)
 		var lateral := absf(player_offset.cross(camera_direction))
 		var lateral_limit := float(building.get_meta("occlusion_lateral_limit", OCCLUSION_LATERAL_LIMIT))
 		var depth_limit := float(building.get_meta("occlusion_depth_limit", OCCLUSION_DEPTH_LIMIT))
-		var is_occluding := depth > 0.8 and depth < depth_limit and lateral < lateral_limit
-		player_is_occluded = player_is_occluded or is_occluding
 		var sprite := building.get_node_or_null("BuildingSprite") as Sprite3D
+		var is_occluding := (
+			sprite != null
+			and depth > 0.8
+			and depth < depth_limit
+			and lateral < lateral_limit
+			and _is_player_inside_sprite_screen_rect(sprite)
+		)
+		player_is_occluded = player_is_occluded or is_occluding
 		if sprite:
 			var color := sprite.modulate
 			var target_alpha := 0.38 if is_occluding else 1.0
@@ -151,6 +159,30 @@ func _update_camera_occluders(delta: float) -> void:
 			sprite.modulate = color
 	var target_player_color := SILHOUETTE_COLOR if player_is_occluded else Color.WHITE
 	survivor.modulate = survivor.modulate.lerp(target_player_color, 1.0 - exp(-10.0 * delta))
+
+
+func _is_player_inside_sprite_screen_rect(sprite: Sprite3D) -> bool:
+	if sprite.texture == null or camera.projection != Camera3D.PROJECTION_ORTHOGONAL:
+		return false
+	var viewport_height := get_viewport().get_visible_rect().size.y
+	var screen_scale := viewport_height / camera.size
+	var sprite_size := Vector2(sprite.texture.get_width(), sprite.texture.get_height()) * sprite.pixel_size * screen_scale
+	var sprite_center := camera.unproject_position(sprite.global_position)
+	var sprite_rect := Rect2(sprite_center - sprite_size * 0.5, sprite_size)
+	var player_screen_position := camera.unproject_position(survivor.global_position)
+	if not sprite_rect.has_point(player_screen_position):
+		return false
+	var mask_key := sprite.texture.resource_path
+	var mask: Image = occlusion_masks.get(mask_key)
+	if mask == null:
+		mask = sprite.texture.get_image()
+		occlusion_masks[mask_key] = mask
+	var uv := (player_screen_position - sprite_rect.position) / sprite_rect.size
+	var pixel := Vector2i(
+		clampi(floori(uv.x * mask.get_width()), 0, mask.get_width() - 1),
+		clampi(floori(uv.y * mask.get_height()), 0, mask.get_height() - 1)
+	)
+	return mask.get_pixelv(pixel).a > 0.1
 
 
 func _input(event: InputEvent) -> void:

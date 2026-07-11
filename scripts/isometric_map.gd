@@ -201,7 +201,9 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	var base_pixel_width := absf(right_corner.x - left_corner.x)
 	var projected_footprint_width := (footprint_world.x + footprint_world.y) / sqrt(2.0)
 	sprite.pixel_size = projected_footprint_width / base_pixel_width
+	sprite.position.x = footprint_world.x * 0.5
 	sprite.position.y = (front_corner.y - texture.get_height() * 0.5) * sprite.pixel_size
+	sprite.position.z = footprint_world.y * 0.5
 	sprite.billboard = 1
 	sprite.transparent = true
 	sprite.shaded = false
