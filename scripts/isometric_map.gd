@@ -113,8 +113,8 @@ func _build_sprite_building(origin: Vector3) -> void:
 	var sprite := Sprite3D.new()
 	sprite.name = "BuildingSprite"
 	sprite.texture = HANBIT_BUILDING
-	sprite.position.y = 4.7
-	sprite.pixel_size = 0.0075
+	sprite.position.y = 7.15
+	sprite.pixel_size = 0.0115
 	sprite.billboard = 1
 	sprite.transparent = true
 	sprite.shaded = false
@@ -125,8 +125,8 @@ func _build_sprite_building(origin: Vector3) -> void:
 
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(8.7, 8.0, 8.7)
-	collision.position.y = 4.0
+	shape.size = Vector3(9.4, 12.0, 9.4)
+	collision.position.y = 6.0
 	collision.shape = shape
 	body.add_child(collision)
 
