@@ -11,10 +11,10 @@ const DEFINITIONS := {
 		"footprint_modules": Vector2i(8, 8),
 		"height_world": 14.5,
 		"footprint_corners_px": [
-			Vector2(132, 940),
-			Vector2(640, 645),
-			Vector2(1148, 940),
-			Vector2(640, 1235),
+			Vector2(223, 930),
+			Vector2(557, 698),
+			Vector2(1047, 973),
+			Vector2(713, 1205),
 		],
 		"occlusion_depth": 14.0,
 	}
