@@ -116,9 +116,10 @@ func _build_sprite_building(origin: Vector3) -> void:
 	sprite.position.y = 4.7
 	sprite.pixel_size = 0.0075
 	sprite.billboard = 1
+	sprite.transparent = true
 	sprite.shaded = false
-	sprite.alpha_cut = 1
-	sprite.alpha_scissor_threshold = 0.08
+	sprite.alpha_cut = 0
+	sprite.render_priority = 0
 	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	body.add_child(sprite)
 

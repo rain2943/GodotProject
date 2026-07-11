@@ -33,6 +33,7 @@ func _ready() -> void:
 	camera.look_at(Vector3.ZERO)
 	$SmokeA.emitting = false
 	$SmokeB.emitting = false
+	survivor.render_priority = 2
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
 	_build_sprite_frames()
 	_set_facing("s")
@@ -63,7 +64,7 @@ func _physics_process(delta: float) -> void:
 	player.move_and_slide()
 	player.position.x = clampf(player.position.x, -MAP_LIMIT, MAP_LIMIT)
 	player.position.z = clampf(player.position.z, -MAP_LIMIT, MAP_LIMIT)
-	_update_camera_occluders()
+	_update_camera_occluders(delta)
 	camera_rig.position = camera_rig.position.lerp(Vector3(player.position.x, 0, player.position.z), 1.0 - exp(-7.0 * delta))
 	$CameraRig/Rain.position.y = 8.0
 	location_label.text = "종로 생존구역  ·  %02d / %02d" % [roundi(player.position.x + 32), roundi(player.position.z + 32)]
@@ -123,15 +124,24 @@ func _build_sprite_frames() -> void:
 	survivor.sprite_frames = frames
 
 
-func _update_camera_occluders() -> void:
+func _update_camera_occluders(delta: float) -> void:
 	var camera_direction := Vector2(1, 1).normalized()
 	var player_position := Vector2(player.position.x, player.position.z)
+	var player_is_occluded := false
 	for node in get_tree().get_nodes_in_group("camera_occluder"):
 		var building := node as Node3D
 		var offset := Vector2(building.global_position.x, building.global_position.z) - player_position
 		var depth := offset.dot(camera_direction)
 		var lateral := absf(offset.cross(camera_direction))
-		building.visible = not (depth > 1.5 and depth < 26.0 and lateral < 9.5)
+		var is_occluding := depth > 1.5 and depth < 26.0 and lateral < 9.5
+		player_is_occluded = player_is_occluded or is_occluding
+		var sprite := building.get_node_or_null("BuildingSprite") as Sprite3D
+		if sprite:
+			var color := sprite.modulate
+			var target_alpha := 0.24 if is_occluding else 1.0
+			color.a = move_toward(color.a, target_alpha, delta * 3.8)
+			sprite.modulate = color
+	survivor.no_depth_test = player_is_occluded
 
 
 func _input(event: InputEvent) -> void:
