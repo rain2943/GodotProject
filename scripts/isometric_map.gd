@@ -5,6 +5,7 @@ const CELL_SIZE := 10.0
 const ROAD_INDICES := [2, 6]
 const MAP_SIZE := GRID_SIZE * CELL_SIZE
 const SIDEWALK_WIDTH := 1.4
+const ISOMETRIC_VERTICAL_PROJECTION := 0.816496580927726
 const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
 const ASPHALT_TEXTURE := preload("res://assets/tiles/asphalt.png")
 const CONCRETE_TEXTURE := preload("res://assets/tiles/concrete.png")
@@ -202,7 +203,7 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	var projected_footprint_width := (footprint_world.x + footprint_world.y) / sqrt(2.0)
 	sprite.pixel_size = projected_footprint_width / base_pixel_width
 	sprite.position.x = footprint_world.x * 0.5
-	sprite.position.y = (front_corner.y - texture.get_height() * 0.5) * sprite.pixel_size
+	sprite.position.y = (front_corner.y - texture.get_height() * 0.5) * sprite.pixel_size / ISOMETRIC_VERTICAL_PROJECTION
 	sprite.position.z = footprint_world.y * 0.5
 	sprite.billboard = 1
 	sprite.transparent = true
