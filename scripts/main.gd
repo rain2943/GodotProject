@@ -4,6 +4,7 @@ const MOVE_SPEED := 5.2
 const MAP_LIMIT := 43.5
 const OCCLUSION_LATERAL_LIMIT := 5.1
 const OCCLUSION_DEPTH_LIMIT := 14.0
+const SILHOUETTE_COLOR := Color("#26343b")
 const ANIMATION_SHEETS := {
 	"s": preload("res://assets/characters/survivor_anim_s.png"),
 	"se": preload("res://assets/characters/survivor_anim_se.png"),
@@ -36,6 +37,7 @@ func _ready() -> void:
 	$SmokeA.emitting = false
 	$SmokeB.emitting = false
 	survivor.render_priority = 2
+	survivor.no_depth_test = true
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
 	_build_sprite_frames()
 	_set_facing("s")
@@ -137,15 +139,18 @@ func _update_camera_occluders(delta: float) -> void:
 		var offset := Vector2(building.global_position.x, building.global_position.z) - player_position
 		var depth := offset.dot(camera_direction)
 		var lateral := absf(offset.cross(camera_direction))
-		var is_occluding := depth > 0.8 and depth < OCCLUSION_DEPTH_LIMIT and lateral < OCCLUSION_LATERAL_LIMIT
+		var lateral_limit := float(building.get_meta("occlusion_lateral_limit", OCCLUSION_LATERAL_LIMIT))
+		var depth_limit := float(building.get_meta("occlusion_depth_limit", OCCLUSION_DEPTH_LIMIT))
+		var is_occluding := depth > 0.8 and depth < depth_limit and lateral < lateral_limit
 		player_is_occluded = player_is_occluded or is_occluding
 		var sprite := building.get_node_or_null("BuildingSprite") as Sprite3D
 		if sprite:
 			var color := sprite.modulate
-			var target_alpha := 0.24 if is_occluding else 1.0
+			var target_alpha := 0.38 if is_occluding else 1.0
 			color.a = move_toward(color.a, target_alpha, delta * 3.8)
 			sprite.modulate = color
-	survivor.no_depth_test = player_is_occluded
+	var target_player_color := SILHOUETTE_COLOR if player_is_occluded else Color.WHITE
+	survivor.modulate = survivor.modulate.lerp(target_player_color, 1.0 - exp(-10.0 * delta))
 
 
 func _input(event: InputEvent) -> void:

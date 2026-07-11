@@ -5,9 +5,17 @@ const CELL_SIZE := 10.0
 const ROAD_INDICES := [2, 6]
 const MAP_SIZE := GRID_SIZE * CELL_SIZE
 const SIDEWALK_WIDTH := 1.4
-const HANBIT_BUILDING := preload("res://assets/buildings/hanbit_building.png")
+const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
 const ASPHALT_TEXTURE := preload("res://assets/tiles/asphalt.png")
 const CONCRETE_TEXTURE := preload("res://assets/tiles/concrete.png")
+const MAP_MODULES := 90
+const SIDEWALK_CLEARANCE_MODULES := 2
+const BUILDING_LAYOUT := [
+	{
+		"building_id": "hanbit_8x8",
+		"module_origin": Vector2i(50, 50),
+	}
+]
 
 var asphalt_material: StandardMaterial3D
 var lot_material: StandardMaterial3D
@@ -21,7 +29,7 @@ func _ready() -> void:
 	_build_materials()
 	_build_floor_collision()
 	_build_tile_grid()
-	_build_sprite_building(Vector3(10, 0, 10))
+	_build_buildings()
 
 
 func _build_materials() -> void:
@@ -119,21 +127,80 @@ func _add_lot_sidewalk(center: Vector3, direction: Vector3) -> void:
 			_add_plane("PavingJoint", sidewalk_center + Vector3(offset, 0, 0), Vector2(0.035, SIDEWALK_WIDTH), sidewalk_edge_material, 0.031)
 
 
-func _build_sprite_building(origin: Vector3) -> void:
+func _build_buildings() -> void:
+	var occupied_modules := {}
+	for placement in BUILDING_LAYOUT:
+		var building_id: String = placement.get("building_id", "")
+		var module_origin: Vector2i = placement.get("module_origin", Vector2i.ZERO)
+		var definition := BUILDING_CATALOG.get_definition(building_id)
+		var validation_error := _validate_building_placement(definition, module_origin, occupied_modules)
+		if not validation_error.is_empty():
+			push_warning("Skipping %s: %s" % [building_id, validation_error])
+			continue
+		var footprint: Vector2i = definition["footprint_modules"]
+		for module_x in range(module_origin.x, module_origin.x + footprint.x):
+			for module_z in range(module_origin.y, module_origin.y + footprint.y):
+				occupied_modules[Vector2i(module_x, module_z)] = building_id
+		_spawn_building(building_id, definition, module_origin)
+
+
+func _validate_building_placement(definition: Dictionary, module_origin: Vector2i, occupied_modules: Dictionary) -> String:
+	if not BUILDING_CATALOG.is_valid_definition(definition):
+		return "invalid catalog definition"
+	var footprint: Vector2i = definition["footprint_modules"]
+	if module_origin.x < 0 or module_origin.y < 0:
+		return "origin is outside the map"
+	if module_origin.x + footprint.x > MAP_MODULES or module_origin.y + footprint.y > MAP_MODULES:
+		return "footprint extends outside the map"
+	for module_x in range(module_origin.x, module_origin.x + footprint.x):
+		for module_z in range(module_origin.y, module_origin.y + footprint.y):
+			var module_position := Vector2i(module_x, module_z)
+			if occupied_modules.has(module_position):
+				return "footprint overlaps another building"
+			var cell_x := floori(float(module_x) / BUILDING_CATALOG.MODULES_PER_CELL)
+			var cell_z := floori(float(module_z) / BUILDING_CATALOG.MODULES_PER_CELL)
+			if ROAD_INDICES.has(cell_x) or ROAD_INDICES.has(cell_z):
+				return "footprint overlaps a road cell"
+			var local_x := module_x % BUILDING_CATALOG.MODULES_PER_CELL
+			var local_z := module_z % BUILDING_CATALOG.MODULES_PER_CELL
+			if ROAD_INDICES.has(cell_x - 1) and local_x < SIDEWALK_CLEARANCE_MODULES:
+				return "footprint overlaps the left sidewalk reserve"
+			if ROAD_INDICES.has(cell_x + 1) and local_x >= BUILDING_CATALOG.MODULES_PER_CELL - SIDEWALK_CLEARANCE_MODULES:
+				return "footprint overlaps the right sidewalk reserve"
+			if ROAD_INDICES.has(cell_z - 1) and local_z < SIDEWALK_CLEARANCE_MODULES:
+				return "footprint overlaps the upper sidewalk reserve"
+			if ROAD_INDICES.has(cell_z + 1) and local_z >= BUILDING_CATALOG.MODULES_PER_CELL - SIDEWALK_CLEARANCE_MODULES:
+				return "footprint overlaps the lower sidewalk reserve"
+	return ""
+
+
+func _spawn_building(building_id: String, definition: Dictionary, module_origin: Vector2i) -> void:
+	var footprint_modules: Vector2i = definition["footprint_modules"]
+	var footprint_world := Vector2(footprint_modules) * BUILDING_CATALOG.MODULE_SIZE
+	var center_x := -MAP_SIZE * 0.5 + (module_origin.x + footprint_modules.x * 0.5) * BUILDING_CATALOG.MODULE_SIZE
+	var center_z := -MAP_SIZE * 0.5 + (module_origin.y + footprint_modules.y * 0.5) * BUILDING_CATALOG.MODULE_SIZE
+	var origin := Vector3(center_x, 0, center_z)
+	var texture := load(definition["texture_path"]) as Texture2D
+	if texture == null:
+		push_warning("Skipping %s: texture failed to load" % building_id)
+		return
+
 	var body := StaticBody3D.new()
-	body.name = "HanbitBuilding"
+	body.name = "%s_%d_%d" % [definition["node_name"], module_origin.x, module_origin.y]
 	body.position = origin
 	body.add_to_group("camera_occluder")
 	add_child(body)
 
 	var sprite := Sprite3D.new()
 	sprite.name = "BuildingSprite"
-	sprite.texture = HANBIT_BUILDING
-	sprite.position.y = 7.05
-	sprite.pixel_size = 0.0118
+	sprite.texture = texture
+	var projected_footprint_width := (footprint_world.x + footprint_world.y) / sqrt(2.0)
+	sprite.pixel_size = projected_footprint_width / float(definition["base_pixel_width"])
+	sprite.position.y = (float(definition["ground_pixel_y"]) - texture.get_height() * 0.5) * sprite.pixel_size
 	sprite.billboard = 1
 	sprite.transparent = true
 	sprite.shaded = false
+	sprite.no_depth_test = true
 	sprite.alpha_cut = 0
 	sprite.render_priority = 0
 	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -141,10 +208,17 @@ func _build_sprite_building(origin: Vector3) -> void:
 
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(7.2, 14.5, 7.2)
-	collision.position.y = 7.25
+	var wall_inset: Vector2 = definition["wall_inset_modules"] * BUILDING_CATALOG.MODULE_SIZE
+	var wall_size := footprint_world - wall_inset * 2.0
+	var height := float(definition["height_world"])
+	shape.size = Vector3(wall_size.x, height, wall_size.y)
+	collision.position.y = height * 0.5
 	collision.shape = shape
 	body.add_child(collision)
+
+	body.set_meta("footprint_modules", footprint_modules)
+	body.set_meta("occlusion_lateral_limit", (wall_size.x + wall_size.y) / (2.0 * sqrt(2.0)))
+	body.set_meta("occlusion_depth_limit", float(definition["occlusion_depth"]))
 
 
 func _add_plane(node_name: String, position: Vector3, size: Vector2, material: StandardMaterial3D, height: float) -> void:
