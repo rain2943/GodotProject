@@ -330,6 +330,9 @@ func _spawn_vehicle(index: int, placement: Dictionary, texture: Texture2D) -> vo
 	var body := StaticBody3D.new()
 	body.name = "Vehicle_%s_%02d" % [placement.get("type", "prop"), index]
 	body.position = placement.get("position", Vector3.ZERO)
+	body.collision_layer = 1
+	body.collision_mask = 0
+	body.add_to_group("vehicle_obstacle")
 	add_child(body)
 
 	var sprite := Sprite3D.new()
@@ -353,8 +356,13 @@ func _spawn_vehicle(index: int, placement: Dictionary, texture: Texture2D) -> vo
 	var height := float(placement.get("height", 1.2))
 	shape.size = Vector3(footprint.x, height, footprint.y)
 	collision.position.y = height * 0.5
+	# Vehicle artwork runs along the isometric screen X axis, which is
+	# world-space (X, -Z). Rotate the footprint to match the visible vehicle.
+	collision.rotation.y = deg_to_rad(45.0)
 	collision.shape = shape
 	body.add_child(collision)
+	body.set_meta("collision_footprint_world", footprint)
+	body.set_meta("collision_rotation_degrees", 45.0)
 
 	var shadow_material := StandardMaterial3D.new()
 	shadow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
