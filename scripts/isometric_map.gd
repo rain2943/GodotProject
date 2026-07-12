@@ -36,6 +36,7 @@ const VEHICLE_PLACEMENTS := [
 		"position": Vector3(-21.8, 0.1, -8.6),
 		"visual_width": 4.8,
 		"collision": Vector2(3.9, 1.85),
+		"collision_depth_offset": 1.1,
 		"height": 1.2,
 	},
 	{
@@ -43,6 +44,7 @@ const VEHICLE_PLACEMENTS := [
 		"position": Vector3(-16.4, 0.1, 20.7),
 		"visual_width": 4.5,
 		"collision": Vector2(3.7, 1.8),
+		"collision_depth_offset": 1.05,
 		"height": 1.2,
 	},
 	{
@@ -50,6 +52,7 @@ const VEHICLE_PLACEMENTS := [
 		"position": Vector3(23.2, 0.1, -16.2),
 		"visual_width": 6.5,
 		"collision": Vector2(5.7, 2.2),
+		"collision_depth_offset": 2.15,
 		"height": 1.8,
 	},
 	{
@@ -57,6 +60,7 @@ const VEHICLE_PLACEMENTS := [
 		"position": Vector3(15.6, 0.1, 23.1),
 		"visual_width": 6.1,
 		"collision": Vector2(5.3, 2.15),
+		"collision_depth_offset": 2.0,
 		"height": 1.75,
 	},
 	{
@@ -64,6 +68,7 @@ const VEHICLE_PLACEMENTS := [
 		"position": Vector3(-22.8, 0.1, 17.2),
 		"visual_width": 8.6,
 		"collision": Vector2(7.7, 2.35),
+		"collision_depth_offset": 2.25,
 		"height": 2.2,
 	},
 	{
@@ -71,6 +76,7 @@ const VEHICLE_PLACEMENTS := [
 		"position": Vector3(20.8, 0.1, -22.2),
 		"visual_width": 8.3,
 		"collision": Vector2(7.45, 2.35),
+		"collision_depth_offset": 2.2,
 		"height": 2.2,
 	},
 ]
@@ -350,19 +356,14 @@ func _spawn_vehicle(index: int, placement: Dictionary, texture: Texture2D) -> vo
 	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	body.add_child(sprite)
 
-	var collision := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
 	var footprint: Vector2 = placement.get("collision", Vector2(3.5, 1.8))
 	var height := float(placement.get("height", 1.2))
-	shape.size = Vector3(footprint.x, height, footprint.y)
-	collision.position.y = height * 0.5
-	# Vehicle artwork runs along the isometric screen X axis, which is
-	# world-space (X, -Z). Rotate the footprint to match the visible vehicle.
-	collision.rotation.y = deg_to_rad(45.0)
-	collision.shape = shape
-	body.add_child(collision)
+	var depth_offset := float(placement.get("collision_depth_offset", 1.0))
+	var collision_center := Vector3(-1.0, 0.0, -1.0).normalized() * depth_offset
+	_add_vehicle_collision(body, footprint, height, collision_center)
 	body.set_meta("collision_footprint_world", footprint)
 	body.set_meta("collision_rotation_degrees", 45.0)
+	body.set_meta("collision_depth_offset", depth_offset)
 
 	var shadow_material := StandardMaterial3D.new()
 	shadow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -373,10 +374,29 @@ func _spawn_vehicle(index: int, placement: Dictionary, texture: Texture2D) -> vo
 	shadow_mesh.material = shadow_material
 	var shadow := MeshInstance3D.new()
 	shadow.name = "VehicleShadow"
-	shadow.position.y = 0.025
+	shadow.position = collision_center + Vector3(0, 0.025, 0)
+	shadow.rotation.y = deg_to_rad(45.0)
 	shadow.mesh = shadow_mesh
 	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	body.add_child(shadow)
+
+
+func _add_vehicle_collision(body: StaticBody3D, footprint: Vector2, height: float, center: Vector3) -> void:
+	# Three contiguous boxes follow the visible front, cabin and rear sections.
+	# Their shared rotation maps screen-horizontal vehicle art to world (X, -Z).
+	var segment_length := footprint.x / 3.0
+	var length_axis := Vector3(1.0, 0.0, -1.0).normalized()
+	for segment_index in 3:
+		var collision := CollisionShape3D.new()
+		collision.name = "VehicleCollision%d" % segment_index
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(segment_length + 0.08, height, footprint.y)
+		var along_length := (float(segment_index) - 1.0) * segment_length
+		collision.position = center + length_axis * along_length
+		collision.position.y = height * 0.5 - body.position.y - 0.05
+		collision.rotation.y = deg_to_rad(45.0)
+		collision.shape = shape
+		body.add_child(collision)
 
 
 func _add_plane(node_name: String, position: Vector3, size: Vector2, material: StandardMaterial3D, height: float) -> void:
