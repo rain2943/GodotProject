@@ -2,46 +2,92 @@ Add-Type -AssemblyName System.Drawing
 
 $ErrorActionPreference = "Stop"
 
-$sourceDir = Join-Path $PSScriptRoot "..\assets\characters"
-$outDir = Join-Path $PSScriptRoot "..\assets\enemies"
-$directions = @("s", "se", "e", "ne", "n")
+$enemyDir = Join-Path $PSScriptRoot "..\assets\enemies"
 $frameSize = 384
+$directions = @("s", "se", "e", "ne", "n")
 
 Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @"
 using System;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 
-public static class EnemySheetBuilder
+public static class EnemyConceptSheetBuilder
 {
-    public static void Build(string inputPath, string outputPath, string kind, string direction)
+    public static void Build(string sourcePath, string outPath, string direction)
     {
-        using (var source = new Bitmap(inputPath))
-        using (var bitmap = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb))
+        using (var original = new Bitmap(sourcePath))
+        using (var cutout = ExtractCutout(original))
+        using (var sheet = new Bitmap(1536, 1536, PixelFormat.Format32bppArgb))
         {
-            using (var g = Graphics.FromImage(bitmap))
+            using (var g = Graphics.FromImage(sheet))
             {
                 g.Clear(Color.Transparent);
-                g.DrawImage(source, 0, 0, source.Width, source.Height);
-            }
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
-            Recolor(bitmap, kind);
-            DrawGear(bitmap, kind, direction);
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
-            bitmap.Save(outputPath, ImageFormat.Png);
+                for (int frame = 0; frame < 16; frame++)
+                {
+                    int col = frame % 4;
+                    int row = frame / 4;
+                    bool walk = frame >= 8;
+                    int cycle = frame % 8;
+                    float bob = walk ? ((cycle == 1 || cycle == 5) ? -5f : ((cycle == 3 || cycle == 7) ? 4f : 0f)) : 0f;
+                    float sway = walk ? ((cycle == 2 || cycle == 6) ? 5f : ((cycle == 4) ? -4f : 0f)) : 0f;
+                    DrawFrame(g, cutout, direction, col * 384, row * 384, sway, bob, walk);
+                }
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(outPath));
+            sheet.Save(outPath, ImageFormat.Png);
         }
     }
 
-    private static void Recolor(Bitmap bitmap, string kind)
+    private static Bitmap ExtractCutout(Bitmap source)
+    {
+        var rect = FindSubjectBounds(source);
+        rect.Inflate(18, 18);
+        rect.Intersect(new Rectangle(0, 0, source.Width, source.Height));
+        var target = new Bitmap(rect.Width, rect.Height, PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(target))
+        {
+            g.Clear(Color.Transparent);
+            g.DrawImage(source, new Rectangle(0, 0, rect.Width, rect.Height), rect, GraphicsUnit.Pixel);
+        }
+        RemoveGreen(target);
+        return target;
+    }
+
+    private static Rectangle FindSubjectBounds(Bitmap source)
+    {
+        int minX = source.Width, minY = source.Height, maxX = 0, maxY = 0;
+        for (int y = 0; y < source.Height; y++)
+        {
+            for (int x = 0; x < source.Width; x++)
+            {
+                var c = source.GetPixel(x, y);
+                if (!IsGreenKey(c))
+                {
+                    minX = Math.Min(minX, x);
+                    minY = Math.Min(minY, y);
+                    maxX = Math.Max(maxX, x);
+                    maxY = Math.Max(maxY, y);
+                }
+            }
+        }
+        if (minX > maxX) return new Rectangle(0, 0, source.Width, source.Height);
+        return Rectangle.FromLTRB(minX, minY, maxX + 1, maxY + 1);
+    }
+
+    private static void RemoveGreen(Bitmap bitmap)
     {
         var rect = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
         var data = bitmap.LockBits(rect, ImageLockMode.ReadWrite, PixelFormat.Format32bppArgb);
         int bytes = Math.Abs(data.Stride) * data.Height;
         byte[] pixels = new byte[bytes];
         Marshal.Copy(data.Scan0, pixels, 0, bytes);
-
         for (int y = 0; y < bitmap.Height; y++)
         {
             int row = y * data.Stride;
@@ -51,109 +97,109 @@ public static class EnemySheetBuilder
                 byte b = pixels[i + 0];
                 byte g = pixels[i + 1];
                 byte r = pixels[i + 2];
-                byte a = pixels[i + 3];
-                if (a < 24) continue;
-
-                bool skin = r > 130 && g > 78 && b > 58 && r > g + 28 && r > b + 38;
-                bool hair = r < 95 && g < 75 && b < 65;
-                if (skin)
+                if (IsGreenKey(r, g, b))
                 {
-                    pixels[i + 0] = Clamp(b * 0.92 + 8);
-                    pixels[i + 1] = Clamp(g * 0.92 + 6);
-                    pixels[i + 2] = Clamp(r * 0.96);
+                    pixels[i + 3] = 0;
                     continue;
                 }
-
-                int hash = (x * 17 + y * 31) & 15;
-                double grime = hash == 0 ? 0.82 : (hash == 1 ? 0.9 : 1.0);
-                if (kind == "melee")
+                if (g > r + 35 && g > b + 35)
                 {
-                    byte tr = hair ? (byte)35 : (byte)48;
-                    byte tg = hair ? (byte)38 : (byte)55;
-                    byte tb = hair ? (byte)42 : (byte)58;
-                    pixels[i + 0] = Clamp((b * 0.45 + tb * 0.55) * grime);
-                    pixels[i + 1] = Clamp((g * 0.45 + tg * 0.55) * grime);
-                    pixels[i + 2] = Clamp((r * 0.45 + tr * 0.55) * grime);
-                }
-                else
-                {
-                    byte tr = hair ? (byte)60 : (byte)74;
-                    byte tg = hair ? (byte)62 : (byte)82;
-                    byte tb = hair ? (byte)58 : (byte)68;
-                    pixels[i + 0] = Clamp((b * 0.50 + tb * 0.50) * grime);
-                    pixels[i + 1] = Clamp((g * 0.50 + tg * 0.50) * grime);
-                    pixels[i + 2] = Clamp((r * 0.50 + tr * 0.50) * grime);
+                    pixels[i + 1] = (byte)Math.Max((r + b) / 2, g - 55);
                 }
             }
         }
-
         Marshal.Copy(pixels, 0, data.Scan0, bytes);
         bitmap.UnlockBits(data);
     }
 
-    private static byte Clamp(double value)
+    private static bool IsGreenKey(Color c)
     {
-        return (byte)Math.Max(0, Math.Min(255, (int)Math.Round(value)));
+        return IsGreenKey(c.R, c.G, c.B);
     }
 
-    private static void DrawGear(Bitmap bitmap, string kind, string direction)
+    private static bool IsGreenKey(int r, int g, int b)
     {
-        using (var g = Graphics.FromImage(bitmap))
-        using (var outline = new Pen(Color.FromArgb(210, 18, 14, 12), 8))
-        using (var bat = new Pen(Color.FromArgb(255, 96, 74, 48), 5))
-        using (var gun = new Pen(Color.FromArgb(255, 32, 34, 36), 6))
-        using (var bandage = new SolidBrush(Color.FromArgb(190, 198, 183, 158)))
-        using (var pouch = new SolidBrush(Color.FromArgb(170, 77, 87, 63)))
-        {
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            for (int frame = 0; frame < 16; frame++)
-            {
-                int ox = (frame % 4) * 384;
-                int oy = (frame / 4) * 384;
-                int gait = frame % 8;
-                int sway = (gait == 2 || gait == 6) ? 5 : (gait == 3 || gait == 7 ? -4 : 0);
+        return g > 165 && r < 90 && b < 105 && g > r * 1.7 && g > b * 1.45;
+    }
 
-                if (kind == "melee")
-                {
-                    g.FillRectangle(bandage, ox + 171, oy + 138, 40, 9);
-                    Point p1, p2;
-                    switch (direction)
-                    {
-                        case "n": p1 = new Point(ox + 150 + sway, oy + 205); p2 = new Point(ox + 102 + sway, oy + 132); break;
-                        case "ne": p1 = new Point(ox + 225 + sway, oy + 210); p2 = new Point(ox + 288 + sway, oy + 142); break;
-                        case "e": p1 = new Point(ox + 230 + sway, oy + 215); p2 = new Point(ox + 315 + sway, oy + 202); break;
-                        case "se": p1 = new Point(ox + 230 + sway, oy + 218); p2 = new Point(ox + 298 + sway, oy + 158); break;
-                        default: p1 = new Point(ox + 236 + sway, oy + 220); p2 = new Point(ox + 298 + sway, oy + 146); break;
-                    }
-                    g.DrawLine(outline, p1, p2);
-                    g.DrawLine(bat, p1, p2);
-                }
-                else
-                {
-                    g.FillRectangle(pouch, ox + 154, oy + 180, 70, 14);
-                    Point p1, p2;
-                    switch (direction)
-                    {
-                        case "n": p1 = new Point(ox + 155 + sway, oy + 198); p2 = new Point(ox + 120 + sway, oy + 172); break;
-                        case "ne": p1 = new Point(ox + 226 + sway, oy + 203); p2 = new Point(ox + 268 + sway, oy + 180); break;
-                        case "e": p1 = new Point(ox + 228 + sway, oy + 207); p2 = new Point(ox + 286 + sway, oy + 207); break;
-                        case "se": p1 = new Point(ox + 226 + sway, oy + 210); p2 = new Point(ox + 272 + sway, oy + 228); break;
-                        default: p1 = new Point(ox + 224 + sway, oy + 210); p2 = new Point(ox + 262 + sway, oy + 238); break;
-                    }
-                    g.DrawLine(outline, p1, p2);
-                    g.DrawLine(gun, p1, p2);
-                    g.FillEllipse(Brushes.Black, p2.X - 4, p2.Y - 4, 8, 8);
-                }
-            }
+    private static void DrawFrame(Graphics g, Bitmap cutout, string direction, int x, int y, float sway, float bob, bool walk)
+    {
+        float targetHeight = direction == "n" ? 252f : 266f;
+        float scale = targetHeight / cutout.Height;
+        float width = cutout.Width * scale;
+        float height = cutout.Height * scale;
+        float squash = 1f;
+        bool flip = false;
+        float alpha = 1f;
+
+        switch (direction)
+        {
+            case "n":
+                squash = 0.86f;
+                alpha = 0.88f;
+                break;
+            case "ne":
+                squash = 0.9f;
+                flip = true;
+                break;
+            case "e":
+                squash = 0.78f;
+                flip = true;
+                break;
+            case "se":
+                squash = 0.9f;
+                flip = true;
+                break;
         }
+
+        width *= squash;
+        float centerX = x + 192f + sway;
+        float footY = y + 340f + bob;
+        var dest = new RectangleF(centerX - width * 0.5f, footY - height, width, height);
+
+        using (var shadow = new SolidBrush(Color.FromArgb(55, 0, 0, 0)))
+        {
+            g.FillEllipse(shadow, x + 132, y + 322, 120, 24);
+        }
+
+        var oldState = g.Save();
+        if (flip)
+        {
+            g.TranslateTransform(dest.X + dest.Width * 0.5f, dest.Y + dest.Height * 0.5f);
+            g.ScaleTransform(-1, 1);
+            g.TranslateTransform(-(dest.X + dest.Width * 0.5f), -(dest.Y + dest.Height * 0.5f));
+        }
+
+        using (var attributes = new ImageAttributes())
+        {
+            var matrix = new ColorMatrix();
+            matrix.Matrix33 = alpha;
+            if (direction == "n")
+            {
+                matrix.Matrix00 = 0.68f;
+                matrix.Matrix11 = 0.72f;
+                matrix.Matrix22 = 0.76f;
+            }
+            attributes.SetColorMatrix(matrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
+            g.DrawImage(cutout, Rectangle.Round(dest), 0, 0, cutout.Width, cutout.Height, GraphicsUnit.Pixel, attributes);
+        }
+        g.Restore(oldState);
+
     }
 }
 "@
 
-foreach ($direction in $directions) {
-	$source = Join-Path $sourceDir "survivor_anim_$direction.png"
-	[EnemySheetBuilder]::Build($source, (Join-Path $outDir "enemy_melee_anim_$direction.png"), "melee", $direction)
-	[EnemySheetBuilder]::Build($source, (Join-Path $outDir "enemy_pistol_anim_$direction.png"), "pistol", $direction)
+$sources = @{
+	"melee" = "enemy_melee_concept.png"
+	"pistol" = "enemy_pistol_concept.png"
 }
 
-Write-Host "Generated enemy animation sheets in $outDir"
+foreach ($kind in $sources.Keys) {
+	$source = Join-Path $enemyDir $sources[$kind]
+	foreach ($direction in $directions) {
+		$outPath = Join-Path $enemyDir "enemy_${kind}_anim_${direction}.png"
+		[EnemyConceptSheetBuilder]::Build($source, $outPath, $direction)
+	}
+}
+
+Write-Host "Generated concept enemy animation sheets in $enemyDir"
