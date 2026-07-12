@@ -6,6 +6,7 @@ const ROAD_INDICES := [2, 6]
 const MAP_SIZE := GRID_SIZE * CELL_SIZE
 const SIDEWALK_WIDTH := 2.0
 const ISOMETRIC_VERTICAL_PROJECTION := 0.816496580927726
+const SHOW_VEHICLE_COLLISION_DEBUG := true
 const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
 const ASPHALT_TEXTURE := preload("res://assets/tiles/asphalt.png")
 const CONCRETE_TEXTURE := preload("res://assets/tiles/concrete.png")
@@ -385,6 +386,13 @@ func _add_vehicle_collision(body: StaticBody3D, footprint: Vector2, height: floa
 	# Their shared rotation maps screen-horizontal vehicle art to world (X, -Z).
 	var segment_length := footprint.x / 3.0
 	var length_axis := Vector3(1.0, 0.0, -1.0).normalized()
+	var debug_material: StandardMaterial3D
+	if SHOW_VEHICLE_COLLISION_DEBUG:
+		debug_material = StandardMaterial3D.new()
+		debug_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		debug_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		debug_material.albedo_color = Color(1.0, 0.03, 0.03, 0.38)
+		debug_material.no_depth_test = true
 	for segment_index in 3:
 		var collision := CollisionShape3D.new()
 		collision.name = "VehicleCollision%d" % segment_index
@@ -396,6 +404,18 @@ func _add_vehicle_collision(body: StaticBody3D, footprint: Vector2, height: floa
 		collision.rotation.y = deg_to_rad(45.0)
 		collision.shape = shape
 		body.add_child(collision)
+		if SHOW_VEHICLE_COLLISION_DEBUG:
+			var debug_plane := MeshInstance3D.new()
+			debug_plane.name = "CollisionDebug%d" % segment_index
+			var debug_mesh := PlaneMesh.new()
+			debug_mesh.size = Vector2(segment_length + 0.08, footprint.y)
+			debug_mesh.material = debug_material
+			debug_plane.position = collision.position
+			debug_plane.position.y = 0.04 - body.position.y
+			debug_plane.rotation.y = collision.rotation.y
+			debug_plane.mesh = debug_mesh
+			debug_plane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			body.add_child(debug_plane)
 
 
 func _add_plane(node_name: String, position: Vector3, size: Vector2, material: StandardMaterial3D, height: float) -> void:
