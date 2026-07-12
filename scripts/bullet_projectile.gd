@@ -62,8 +62,14 @@ func _on_body_entered(body: Node3D) -> void:
 
 
 func _apply_hit(body: Object) -> void:
-	if body != null and body.has_method("take_damage"):
+	if body != null and body.has_method("take_hit"):
+		body.call("take_hit", damage, direction)
+	elif body != null and body.has_method("take_damage"):
 		body.call("take_damage", damage)
-	elif body is Node and (body as Node).get_parent() != null and (body as Node).get_parent().has_method("take_damage"):
-		(body as Node).get_parent().call("take_damage", damage)
+	elif body is Node and (body as Node).get_parent() != null:
+		var parent := (body as Node).get_parent()
+		if parent.has_method("take_hit"):
+			parent.call("take_hit", damage, direction)
+		elif parent.has_method("take_damage"):
+			parent.call("take_damage", damage)
 	queue_free()
