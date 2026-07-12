@@ -17,6 +17,7 @@ config/features=PackedStringArray("4.5")
 [autoload]
 
 MCPRuntime="*res://addons/godot_mcp/runtime/mcp_runtime.gd"
+GameState="*res://scripts/game_state.gd"
 
 [display]
 

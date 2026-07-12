@@ -108,6 +108,11 @@ var enemies: Array[CharacterBody3D] = []
 
 
 func _ready() -> void:
+	player_health = GameState.player_health
+	magazine_ammo = GameState.magazine_ammo
+	reserve_ammo = GameState.reserve_ammo
+	var restore_weapon := GameState.has_ak
+	has_ak = false
 	camera.size = 28.0
 	player.collision_mask = 3
 	camera.position = Vector3(10.5, 10.5, 10.5)
@@ -128,6 +133,18 @@ func _ready() -> void:
 	_setup_building_overlays()
 	_build_visibility_fog()
 	_set_facing("s")
+	var world := $World as ProceduralCityMap
+	world.shelter_portal_entered.connect(_on_shelter_portal_entered)
+	if GameState.returning_from_shelter:
+		player.position = world.get_shelter_exit_position()
+		GameState.returning_from_shelter = false
+	else:
+		player.position = world.find_nearest_open_position(player.position)
+	var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
+	if health_bar:
+		health_bar.value = player_health
+	if restore_weapon:
+		_equip_ak47()
 
 
 func _physics_process(delta: float) -> void:
@@ -300,7 +317,7 @@ func _on_weapon_animation_finished() -> void:
 func _spawn_ak_pickup() -> void:
 	ak_pickup = Node3D.new()
 	ak_pickup.name = "AK47Pickup"
-	ak_pickup.position = AK_PICKUP_POSITION
+	ak_pickup.position = _safe_map_position(AK_PICKUP_POSITION)
 	add_child(ak_pickup)
 
 	var sprite := Sprite3D.new()
@@ -337,7 +354,7 @@ func _spawn_ammo_pickups() -> void:
 	for index in AMMO_PICKUP_POSITIONS.size():
 		var pickup := Node3D.new()
 		pickup.name = "Ammo762_%d" % index
-		pickup.position = AMMO_PICKUP_POSITIONS[index]
+		pickup.position = _safe_map_position(AMMO_PICKUP_POSITIONS[index])
 		pickup.set_meta("base_y", pickup.position.y)
 		add_child(pickup)
 		var sprite := Sprite3D.new()
@@ -380,6 +397,7 @@ func _collect_nearby_ammo() -> void:
 	if not is_instance_valid(nearby_ammo_pickup):
 		return
 	reserve_ammo += AMMO_PICKUP_AMOUNT
+	GameState.reserve_ammo = reserve_ammo
 	ammo_notice.text = "+%d  7.62mm 탄약   잔탄 %d" % [AMMO_PICKUP_AMOUNT, reserve_ammo]
 	ammo_notice.visible = true
 	ammo_notice_time = 2.2
@@ -594,6 +612,7 @@ func _update_pickup(delta: float) -> void:
 
 func _equip_ak47() -> void:
 	has_ak = true
+	GameState.has_ak = true
 	pickup_touch_held = false
 	pickup_panel.visible = false
 	if is_instance_valid(ak_pickup):
@@ -636,6 +655,7 @@ func _fire_ak47() -> void:
 		_reload_ak47()
 		return
 	magazine_ammo -= 1
+	GameState.magazine_ammo = magazine_ammo
 	fire_cooldown = FIRE_INTERVAL
 	var world_direction := _get_current_fire_direction()
 	_set_facing_from_world_direction(world_direction)
@@ -647,7 +667,7 @@ func _fire_ak47() -> void:
 	projectile.set_script(BULLET_PROJECTILE)
 	projectile.set("direction", world_direction)
 	projectile.set("source_body", player)
-	projectile.set("damage", 24)
+	projectile.set("damage", 24 + (GameState.weapon_level - 1) * 6)
 	projectile.position = _get_weapon_muzzle_position(world_direction)
 	add_child(projectile)
 	_play_gunshot()
@@ -730,6 +750,8 @@ func _reload_ak47() -> void:
 	var loaded := mini(30, reserve_ammo)
 	magazine_ammo = loaded
 	reserve_ammo -= loaded
+	GameState.magazine_ammo = magazine_ammo
+	GameState.reserve_ammo = reserve_ammo
 	fire_cooldown = 0.85
 	ammo_notice.text = "AK-47 재장전   %d / %d" % [magazine_ammo, reserve_ammo]
 	ammo_notice.visible = true
@@ -933,7 +955,7 @@ func _spawn_enemies() -> void:
 		var enemy := CharacterBody3D.new()
 		enemy.name = "%sEnemy%d" % [kind.capitalize(), index]
 		enemy.set_script(ENEMY_SCRIPT)
-		enemy.position = Vector3(spawn_points[index].x, 0.78, spawn_points[index].y)
+		enemy.position = _safe_map_position(Vector3(spawn_points[index].x, 0.78, spawn_points[index].y))
 		enemy.call("configure", kind, player, sheets)
 		add_child(enemy)
 		enemies.append(enemy)
@@ -982,6 +1004,7 @@ func _update_visibility_fog() -> void:
 
 func take_damage(amount: int) -> void:
 	player_health = maxi(0, player_health - amount)
+	GameState.player_health = player_health
 	var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
 	if health_bar:
 		health_bar.value = player_health
@@ -1123,6 +1146,25 @@ func _is_player_inside_sprite_screen_rect(sprite: Sprite3D) -> bool:
 	return mask.get_pixelv(pixel).a > 0.1
 
 
+func _safe_map_position(requested_position: Vector3) -> Vector3:
+	var world := get_node_or_null("World") as ProceduralCityMap
+	if world == null:
+		return requested_position
+	return world.find_nearest_open_position(requested_position)
+
+
+func _save_run_state() -> void:
+	GameState.player_health = player_health
+	GameState.magazine_ammo = magazine_ammo
+	GameState.reserve_ammo = reserve_ammo
+	GameState.has_ak = has_ak
+
+
+func _on_shelter_portal_entered() -> void:
+	_save_run_state()
+	get_tree().call_deferred("change_scene_to_file", "res://scenes/shelter_interior.tscn")
+
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and not event.echo:
 		var key_event := event as InputEventKey
@@ -1135,6 +1177,10 @@ func _input(event: InputEvent) -> void:
 				pickup_keyboard_held = key_event.pressed
 		elif key == KEY_SPACE and key_event.pressed:
 			_try_fire_ak47()
+		elif key == KEY_N and key_event.pressed:
+			_save_run_state()
+			GameState.randomize_map()
+			get_tree().reload_current_scene()
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:

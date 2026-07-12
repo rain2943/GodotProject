@@ -111,6 +111,13 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector3.ZERO
 		_set_motion_state("idle")
 		return
+	if _target_is_in_safe_zone():
+		velocity = velocity.move_toward(Vector3.ZERO, 12.0 * delta)
+		combat_state = "normal"
+		threat_marker.visible = false
+		_set_motion_state("idle")
+		move_and_slide()
+		return
 
 	var offset := target.global_position - global_position
 	offset.y = 0.0
@@ -306,6 +313,13 @@ func _has_line_of_sight() -> bool:
 	query.exclude = [get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	return not hit.is_empty() and hit.get("collider") == target
+
+
+func _target_is_in_safe_zone() -> bool:
+	if not is_instance_valid(target) or target.get_parent() == null:
+		return false
+	var world := target.get_parent().get_node_or_null("World")
+	return world != null and world.has_method("is_position_in_safe_zone") and world.call("is_position_in_safe_zone", target.global_position)
 
 
 func _fire_pistol(direction: Vector3) -> void:
