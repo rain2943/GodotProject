@@ -9,6 +9,11 @@ const ISOMETRIC_VERTICAL_PROJECTION := 0.816496580927726
 const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
 const ASPHALT_TEXTURE := preload("res://assets/tiles/asphalt.png")
 const CONCRETE_TEXTURE := preload("res://assets/tiles/concrete.png")
+const VEHICLE_TEXTURES := {
+	"sedan": preload("res://assets/vehicles/wrecked_sedan.png"),
+	"truck": preload("res://assets/vehicles/wrecked_truck.png"),
+	"bus": preload("res://assets/vehicles/wrecked_bus.png"),
+}
 const MAP_MODULES := 90
 const SIDEWALK_CLEARANCE_MODULES := 2
 const ALLEY_SEGMENTS := [
@@ -25,6 +30,50 @@ const BUILDING_LAYOUT := [
 		"module_origin": Vector2i(50, 54),
 	}
 ]
+const VEHICLE_PLACEMENTS := [
+	{
+		"type": "sedan",
+		"position": Vector3(-21.8, 0.1, -8.6),
+		"visual_width": 4.8,
+		"collision": Vector2(3.9, 1.85),
+		"height": 1.2,
+	},
+	{
+		"type": "sedan",
+		"position": Vector3(-16.4, 0.1, 20.7),
+		"visual_width": 4.5,
+		"collision": Vector2(3.7, 1.8),
+		"height": 1.2,
+	},
+	{
+		"type": "truck",
+		"position": Vector3(23.2, 0.1, -16.2),
+		"visual_width": 6.5,
+		"collision": Vector2(5.7, 2.2),
+		"height": 1.8,
+	},
+	{
+		"type": "truck",
+		"position": Vector3(15.6, 0.1, 23.1),
+		"visual_width": 6.1,
+		"collision": Vector2(5.3, 2.15),
+		"height": 1.75,
+	},
+	{
+		"type": "bus",
+		"position": Vector3(-22.8, 0.1, 17.2),
+		"visual_width": 8.6,
+		"collision": Vector2(7.7, 2.35),
+		"height": 2.2,
+	},
+	{
+		"type": "bus",
+		"position": Vector3(20.8, 0.1, -22.2),
+		"visual_width": 8.3,
+		"collision": Vector2(7.45, 2.35),
+		"height": 2.2,
+	},
+]
 
 var asphalt_material: StandardMaterial3D
 var lot_material: StandardMaterial3D
@@ -40,6 +89,7 @@ func _ready() -> void:
 	_build_tile_grid()
 	_build_alleys()
 	_build_buildings()
+	_build_vehicles()
 
 
 func _build_materials() -> void:
@@ -263,6 +313,62 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	body.set_meta("footprint_corners_px", footprint_corners)
 	body.set_meta("occlusion_lateral_limit", (footprint_world.x + footprint_world.y) / (2.0 * sqrt(2.0)))
 	body.set_meta("occlusion_depth_limit", float(definition["occlusion_depth"]))
+
+
+func _build_vehicles() -> void:
+	for index in VEHICLE_PLACEMENTS.size():
+		var placement: Dictionary = VEHICLE_PLACEMENTS[index]
+		var vehicle_type: String = placement.get("type", "")
+		var texture := VEHICLE_TEXTURES.get(vehicle_type) as Texture2D
+		if texture == null:
+			push_warning("Skipping vehicle %s: texture missing" % vehicle_type)
+			continue
+		_spawn_vehicle(index, placement, texture)
+
+
+func _spawn_vehicle(index: int, placement: Dictionary, texture: Texture2D) -> void:
+	var body := StaticBody3D.new()
+	body.name = "Vehicle_%s_%02d" % [placement.get("type", "prop"), index]
+	body.position = placement.get("position", Vector3.ZERO)
+	add_child(body)
+
+	var sprite := Sprite3D.new()
+	sprite.name = "VehicleSprite"
+	sprite.texture = texture
+	var visual_width := float(placement.get("visual_width", 4.0))
+	sprite.pixel_size = visual_width / float(texture.get_width())
+	sprite.position.y = (float(texture.get_height()) * sprite.pixel_size * 0.5) / ISOMETRIC_VERTICAL_PROJECTION
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.transparent = true
+	sprite.shaded = false
+	sprite.no_depth_test = true
+	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+	sprite.render_priority = 5
+	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	body.add_child(sprite)
+
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	var footprint: Vector2 = placement.get("collision", Vector2(3.5, 1.8))
+	var height := float(placement.get("height", 1.2))
+	shape.size = Vector3(footprint.x, height, footprint.y)
+	collision.position.y = height * 0.5
+	collision.shape = shape
+	body.add_child(collision)
+
+	var shadow_material := StandardMaterial3D.new()
+	shadow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	shadow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	shadow_material.albedo_color = Color(0, 0, 0, 0.3)
+	var shadow_mesh := PlaneMesh.new()
+	shadow_mesh.size = Vector2(footprint.x * 1.04, footprint.y * 1.18)
+	shadow_mesh.material = shadow_material
+	var shadow := MeshInstance3D.new()
+	shadow.name = "VehicleShadow"
+	shadow.position.y = 0.025
+	shadow.mesh = shadow_mesh
+	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	body.add_child(shadow)
 
 
 func _add_plane(node_name: String, position: Vector3, size: Vector2, material: StandardMaterial3D, height: float) -> void:
