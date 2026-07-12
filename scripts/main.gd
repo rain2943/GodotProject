@@ -41,8 +41,20 @@ const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.p
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
-const ENEMY_MELEE_TEXTURE := preload("res://assets/enemies/enemy_melee.png")
-const ENEMY_PISTOL_TEXTURE := preload("res://assets/enemies/enemy_pistol.png")
+const ENEMY_MELEE_SHEETS := {
+	"s": preload("res://assets/enemies/enemy_melee_anim_s.png"),
+	"se": preload("res://assets/enemies/enemy_melee_anim_se.png"),
+	"e": preload("res://assets/enemies/enemy_melee_anim_e.png"),
+	"ne": preload("res://assets/enemies/enemy_melee_anim_ne.png"),
+	"n": preload("res://assets/enemies/enemy_melee_anim_n.png"),
+}
+const ENEMY_PISTOL_SHEETS := {
+	"s": preload("res://assets/enemies/enemy_pistol_anim_s.png"),
+	"se": preload("res://assets/enemies/enemy_pistol_anim_se.png"),
+	"e": preload("res://assets/enemies/enemy_pistol_anim_e.png"),
+	"ne": preload("res://assets/enemies/enemy_pistol_anim_ne.png"),
+	"n": preload("res://assets/enemies/enemy_pistol_anim_n.png"),
+}
 const AK_PICKUP_POSITION := Vector3(1.15, 0.32, 0.7)
 const PICKUP_DISTANCE := 1.75
 const PICKUP_HOLD_DURATION := 0.9
@@ -94,6 +106,7 @@ var fire_button: Button
 var fire_cooldown := 0.0
 var fire_pose_time := 0.0
 var fire_button_held := false
+var mouse_fire_held := false
 var has_ak := false
 var magazine_ammo := 30
 var reserve_ammo := 90
@@ -113,6 +126,7 @@ var ammo_prompt_panel: PanelContainer
 var nearby_ammo_pickup: Node3D
 var visibility_material: ShaderMaterial
 var smoke_particle_texture: ImageTexture
+var loot_glow_texture: ImageTexture
 var player_health := 82
 var enemies: Array[CharacterBody3D] = []
 
@@ -162,6 +176,9 @@ func _physics_process(delta: float) -> void:
 		_set_motion_state("idle")
 		state_label.text = "경계 중"
 
+	if mouse_fire_held and has_ak:
+		_set_facing_from_world_direction(_get_mouse_world_direction())
+
 	player.move_and_slide()
 	player.position.x = clampf(player.position.x, -MAP_LIMIT, MAP_LIMIT)
 	player.position.z = clampf(player.position.z, -MAP_LIMIT, MAP_LIMIT)
@@ -180,6 +197,16 @@ func _update_facing(screen_direction: Vector2) -> void:
 	var angle := fposmod(rad_to_deg(atan2(screen_direction.x, -screen_direction.y)), 360.0)
 	var index := int(round(angle / 45.0)) % 8
 	_set_facing(SCREEN_DIRECTION_NAMES[index])
+
+
+func _set_facing_from_world_direction(world_direction: Vector3) -> void:
+	if world_direction.length_squared() <= 0.01:
+		return
+	var screen_direction := Vector2(
+		world_direction.x - world_direction.z,
+		world_direction.x + world_direction.z
+	).normalized()
+	_update_facing(screen_direction)
 
 
 func _set_facing(direction_name: String) -> void:
@@ -362,6 +389,7 @@ func _spawn_ak_pickup() -> void:
 	shadow.mesh = shadow_mesh
 	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	ak_pickup.add_child(shadow)
+	_add_loot_highlight(ak_pickup, Color("#dfb94f"), 1.05)
 
 
 func _spawn_ammo_pickups() -> void:
@@ -380,6 +408,7 @@ func _spawn_ammo_pickups() -> void:
 		sprite.no_depth_test = true
 		sprite.render_priority = 88
 		pickup.add_child(sprite)
+		_add_loot_highlight(pickup, Color("#f2d27a"), 0.88)
 		ammo_pickups.append(pickup)
 
 
@@ -398,6 +427,7 @@ func _update_ammo_pickups(delta: float) -> void:
 		pickup.position.y = base_y + sin(Time.get_ticks_msec() * 0.004 + pickup.position.x) * 0.04
 		var pickup_ground := Vector2(pickup.position.x, pickup.position.z)
 		var distance := player_ground.distance_to(pickup_ground)
+		_update_loot_highlight(pickup, distance, delta)
 		if distance <= PICKUP_DISTANCE and distance < nearest_distance:
 			nearest_distance = distance
 			nearby_ammo_pickup = pickup
@@ -417,6 +447,73 @@ func _collect_nearby_ammo() -> void:
 	nearby_ammo_pickup.queue_free()
 	nearby_ammo_pickup = null
 	ammo_prompt_panel.visible = false
+
+
+func _add_loot_highlight(pickup: Node3D, color: Color, radius: float) -> void:
+	var material := StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(color.r, color.g, color.b, 0.34)
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = 1.6
+
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = radius * 0.88
+	ring_mesh.outer_radius = radius
+	ring_mesh.rings = 24
+	ring_mesh.ring_segments = 8
+	ring_mesh.material = material
+	var ring := MeshInstance3D.new()
+	ring.name = "LootRing"
+	ring.position.y = -0.26
+	ring.mesh = ring_mesh
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	pickup.add_child(ring)
+
+	var marker := Sprite3D.new()
+	marker.name = "LootMarker"
+	marker.texture = _get_loot_glow_texture()
+	marker.position.y = 1.1
+	marker.pixel_size = 0.006
+	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	marker.shaded = false
+	marker.transparent = true
+	marker.no_depth_test = true
+	marker.render_priority = 120
+	marker.modulate = color
+	pickup.add_child(marker)
+
+
+func _update_loot_highlight(pickup: Node3D, distance: float, _delta: float) -> void:
+	var ring := pickup.get_node_or_null("LootRing") as MeshInstance3D
+	var marker := pickup.get_node_or_null("LootMarker") as Sprite3D
+	var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006 + pickup.position.x)
+	var near_boost := 1.0 if distance > PICKUP_DISTANCE else 1.28
+	if ring:
+		var scale_value := near_boost * (1.0 + pulse * 0.16)
+		ring.scale = Vector3(scale_value, scale_value, scale_value)
+	if marker:
+		marker.position.y = 1.05 + pulse * 0.18
+		var color := marker.modulate
+		color.a = 0.58 + pulse * 0.36
+		marker.modulate = color
+
+
+func _get_loot_glow_texture() -> ImageTexture:
+	if loot_glow_texture != null:
+		return loot_glow_texture
+	var image := Image.create(96, 96, false, Image.FORMAT_RGBA8)
+	for y in 96:
+		for x in 96:
+			var uv := (Vector2(x, y) + Vector2(0.5, 0.5)) / 96.0
+			var center_distance := uv.distance_to(Vector2(0.5, 0.5))
+			var diamond := absf(uv.x - 0.5) + absf(uv.y - 0.5)
+			var alpha := maxf(0.0, 1.0 - diamond * 2.1)
+			alpha = maxf(alpha, maxf(0.0, 1.0 - center_distance * 2.6) * 0.55)
+			image.set_pixel(x, y, Color(1, 1, 1, alpha * alpha))
+	loot_glow_texture = ImageTexture.create_from_image(image)
+	return loot_glow_texture
 
 
 func _build_weapon_hud() -> void:
@@ -540,7 +637,9 @@ func _update_pickup(delta: float) -> void:
 	ak_pickup.position.y = AK_PICKUP_POSITION.y + sin(Time.get_ticks_msec() * 0.004) * 0.045
 	var player_ground := Vector2(player.position.x, player.position.z)
 	var pickup_ground := Vector2(ak_pickup.position.x, ak_pickup.position.z)
-	var is_near := player_ground.distance_to(pickup_ground) <= PICKUP_DISTANCE
+	var distance := player_ground.distance_to(pickup_ground)
+	_update_loot_highlight(ak_pickup, distance, delta)
+	var is_near := distance <= PICKUP_DISTANCE
 	pickup_panel.visible = is_near
 	var holding := pickup_touch_held or pickup_keyboard_held
 	if is_near and holding:
@@ -573,9 +672,10 @@ func _equip_ak47() -> void:
 func _update_firing(delta: float) -> void:
 	fire_cooldown = maxf(0.0, fire_cooldown - delta)
 	fire_pose_time = maxf(0.0, fire_pose_time - delta)
-	if fire_button_held and has_ak and fire_cooldown <= 0.0:
+	var firing_held := fire_button_held or mouse_fire_held
+	if firing_held and has_ak and fire_cooldown <= 0.0:
 		_fire_ak47()
-	elif is_firing_animation and not fire_button_held and fire_pose_time <= 0.0:
+	elif is_firing_animation and not firing_held and fire_pose_time <= 0.0:
 		_stop_survivor_fire_animation()
 
 
@@ -600,13 +700,9 @@ func _fire_ak47() -> void:
 	magazine_ammo -= 1
 	fire_cooldown = FIRE_INTERVAL
 	fire_pose_time = 0.14
+	var world_direction := _get_current_fire_direction()
+	_set_facing_from_world_direction(world_direction)
 	_play_survivor_fire_animation()
-	var screen_direction: Vector2 = DIRECTION_VECTORS[facing]
-	var world_direction := Vector3(
-		screen_direction.x + screen_direction.y,
-		0,
-		-screen_direction.x + screen_direction.y
-	).normalized()
 	var projectile := Area3D.new()
 	projectile.name = "AK47Bullet"
 	projectile.set_script(BULLET_PROJECTILE)
@@ -619,6 +715,42 @@ func _fire_ak47() -> void:
 	_spawn_muzzle_light(world_direction)
 	_spawn_launch_fx(world_direction)
 	_update_equipment_ui()
+
+
+func _get_current_fire_direction() -> Vector3:
+	if mouse_fire_held:
+		return _get_mouse_world_direction()
+	var screen_direction: Vector2 = DIRECTION_VECTORS[facing]
+	return Vector3(
+		screen_direction.x + screen_direction.y,
+		0,
+		-screen_direction.x + screen_direction.y
+	).normalized()
+
+
+func _get_mouse_world_direction() -> Vector3:
+	var mouse_position := get_viewport().get_mouse_position()
+	var ray_origin := camera.project_ray_origin(mouse_position)
+	var ray_direction := camera.project_ray_normal(mouse_position)
+	var target_y := player.global_position.y
+	if absf(ray_direction.y) < 0.001:
+		return _get_current_facing_world_direction()
+	var distance_to_plane := (target_y - ray_origin.y) / ray_direction.y
+	var hit_position := ray_origin + ray_direction * distance_to_plane
+	var direction := hit_position - player.global_position
+	direction.y = 0.0
+	if direction.length_squared() <= 0.01:
+		return _get_current_facing_world_direction()
+	return direction.normalized()
+
+
+func _get_current_facing_world_direction() -> Vector3:
+	var screen_direction: Vector2 = DIRECTION_VECTORS[facing]
+	return Vector3(
+		screen_direction.x + screen_direction.y,
+		0,
+		-screen_direction.x + screen_direction.y
+	).normalized()
 
 
 func _reload_ak47() -> void:
@@ -827,12 +959,12 @@ func _spawn_enemies() -> void:
 	spawn_points.shuffle()
 	for index in 6:
 		var kind := "melee" if index < 3 else "pistol"
-		var texture := ENEMY_MELEE_TEXTURE if kind == "melee" else ENEMY_PISTOL_TEXTURE
+		var sheets := ENEMY_MELEE_SHEETS if kind == "melee" else ENEMY_PISTOL_SHEETS
 		var enemy := CharacterBody3D.new()
 		enemy.name = "%sEnemy%d" % [kind.capitalize(), index]
 		enemy.set_script(ENEMY_SCRIPT)
 		enemy.position = Vector3(spawn_points[index].x, 0.78, spawn_points[index].y)
-		enemy.call("configure", kind, player, texture)
+		enemy.call("configure", kind, player, sheets)
 		add_child(enemy)
 		enemies.append(enemy)
 
@@ -1055,6 +1187,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			fire_button_held = mouse_event.pressed
+			mouse_fire_held = mouse_event.pressed
 			if mouse_event.pressed:
 				_try_fire_ak47()

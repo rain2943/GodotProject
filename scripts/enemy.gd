@@ -5,19 +5,23 @@ signal died(enemy: CharacterBody3D)
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const MELEE_SPEED := 3.1
 const PISTOL_SPEED := 2.5
+const FRAME_SIZE := Vector2(384, 384)
+const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 
 var enemy_kind := "melee"
 var target: CharacterBody3D
-var sprite_texture: Texture2D
+var animation_sheets := {}
 var health := 55
 var attack_cooldown := 0.0
-var sprite: Sprite3D
+var sprite: AnimatedSprite3D
+var motion_state := "idle"
+var facing := "s"
 
 
-func configure(kind: String, target_body: CharacterBody3D, texture: Texture2D) -> void:
+func configure(kind: String, target_body: CharacterBody3D, sheets: Dictionary) -> void:
 	enemy_kind = kind
 	target = target_body
-	sprite_texture = texture
+	animation_sheets = sheets
 	health = 70 if enemy_kind == "melee" else 50
 
 
@@ -49,11 +53,11 @@ func _ready() -> void:
 	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(shadow)
 
-	sprite = Sprite3D.new()
+	sprite = AnimatedSprite3D.new()
 	sprite.name = "EnemySprite"
-	sprite.texture = sprite_texture
+	sprite.sprite_frames = _create_sprite_frames()
 	sprite.position.y = 0.25
-	sprite.pixel_size = 0.0019
+	sprite.pixel_size = 0.0068
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.shaded = false
 	sprite.transparent = true
@@ -61,12 +65,14 @@ func _ready() -> void:
 	sprite.no_depth_test = true
 	sprite.render_priority = 30
 	add_child(sprite)
+	_play_animation()
 
 
 func _physics_process(delta: float) -> void:
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	if not is_instance_valid(target):
 		velocity = Vector3.ZERO
+		_set_motion_state("idle")
 		return
 
 	var offset := target.global_position - global_position
@@ -76,16 +82,82 @@ func _physics_process(delta: float) -> void:
 	var can_see_target := distance <= vision_range and _has_line_of_sight()
 	if not can_see_target:
 		velocity = velocity.move_toward(Vector3.ZERO, 12.0 * delta)
+		_set_motion_state("idle")
 		move_and_slide()
 		return
 
 	var direction := offset.normalized() if distance > 0.01 else Vector3.ZERO
-	sprite.flip_h = direction.x - direction.z < 0.0
+	_set_facing_from_world_direction(direction)
 	if enemy_kind == "melee":
 		_update_melee(direction, distance)
 	else:
 		_update_pistol(direction, distance)
+	_set_motion_state("walk" if velocity.length_squared() > 0.05 else "idle")
 	move_and_slide()
+
+
+func _create_sprite_frames() -> SpriteFrames:
+	var frames := SpriteFrames.new()
+	frames.remove_animation("default")
+	for direction_name in animation_sheets:
+		for state in ["idle", "walk"]:
+			var animation_name := "%s_%s" % [state, direction_name]
+			frames.add_animation(animation_name)
+			frames.set_animation_loop(animation_name, true)
+			frames.set_animation_speed(animation_name, 7.0 if state == "idle" else 8.5)
+			var first_frame := 0 if state == "idle" else 8
+			for frame_index in range(first_frame, first_frame + 8):
+				var atlas := AtlasTexture.new()
+				atlas.atlas = animation_sheets[direction_name]
+				atlas.region = Rect2(
+					(frame_index % 4) * FRAME_SIZE.x,
+					(frame_index / 4) * FRAME_SIZE.y,
+					FRAME_SIZE.x,
+					FRAME_SIZE.y
+				)
+				frames.add_frame(animation_name, atlas)
+	return frames
+
+
+func _set_motion_state(next_state: String) -> void:
+	if motion_state == next_state:
+		return
+	motion_state = next_state
+	_play_animation()
+
+
+func _set_facing(direction_name: String) -> void:
+	if facing == direction_name:
+		return
+	facing = direction_name
+	_play_animation()
+
+
+func _set_facing_from_world_direction(world_direction: Vector3) -> void:
+	if world_direction.length_squared() <= 0.01:
+		return
+	var screen_direction := Vector2(
+		world_direction.x - world_direction.z,
+		world_direction.x + world_direction.z
+	).normalized()
+	var angle := fposmod(rad_to_deg(atan2(screen_direction.x, -screen_direction.y)), 360.0)
+	var index := int(round(angle / 45.0)) % 8
+	_set_facing(SCREEN_DIRECTION_NAMES[index])
+
+
+func _play_animation() -> void:
+	if sprite == null:
+		return
+	var source := facing
+	var flipped := false
+	match facing:
+		"sw": source = "se"; flipped = true
+		"w": source = "e"; flipped = true
+		"nw": source = "ne"; flipped = true
+	sprite.flip_h = flipped
+	var animation_name := "%s_%s" % [motion_state, source]
+	if sprite.animation != animation_name or not sprite.is_playing():
+		sprite.play(animation_name)
 
 
 func _update_melee(direction: Vector3, distance: float) -> void:
