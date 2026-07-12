@@ -13,6 +13,8 @@ const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
 const ASPHALT_TEXTURE := preload("res://assets/tiles/asphalt.png")
 const CONCRETE_TEXTURE := preload("res://assets/tiles/concrete.png")
 const RIVER_TEXTURE_PATH := "res://assets/tiles/river_water_generated.png"
+const PARKING_TEXTURE_PATH := "res://assets/tiles/parking_lot_generated.png"
+const SHELTER_TEXTURE_PATH := "res://assets/buildings/shelter_exterior_generated.png"
 const VEHICLE_TEXTURES := {
 	"sedan": preload("res://assets/vehicles/wrecked_sedan.png"),
 	"truck": preload("res://assets/vehicles/wrecked_truck.png"),
@@ -40,9 +42,8 @@ var curb_material: StandardMaterial3D
 var water_material: StandardMaterial3D
 var riverbank_material: StandardMaterial3D
 var bridge_material: StandardMaterial3D
-var shelter_material: StandardMaterial3D
-var shelter_glow_material: StandardMaterial3D
 var vehicle_collision_material: StandardMaterial3D
+var parking_material: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -118,13 +119,12 @@ func _build_materials() -> void:
 		water_material = _color_material(Color("#264d59"))
 	water_material.metallic = 0.12
 	water_material.roughness = 0.38
+	if ResourceLoader.exists(PARKING_TEXTURE_PATH):
+		parking_material = _texture_material(load(PARKING_TEXTURE_PATH) as Texture2D)
+	else:
+		parking_material = asphalt_material
 	riverbank_material = _color_material(Color("#4f5146"))
 	bridge_material = _color_material(Color("#575b5d"))
-	shelter_material = _color_material(Color("#3f4d49"))
-	shelter_glow_material = _color_material(Color("#62e6a5"))
-	shelter_glow_material.emission_enabled = true
-	shelter_glow_material.emission = Color("#42d990")
-	shelter_glow_material.emission_energy_multiplier = 2.6
 	vehicle_collision_material = _color_material(Color(1.0, 0.02, 0.02, 0.46))
 	vehicle_collision_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	vehicle_collision_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -218,13 +218,15 @@ func _build_zoned_lots() -> void:
 
 func _build_parking_lot(cell: Vector2i) -> void:
 	var center := _cell_center(cell)
-	_add_plane("ParkingAsphalt", center, Vector2(8.2, 8.2), asphalt_material, 0.045)
-	for offset in [-3.0, -1.5, 0.0, 1.5, 3.0]:
-		_add_plane("ParkingStripe", center + Vector3(offset, 0, 0), Vector2(0.07, 3.4), marking_material, 0.055)
-	var types := VEHICLE_TEXTURES.keys()
-	var vehicle_type: String = types[rng.randi_range(0, types.size() - 1)]
-	var position := center + Vector3(0, 0.1, rng.randf_range(-0.55, 0.55))
-	_spawn_vehicle("Parked_%d_%d" % [cell.x, cell.y], vehicle_type, position)
+	_add_plane("ParkingLotArt", center, Vector2(9.4, 9.4), parking_material, 0.045)
+	var slots := [
+		Vector3(-2.45, 0.1, -2.15),
+		Vector3(-2.45, 0.1, 2.15),
+		Vector3(2.45, 0.1, -2.15),
+		Vector3(2.45, 0.1, 2.15),
+	]
+	var slot: Vector3 = slots[rng.randi_range(0, slots.size() - 1)]
+	_spawn_vehicle("Parked_%d_%d" % [cell.x, cell.y], "sedan", center + slot)
 
 
 func _build_open_lot(cell: Vector2i) -> void:
@@ -350,26 +352,36 @@ func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3) 
 
 func _build_shelter() -> void:
 	var center := _cell_center(SHELTER_CELL)
-	var shelter := Node3D.new()
+	var shelter := StaticBody3D.new()
 	shelter.name = "ShelterSafehouse"
 	shelter.position = center
+	shelter.collision_layer = 1
 	shelter.add_to_group("safe_zone")
+	shelter.add_to_group("camera_occluder")
 	add_child(shelter)
-	_add_cylinder_to(shelter, "SafeZone", Vector3(0, 0.04, 0), 5.0, 0.05, shelter_glow_material)
-	_add_box_to(shelter, "ShelterBase", Vector3(0, 1.25, 0), Vector3(6.2, 2.5, 6.0), shelter_material)
-	_add_box_to(shelter, "ShelterRoof", Vector3(0, 2.7, 0), Vector3(6.8, 0.35, 6.6), curb_material)
-	_add_box_to(shelter, "PortalFrameLeft", Vector3(3.18, 1.0, -1.1), Vector3(0.35, 2.0, 0.35), shelter_glow_material)
-	_add_box_to(shelter, "PortalFrameRight", Vector3(3.18, 1.0, 1.1), Vector3(0.35, 2.0, 0.35), shelter_glow_material)
-	_add_box_to(shelter, "PortalFrameTop", Vector3(3.18, 2.0, 0), Vector3(0.35, 0.28, 2.55), shelter_glow_material)
-	var label := Label3D.new()
-	label.text = "SHELTER 01"
-	label.position = Vector3(0, 3.35, 0)
-	label.font_size = 48
-	label.modulate = Color("#9fffd0")
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	shelter.add_child(label)
+	if ResourceLoader.exists(SHELTER_TEXTURE_PATH):
+		var sprite := Sprite3D.new()
+		sprite.name = "BuildingSprite"
+		sprite.texture = load(SHELTER_TEXTURE_PATH) as Texture2D
+		sprite.pixel_size = 0.0088
+		sprite.position.y = 4.3
+		sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		sprite.transparent = true
+		sprite.shaded = false
+		sprite.no_depth_test = true
+		sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		shelter.add_child(sprite)
+	var shelter_collision := CollisionShape3D.new()
+	shelter_collision.name = "ShelterCollision"
+	var shelter_shape := BoxShape3D.new()
+	shelter_shape.size = Vector3(6.0, 4.2, 6.0)
+	shelter_collision.position.y = 2.1
+	shelter_collision.shape = shelter_shape
+	shelter.add_child(shelter_collision)
+	shelter.set_meta("occlusion_lateral_limit", 5.0)
+	shelter.set_meta("occlusion_depth_limit", 9.0)
 	var light := OmniLight3D.new()
-	light.position = Vector3(3.4, 1.4, 0)
+	light.position = Vector3(3.4, 1.2, 0)
 	light.light_color = Color("#5dffb2")
 	light.light_energy = 2.0
 	light.omni_range = 6.0
@@ -497,20 +509,6 @@ func _add_box_to(parent: Node, node_name: String, position: Vector3, size: Vecto
 	instance.position = position
 	var mesh := BoxMesh.new()
 	mesh.size = size
-	mesh.material = material
-	instance.mesh = mesh
-	parent.add_child(instance)
-
-
-func _add_cylinder_to(parent: Node, node_name: String, position: Vector3, radius: float, height: float, material: Material) -> void:
-	var instance := MeshInstance3D.new()
-	instance.name = node_name
-	instance.position = position
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = radius
-	mesh.bottom_radius = radius
-	mesh.height = height
-	mesh.radial_segments = 48
 	mesh.material = material
 	instance.mesh = mesh
 	parent.add_child(instance)
