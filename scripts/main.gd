@@ -259,7 +259,7 @@ func _setup_weapon_layer() -> void:
 	weapon_sprite.shaded = false
 	weapon_sprite.transparent = true
 	weapon_sprite.no_depth_test = true
-	weapon_sprite.render_priority = 128
+	weapon_sprite.render_priority = 127
 	weapon_sprite.offset = Vector2(0, -28)
 	weapon_sprite.visible = false
 	player.add_child(weapon_sprite)
