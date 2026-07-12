@@ -7,27 +7,27 @@ const MODULES_PER_CELL := 10
 const DEFINITIONS := {
 	"hanbit_8x8": {
 		"node_name": "HanbitBuilding",
-		"texture_path": "res://assets/buildings/hanbit_building.png",
+		"texture_path": "res://assets/buildings/hanbit_building_v2.png",
 		"footprint_modules": Vector2i(8, 8),
 		"height_world": 14.5,
 		"footprint_corners_px": [
-			Vector2(223, 930),
-			Vector2(557, 698),
-			Vector2(1047, 973),
-			Vector2(713, 1205),
+			Vector2(409, 1148),
+			Vector2(768, 941),
+			Vector2(1127, 1148),
+			Vector2(768, 1355),
 		],
 		"occlusion_depth": 14.0,
 	},
 	"academy_8x8": {
 		"node_name": "AcademyBuilding",
-		"texture_path": "res://assets/buildings/academy_building.png",
+		"texture_path": "res://assets/buildings/academy_building_v2.png",
 		"footprint_modules": Vector2i(8, 8),
 		"height_world": 15.0,
 		"footprint_corners_px": [
-			Vector2(249, 1023),
-			Vector2(524, 861),
-			Vector2(1002, 1047),
-			Vector2(727, 1209),
+			Vector2(409, 1148),
+			Vector2(768, 941),
+			Vector2(1127, 1148),
+			Vector2(768, 1355),
 		],
 		"occlusion_depth": 14.5,
 	}
