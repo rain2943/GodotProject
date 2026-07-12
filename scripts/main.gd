@@ -20,6 +20,7 @@ const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.p
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
+const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const ENEMY_MELEE_SHEETS := {
 	"s": preload("res://assets/enemies/enemy_melee_anim_s.png"),
 	"se": preload("res://assets/enemies/enemy_melee_anim_se.png"),
@@ -98,8 +99,11 @@ var unarmed_sprite_frames: SpriteFrames
 var ammo_pickups: Array[Node3D] = []
 var ammo_notice: Label
 var ammo_notice_time := 0.0
+var ammo_pickup_chain_total := 0
+var ammo_pickup_chain_time := 0.0
 var ammo_prompt_panel: PanelContainer
 var nearby_ammo_pickup: Node3D
+var inventory_ui: Control
 var visibility_material: ShaderMaterial
 var smoke_particle_texture: ImageTexture
 var loot_glow_texture: ImageTexture
@@ -148,6 +152,10 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _is_inventory_open():
+		player.velocity = Vector3.ZERO
+		player.move_and_slide()
+		return
 	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if Input.is_key_pressed(KEY_A): input_vector.x -= 1.0
 	if Input.is_key_pressed(KEY_D): input_vector.x += 1.0
@@ -372,6 +380,9 @@ func _spawn_ammo_pickups() -> void:
 
 func _update_ammo_pickups(delta: float) -> void:
 	ammo_notice_time = maxf(0.0, ammo_notice_time - delta)
+	ammo_pickup_chain_time = maxf(0.0, ammo_pickup_chain_time - delta)
+	if ammo_pickup_chain_time <= 0.0:
+		ammo_pickup_chain_total = 0
 	if ammo_notice and ammo_notice_time <= 0.0:
 		ammo_notice.visible = false
 	var player_ground := Vector2(player.position.x, player.position.z)
@@ -398,7 +409,18 @@ func _collect_nearby_ammo() -> void:
 		return
 	reserve_ammo += AMMO_PICKUP_AMOUNT
 	GameState.reserve_ammo = reserve_ammo
-	ammo_notice.text = "+%d  7.62mm 탄약   잔탄 %d" % [AMMO_PICKUP_AMOUNT, reserve_ammo]
+	if ammo_pickup_chain_time <= 0.0:
+		ammo_pickup_chain_total = 0
+	ammo_pickup_chain_total += AMMO_PICKUP_AMOUNT
+	ammo_pickup_chain_time = 2.4
+	var total_ammo := magazine_ammo + reserve_ammo
+	ammo_notice.text = "+%d  7.62mm   연속 획득 +%d\n탄창 %d / 30   예비 %d   총 %d" % [
+		AMMO_PICKUP_AMOUNT,
+		ammo_pickup_chain_total,
+		magazine_ammo,
+		reserve_ammo,
+		total_ammo,
+	]
 	ammo_notice.visible = true
 	ammo_notice_time = 2.2
 	_update_equipment_ui()
@@ -528,14 +550,14 @@ func _build_weapon_hud() -> void:
 	equipment_panel.name = "EquipmentPanel"
 	equipment_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	equipment_panel.offset_left = -244
-	equipment_panel.offset_top = -176
+	equipment_panel.offset_top = -194
 	equipment_panel.offset_right = -22
-	equipment_panel.offset_bottom = -116
+	equipment_panel.offset_bottom = -112
 	equipment_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.02, 0.025, 0.028, 0.94), Color("#83a68f")))
 	equipment_panel.visible = false
 	$HUD.add_child(equipment_panel)
 	equipment_label = Label.new()
-	equipment_label.custom_minimum_size = Vector2(220, 58)
+	equipment_label.custom_minimum_size = Vector2(220, 78)
 	equipment_label.text = "AK-47\n30 / 90"
 	equipment_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	equipment_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -567,9 +589,9 @@ func _build_weapon_hud() -> void:
 	ammo_notice.name = "AmmoNotice"
 	ammo_notice.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	ammo_notice.offset_left = -170
-	ammo_notice.offset_top = -170
+	ammo_notice.offset_top = -196
 	ammo_notice.offset_right = 170
-	ammo_notice.offset_bottom = -132
+	ammo_notice.offset_bottom = -138
 	ammo_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ammo_notice.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	ammo_notice.add_theme_font_override("font", font)
@@ -579,6 +601,13 @@ func _build_weapon_hud() -> void:
 	ammo_notice.add_theme_constant_override("outline_size", 5)
 	ammo_notice.visible = false
 	$HUD.add_child(ammo_notice)
+
+	inventory_ui = INVENTORY_UI_SCRIPT.new()
+	inventory_ui.name = "InventoryUI"
+	$HUD.add_child(inventory_ui)
+	inventory_ui.call("setup", font, AK_DROP_TEXTURE, AMMO_762_TEXTURE)
+	inventory_ui.connect("open_state_changed", _on_inventory_open_state_changed)
+	_update_equipment_ui()
 
 
 func _make_panel_style(background: Color, border: Color, radius: int = 4) -> StyleBoxFlat:
@@ -744,26 +773,55 @@ func _get_current_facing_world_direction() -> Vector3:
 
 
 func _reload_ak47() -> void:
-	if reserve_ammo <= 0:
+	if reserve_ammo <= 0 or magazine_ammo >= 30:
 		fire_cooldown = 0.35
 		return
-	var loaded := mini(30, reserve_ammo)
-	magazine_ammo = loaded
+	var needed := 30 - magazine_ammo
+	var loaded := mini(needed, reserve_ammo)
+	magazine_ammo += loaded
 	reserve_ammo -= loaded
 	GameState.magazine_ammo = magazine_ammo
 	GameState.reserve_ammo = reserve_ammo
 	fire_cooldown = 0.85
-	ammo_notice.text = "AK-47 재장전   %d / %d" % [magazine_ammo, reserve_ammo]
+	ammo_notice.text = "AK-47 재장전  +%d\n탄창 %d / 30   예비 %d   총 %d" % [
+		loaded,
+		magazine_ammo,
+		reserve_ammo,
+		magazine_ammo + reserve_ammo,
+	]
 	ammo_notice.visible = true
 	ammo_notice_time = 1.4
 	_update_equipment_ui()
 
 
 func _update_equipment_ui() -> void:
-	equipment_label.text = "AK-47  장착\n%02d / %02d" % [magazine_ammo, reserve_ammo]
+	var total_ammo := magazine_ammo + reserve_ammo
+	if equipment_label:
+		equipment_label.text = "AK-47  장착\n탄창 %02d / 30   예비 %03d\n총 탄약 %03d" % [magazine_ammo, reserve_ammo, total_ammo]
 	var slot_label := get_node_or_null("HUD/QuickSlots/Slot1/Label") as Label
 	if slot_label:
-		slot_label.text = "AK-47\n%d" % magazine_ammo
+		slot_label.text = "AK-47\n%d | %d" % [magazine_ammo, reserve_ammo] if has_ak else "빈 손\n-"
+	if inventory_ui:
+		inventory_ui.call("update_state", has_ak, magazine_ammo, reserve_ammo)
+
+
+func _is_inventory_open() -> bool:
+	return inventory_ui != null and bool(inventory_ui.call("is_open"))
+
+
+func _toggle_inventory() -> void:
+	if inventory_ui:
+		inventory_ui.call("toggle")
+
+
+func _on_inventory_open_state_changed(is_open: bool) -> void:
+	if not is_open:
+		return
+	fire_button_held = false
+	mouse_fire_held = false
+	pickup_touch_held = false
+	pickup_keyboard_held = false
+	touch_vector = Vector2.ZERO
 
 
 func _spawn_muzzle_light(direction: Vector3) -> void:
@@ -1169,6 +1227,11 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and not event.echo:
 		var key_event := event as InputEventKey
 		var key := key_event.keycode if key_event.keycode != 0 else key_event.physical_keycode
+		if key == KEY_I and key_event.pressed:
+			_toggle_inventory()
+			return
+		if _is_inventory_open():
+			return
 		if key == KEY_E:
 			if key_event.pressed and is_instance_valid(nearby_ammo_pickup):
 				_collect_nearby_ammo()
@@ -1177,11 +1240,15 @@ func _input(event: InputEvent) -> void:
 				pickup_keyboard_held = key_event.pressed
 		elif key == KEY_SPACE and key_event.pressed:
 			_try_fire_ak47()
+		elif key == KEY_R and key_event.pressed and has_ak:
+			_reload_ak47()
 		elif key == KEY_N and key_event.pressed:
 			_save_run_state()
 			GameState.randomize_map()
 			get_tree().reload_current_scene()
 	elif event is InputEventScreenTouch:
+		if _is_inventory_open():
+			return
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
 			if has_ak and fire_button.visible and fire_button.get_global_rect().has_point(touch.position):
@@ -1211,7 +1278,7 @@ func _input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if DisplayServer.is_touchscreen_available():
+	if DisplayServer.is_touchscreen_available() or _is_inventory_open():
 		return
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
