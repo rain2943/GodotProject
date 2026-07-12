@@ -353,17 +353,9 @@ func _spawn_vehicle(index: int, placement: Dictionary, texture: Texture2D) -> vo
 
 	var footprint: Vector2 = placement.get("collision", Vector2(3.5, 1.8))
 	var height := float(placement.get("height", 1.2))
-	# The vehicle is pre-rendered isometric art on a vertical billboard. Convert
-	# its entire visible rectangle back onto the ground so the player cannot
-	# walk into the hood, roof or rear portion projected above the tire contact.
-	var visual_height := float(texture.get_height()) * sprite.pixel_size
-	var blocking_depth := maxf(footprint.y, visual_height * sqrt(3.0))
-	var blocking_footprint := Vector2(maxf(footprint.x, visual_width * 0.96), blocking_depth)
-	var collision_center := Vector3(-1.0, 0.0, -1.0).normalized() * (blocking_depth * 0.5)
-	_add_vehicle_collision(body, blocking_footprint, height, collision_center)
-	body.set_meta("collision_footprint_world", blocking_footprint)
+	_add_vehicle_silhouette_collision(body, texture, sprite.pixel_size, height, footprint)
+	body.set_meta("collision_footprint_world", footprint)
 	body.set_meta("collision_rotation_degrees", 45.0)
-	body.set_meta("collision_depth_offset", blocking_depth * 0.5)
 
 	var shadow_material := StandardMaterial3D.new()
 	shadow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -381,11 +373,24 @@ func _spawn_vehicle(index: int, placement: Dictionary, texture: Texture2D) -> vo
 	body.add_child(shadow)
 
 
-func _add_vehicle_collision(body: StaticBody3D, footprint: Vector2, height: float, center: Vector3) -> void:
-	# Three contiguous boxes follow the visible front, cabin and rear sections.
-	# Their shared rotation maps screen-horizontal vehicle art to world (X, -Z).
-	var segment_length := footprint.x / 3.0
+func _add_vehicle_silhouette_collision(
+	body: StaticBody3D,
+	texture: Texture2D,
+	pixel_size: float,
+	height: float,
+	fallback_footprint: Vector2
+) -> void:
+	var image := texture.get_image()
+	if image == null or image.is_empty():
+		_add_vehicle_collision_strip(body, Vector3.ZERO, fallback_footprint, height, 0, null)
+		return
+
+	var image_width := image.get_width()
+	var image_height := image.get_height()
+	var band_count := 12
+	var band_height := ceili(float(image_height) / float(band_count))
 	var length_axis := Vector3(1.0, 0.0, -1.0).normalized()
+	var depth_axis := Vector3(-1.0, 0.0, -1.0).normalized()
 	var debug_material: StandardMaterial3D
 	if SHOW_VEHICLE_COLLISION_DEBUG:
 		debug_material = StandardMaterial3D.new()
@@ -393,29 +398,73 @@ func _add_vehicle_collision(body: StaticBody3D, footprint: Vector2, height: floa
 		debug_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		debug_material.albedo_color = Color(1.0, 0.03, 0.03, 0.38)
 		debug_material.no_depth_test = true
-	for segment_index in 3:
-		var collision := CollisionShape3D.new()
-		collision.name = "VehicleCollision%d" % segment_index
-		var shape := BoxShape3D.new()
-		shape.size = Vector3(segment_length + 0.08, height, footprint.y)
-		var along_length := (float(segment_index) - 1.0) * segment_length
-		collision.position = center + length_axis * along_length
-		collision.position.y = height * 0.5 - body.position.y - 0.05
-		collision.rotation.y = deg_to_rad(45.0)
-		collision.shape = shape
-		body.add_child(collision)
-		if SHOW_VEHICLE_COLLISION_DEBUG:
-			var debug_plane := MeshInstance3D.new()
-			debug_plane.name = "CollisionDebug%d" % segment_index
-			var debug_mesh := PlaneMesh.new()
-			debug_mesh.size = Vector2(segment_length + 0.08, footprint.y)
-			debug_mesh.material = debug_material
-			debug_plane.position = collision.position
-			debug_plane.position.y = 0.04 - body.position.y
-			debug_plane.rotation.y = collision.rotation.y
-			debug_plane.mesh = debug_mesh
-			debug_plane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			body.add_child(debug_plane)
+	var strip_index := 0
+	for band_index in band_count:
+		var y_start := band_index * band_height
+		var y_end := mini(y_start + band_height, image_height)
+		if y_start >= y_end:
+			continue
+		var min_x := image_width
+		var max_x := -1
+		var required_pixels := maxi(1, ceili(float(y_end - y_start) * 0.18))
+		for x in image_width:
+			var opaque_pixels := 0
+			for y in range(y_start, y_end):
+				if image.get_pixel(x, y).a >= 0.28:
+					opaque_pixels += 1
+			if opaque_pixels >= required_pixels:
+				min_x = mini(min_x, x)
+				max_x = maxi(max_x, x)
+		if max_x < min_x:
+			continue
+		min_x = maxi(0, min_x - 2)
+		max_x = mini(image_width - 1, max_x + 2)
+		var strip_width := float(max_x - min_x + 1) * pixel_size
+		var strip_depth := float(y_end - y_start) * pixel_size * sqrt(3.0) + 0.04
+		var horizontal_center := (float(min_x + max_x + 1) * 0.5 - float(image_width) * 0.5) * pixel_size
+		var vertical_center := float(y_start + y_end) * 0.5
+		var depth_from_bottom := (float(image_height) - vertical_center) * pixel_size * sqrt(3.0)
+		var center := length_axis * horizontal_center + depth_axis * depth_from_bottom
+		_add_vehicle_collision_strip(
+			body,
+			center,
+			Vector2(strip_width, strip_depth),
+			height,
+			strip_index,
+			debug_material
+		)
+		strip_index += 1
+
+
+func _add_vehicle_collision_strip(
+	body: StaticBody3D,
+	center: Vector3,
+	size: Vector2,
+	height: float,
+	strip_index: int,
+	debug_material: StandardMaterial3D
+) -> void:
+	var collision := CollisionShape3D.new()
+	collision.name = "VehicleCollision%d" % strip_index
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(size.x, height, size.y)
+	collision.position = center
+	collision.position.y = height * 0.5 - body.position.y - 0.05
+	collision.rotation.y = deg_to_rad(45.0)
+	collision.shape = shape
+	body.add_child(collision)
+	if SHOW_VEHICLE_COLLISION_DEBUG and debug_material != null:
+		var debug_plane := MeshInstance3D.new()
+		debug_plane.name = "CollisionDebug%d" % strip_index
+		var debug_mesh := PlaneMesh.new()
+		debug_mesh.size = size
+		debug_mesh.material = debug_material
+		debug_plane.position = collision.position
+		debug_plane.position.y = 0.04 - body.position.y
+		debug_plane.rotation.y = collision.rotation.y
+		debug_plane.mesh = debug_mesh
+		debug_plane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		body.add_child(debug_plane)
 
 
 func _add_plane(node_name: String, position: Vector3, size: Vector2, material: StandardMaterial3D, height: float) -> void:
