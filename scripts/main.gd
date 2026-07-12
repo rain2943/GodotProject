@@ -12,16 +12,38 @@ const ANIMATION_SHEETS := {
 	"ne": preload("res://assets/characters/survivor_anim_ne.png"),
 	"n": preload("res://assets/characters/survivor_anim_n.png"),
 }
+const ARMED_ANIMATION_SHEETS := {
+	"s": preload("res://assets/characters/survivor_armed_s.png"),
+	"se": preload("res://assets/characters/survivor_armed_se.png"),
+	"e": preload("res://assets/characters/survivor_armed_e.png"),
+	"ne": preload("res://assets/characters/survivor_armed_ne.png"),
+	"n": preload("res://assets/characters/survivor_armed_n.png"),
+}
+const FIRE_ANIMATION_SHEETS := {
+	"s": preload("res://assets/characters/survivor_fire_s.png"),
+	"se": preload("res://assets/characters/survivor_fire_se.png"),
+	"e": preload("res://assets/characters/survivor_fire_e.png"),
+	"ne": preload("res://assets/characters/survivor_fire_ne.png"),
+	"n": preload("res://assets/characters/survivor_fire_n.png"),
+}
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const FRAME_SIZE := Vector2(384, 384)
 const WEAPON_FRAME_SIZE := Vector2(192, 192)
 const AK_DROP_TEXTURE := preload("res://assets/weapons/ak47_drop.png")
 const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
+const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const AK_PICKUP_POSITION := Vector3(1.15, 0.32, 0.7)
 const PICKUP_DISTANCE := 1.75
 const PICKUP_HOLD_DURATION := 0.9
 const FIRE_INTERVAL := 0.12
+const AMMO_PICKUP_AMOUNT := 30
+const AMMO_PICKUP_POSITIONS := [
+	Vector3(2, 0.3, 2),
+	Vector3(15, 0.3, -4),
+	Vector3(-14, 0.3, 16),
+	Vector3(18, 0.3, 18),
+]
 const DIRECTION_VECTORS := {
 	"n": Vector2(0, -1),
 	"ne": Vector2(1, -1),
@@ -43,6 +65,7 @@ const DIRECTION_VECTORS := {
 @onready var state_label: Label = $HUD/TopRight/State
 
 var touch_id := -1
+var fire_touch_id := -1
 var touch_origin := Vector2.ZERO
 var touch_vector := Vector2.ZERO
 var facing := "s"
@@ -59,6 +82,7 @@ var equipment_panel: PanelContainer
 var equipment_label: Label
 var fire_button: Button
 var fire_cooldown := 0.0
+var fire_button_held := false
 var has_ak := false
 var magazine_ammo := 30
 var reserve_ammo := 90
@@ -68,6 +92,12 @@ var building_canvas: CanvasLayer
 var building_overlays := {}
 var survivor_overlay: Sprite2D
 var weapon_overlay: Sprite2D
+var unarmed_sprite_frames: SpriteFrames
+var armed_sprite_frames: SpriteFrames
+var is_firing_animation := false
+var ammo_pickups: Array[Node3D] = []
+var ammo_notice: Label
+var ammo_notice_time := 0.0
 
 
 func _ready() -> void:
@@ -83,6 +113,7 @@ func _ready() -> void:
 	_build_sprite_frames()
 	_setup_weapon_layer()
 	_spawn_ak_pickup()
+	_spawn_ammo_pickups()
 	_build_weapon_hud()
 	_build_gunshot_audio()
 	_setup_building_overlays()
@@ -115,6 +146,7 @@ func _physics_process(delta: float) -> void:
 	player.position.x = clampf(player.position.x, -MAP_LIMIT, MAP_LIMIT)
 	player.position.z = clampf(player.position.z, -MAP_LIMIT, MAP_LIMIT)
 	_update_pickup(delta)
+	_update_ammo_pickups(delta)
 	_update_firing(delta)
 	_update_camera_occluders(delta)
 	camera_rig.position = camera_rig.position.lerp(Vector3(player.position.x, 0, player.position.z), 1.0 - exp(-7.0 * delta))
@@ -144,6 +176,8 @@ func _set_motion_state(next_state: String) -> void:
 
 
 func _play_directional_animation() -> void:
+	if is_firing_animation:
+		return
 	var source := facing
 	var flipped := false
 	match facing:
@@ -157,9 +191,16 @@ func _play_directional_animation() -> void:
 
 
 func _build_sprite_frames() -> void:
+	unarmed_sprite_frames = _create_character_frames(ANIMATION_SHEETS, false)
+	armed_sprite_frames = _create_character_frames(ARMED_ANIMATION_SHEETS, true)
+	survivor.sprite_frames = unarmed_sprite_frames
+	survivor.animation_finished.connect(_on_survivor_animation_finished)
+
+
+func _create_character_frames(sheets: Dictionary, include_fire: bool) -> SpriteFrames:
 	var frames := SpriteFrames.new()
 	frames.remove_animation("default")
-	for direction_name in ANIMATION_SHEETS:
+	for direction_name in sheets:
 		for state in ["idle", "walk"]:
 			var animation_name := "%s_%s" % [state, direction_name]
 			frames.add_animation(animation_name)
@@ -168,7 +209,7 @@ func _build_sprite_frames() -> void:
 			var first_frame := 0 if state == "idle" else 8
 			for frame_index in range(first_frame, first_frame + 8):
 				var atlas := AtlasTexture.new()
-				atlas.atlas = ANIMATION_SHEETS[direction_name]
+				atlas.atlas = sheets[direction_name]
 				atlas.region = Rect2(
 					(frame_index % 4) * FRAME_SIZE.x,
 					(frame_index / 4) * FRAME_SIZE.y,
@@ -178,7 +219,35 @@ func _build_sprite_frames() -> void:
 				var cycle_index := frame_index - first_frame
 				var duration := 1.6 if state == "walk" and direction_name == "ne" and cycle_index in [2, 6] else 1.0
 				frames.add_frame(animation_name, atlas, duration)
-	survivor.sprite_frames = frames
+		if include_fire:
+			var fire_name := "fire_%s" % direction_name
+			frames.add_animation(fire_name)
+			frames.set_animation_loop(fire_name, false)
+			frames.set_animation_speed(fire_name, 16.0)
+			for frame_index in 4:
+				var fire_atlas := AtlasTexture.new()
+				fire_atlas.atlas = FIRE_ANIMATION_SHEETS[direction_name]
+				fire_atlas.region = Rect2(frame_index * FRAME_SIZE.x, 0, FRAME_SIZE.x, FRAME_SIZE.y)
+				frames.add_frame(fire_name, fire_atlas)
+	return frames
+
+
+func _on_survivor_animation_finished() -> void:
+	if is_firing_animation:
+		is_firing_animation = false
+		_play_directional_animation()
+
+
+func _play_survivor_fire_animation() -> void:
+	var source := facing
+	var flipped := false
+	match facing:
+		"sw": source = "se"; flipped = true
+		"w": source = "e"; flipped = true
+		"nw": source = "ne"; flipped = true
+	is_firing_animation = true
+	survivor.flip_h = flipped
+	survivor.play("fire_%s" % source)
 
 
 func _setup_weapon_layer() -> void:
@@ -265,6 +334,47 @@ func _spawn_ak_pickup() -> void:
 	ak_pickup.add_child(shadow)
 
 
+func _spawn_ammo_pickups() -> void:
+	for index in AMMO_PICKUP_POSITIONS.size():
+		var pickup := Node3D.new()
+		pickup.name = "Ammo762_%d" % index
+		pickup.position = AMMO_PICKUP_POSITIONS[index]
+		pickup.set_meta("base_y", pickup.position.y)
+		add_child(pickup)
+		var sprite := Sprite3D.new()
+		sprite.texture = AMMO_762_TEXTURE
+		sprite.pixel_size = 0.0032
+		sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		sprite.shaded = false
+		sprite.transparent = true
+		sprite.no_depth_test = true
+		sprite.render_priority = 88
+		pickup.add_child(sprite)
+		ammo_pickups.append(pickup)
+
+
+func _update_ammo_pickups(delta: float) -> void:
+	ammo_notice_time = maxf(0.0, ammo_notice_time - delta)
+	if ammo_notice and ammo_notice_time <= 0.0:
+		ammo_notice.visible = false
+	var player_ground := Vector2(player.position.x, player.position.z)
+	for pickup in ammo_pickups.duplicate():
+		if not is_instance_valid(pickup):
+			ammo_pickups.erase(pickup)
+			continue
+		var base_y := float(pickup.get_meta("base_y", 0.3))
+		pickup.position.y = base_y + sin(Time.get_ticks_msec() * 0.004 + pickup.position.x) * 0.04
+		var pickup_ground := Vector2(pickup.position.x, pickup.position.z)
+		if player_ground.distance_to(pickup_ground) <= 1.15:
+			reserve_ammo += AMMO_PICKUP_AMOUNT
+			ammo_notice.text = "+%d  7.62mm 탄약   잔탄 %d" % [AMMO_PICKUP_AMOUNT, reserve_ammo]
+			ammo_notice.visible = true
+			ammo_notice_time = 2.2
+			_update_equipment_ui()
+			ammo_pickups.erase(pickup)
+			pickup.queue_free()
+
+
 func _build_weapon_hud() -> void:
 	var font := load("res://assets/fonts/Pretendard-Regular.otf") as Font
 	pickup_panel = PanelContainer.new()
@@ -329,9 +439,27 @@ func _build_weapon_hud() -> void:
 	fire_button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.16, 0.055, 0.04, 0.92), Color("#d98155"), 40))
 	fire_button.add_theme_stylebox_override("hover", _make_panel_style(Color(0.24, 0.075, 0.045, 0.94), Color("#e99a67"), 40))
 	fire_button.add_theme_stylebox_override("pressed", _make_panel_style(Color(0.42, 0.12, 0.055, 0.96), Color("#ffc078"), 40))
-	fire_button.button_down.connect(_try_fire_ak47)
+	fire_button.button_down.connect(_on_fire_button_down)
+	fire_button.button_up.connect(_on_fire_button_up)
 	fire_button.visible = false
 	$HUD.add_child(fire_button)
+
+	ammo_notice = Label.new()
+	ammo_notice.name = "AmmoNotice"
+	ammo_notice.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	ammo_notice.offset_left = -170
+	ammo_notice.offset_top = -170
+	ammo_notice.offset_right = 170
+	ammo_notice.offset_bottom = -132
+	ammo_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ammo_notice.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	ammo_notice.add_theme_font_override("font", font)
+	ammo_notice.add_theme_font_size_override("font_size", 16)
+	ammo_notice.add_theme_color_override("font_color", Color("#f2d27a"))
+	ammo_notice.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	ammo_notice.add_theme_constant_override("outline_size", 5)
+	ammo_notice.visible = false
+	$HUD.add_child(ammo_notice)
 
 
 func _make_panel_style(background: Color, border: Color, radius: int = 4) -> StyleBoxFlat:
@@ -368,7 +496,9 @@ func _equip_ak47() -> void:
 	if is_instance_valid(ak_pickup):
 		ak_pickup.queue_free()
 	weapon_sprite.visible = false
-	weapon_sprite.play("idle_%s" % facing)
+	survivor.sprite_frames = armed_sprite_frames
+	is_firing_animation = false
+	_play_directional_animation()
 	equipment_panel.visible = true
 	fire_button.visible = true
 	var slot_label := get_node_or_null("HUD/QuickSlots/Slot1/Label") as Label
@@ -379,6 +509,17 @@ func _equip_ak47() -> void:
 
 func _update_firing(delta: float) -> void:
 	fire_cooldown = maxf(0.0, fire_cooldown - delta)
+	if fire_button_held and has_ak and fire_cooldown <= 0.0:
+		_fire_ak47()
+
+
+func _on_fire_button_down() -> void:
+	fire_button_held = true
+	_try_fire_ak47()
+
+
+func _on_fire_button_up() -> void:
+	fire_button_held = false
 
 
 func _try_fire_ak47() -> void:
@@ -388,11 +529,11 @@ func _try_fire_ak47() -> void:
 
 func _fire_ak47() -> void:
 	if magazine_ammo <= 0:
-		fire_cooldown = 0.25
+		_reload_ak47()
 		return
 	magazine_ammo -= 1
 	fire_cooldown = FIRE_INTERVAL
-	weapon_sprite.play("fire_%s" % facing)
+	_play_survivor_fire_animation()
 	var screen_direction: Vector2 = DIRECTION_VECTORS[facing]
 	var world_direction := Vector3(
 		screen_direction.x + screen_direction.y,
@@ -408,6 +549,21 @@ func _fire_ak47() -> void:
 	add_child(projectile)
 	_play_gunshot()
 	_spawn_muzzle_light(world_direction)
+	_spawn_launch_fx(world_direction)
+	_update_equipment_ui()
+
+
+func _reload_ak47() -> void:
+	if reserve_ammo <= 0:
+		fire_cooldown = 0.35
+		return
+	var loaded := mini(30, reserve_ammo)
+	magazine_ammo = loaded
+	reserve_ammo -= loaded
+	fire_cooldown = 0.85
+	ammo_notice.text = "AK-47 재장전   %d / %d" % [magazine_ammo, reserve_ammo]
+	ammo_notice.visible = true
+	ammo_notice_time = 1.4
 	_update_equipment_ui()
 
 
@@ -426,6 +582,59 @@ func _spawn_muzzle_light(direction: Vector3) -> void:
 	flash.position = player.position + direction * 0.8 + Vector3(0, 0.2, 0)
 	add_child(flash)
 	get_tree().create_timer(0.045).timeout.connect(flash.queue_free)
+
+
+func _spawn_launch_fx(direction: Vector3) -> void:
+	var origin := player.position + direction * 0.86 + Vector3(0, 0.18, 0)
+	_spawn_particle_burst(origin, direction, Color("#ffd36a"), 14, 0.16, 2.8, 6.0, 0.08, 0.24)
+	_spawn_particle_burst(origin, direction + Vector3.UP * 0.25, Color(0.42, 0.44, 0.46, 0.58), 7, 0.42, 0.35, 1.2, 0.18, 0.52)
+
+
+func _spawn_particle_burst(
+	position: Vector3,
+	direction: Vector3,
+	color: Color,
+	amount: int,
+	lifetime: float,
+	velocity_min: float,
+	velocity_max: float,
+	scale_min: float,
+	scale_max: float
+) -> void:
+	var particles := GPUParticles3D.new()
+	particles.position = position
+	particles.amount = amount
+	particles.lifetime = lifetime
+	particles.one_shot = true
+	particles.explosiveness = 1.0
+	particles.local_coords = false
+	particles.visibility_aabb = AABB(Vector3(-3, -3, -3), Vector3(6, 6, 6))
+	var process := ParticleProcessMaterial.new()
+	process.direction = direction.normalized()
+	process.spread = 24.0
+	process.gravity = Vector3(0, 0.5, 0)
+	process.initial_velocity_min = velocity_min
+	process.initial_velocity_max = velocity_max
+	process.scale_min = scale_min
+	process.scale_max = scale_max
+	process.color = color
+	particles.process_material = process
+	var material := StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.vertex_color_use_as_albedo = true
+	material.albedo_color = color
+	material.emission_enabled = true
+	material.emission = Color(color.r, color.g, color.b)
+	material.emission_energy_multiplier = 2.4
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(0.16, 0.16)
+	mesh.material = material
+	particles.draw_pass_1 = mesh
+	add_child(particles)
+	particles.finished.connect(particles.queue_free)
+	particles.emitting = true
 
 
 func _build_gunshot_audio() -> void:
@@ -521,6 +730,7 @@ func _update_building_overlays() -> void:
 			continue
 		overlay.position = camera.unproject_position(source.global_position)
 		overlay.scale = Vector2.ONE * source.pixel_size * screen_scale
+		overlay.offset = source.offset
 		overlay.modulate = source.modulate
 	var player_depth := roundi((player.global_position.x + player.global_position.z) * 10.0)
 	var survivor_texture := survivor.sprite_frames.get_frame_texture(survivor.animation, survivor.frame)
@@ -531,16 +741,7 @@ func _update_building_overlays() -> void:
 	survivor_overlay.flip_h = survivor.flip_h
 	survivor_overlay.modulate = survivor.modulate
 	survivor_overlay.z_index = player_depth
-	weapon_overlay.visible = has_ak
-	if has_ak:
-		var weapon_texture := weapon_sprite.sprite_frames.get_frame_texture(weapon_sprite.animation, weapon_sprite.frame)
-		if weapon_texture:
-			weapon_overlay.texture = weapon_texture
-		weapon_overlay.position = camera.unproject_position(weapon_sprite.global_position)
-		weapon_overlay.scale = Vector2.ONE * weapon_sprite.pixel_size * screen_scale
-		weapon_overlay.offset = weapon_sprite.offset
-		weapon_overlay.modulate = weapon_sprite.modulate
-		weapon_overlay.z_index = player_depth + 1
+	weapon_overlay.visible = false
 
 
 func _update_camera_occluders(delta: float) -> void:
@@ -608,21 +809,28 @@ func _input(event: InputEvent) -> void:
 			_try_fire_ak47()
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
-		if touch.pressed and touch.position.x < get_viewport().get_visible_rect().size.x * 0.55:
-			touch_id = touch.index
-			touch_origin = touch.position
-			touch_vector = Vector2.ZERO
-			touch_stick.visible = true
-			touch_stick.position = touch_origin - touch_stick.size * 0.5
-		elif not touch.pressed and touch.index == touch_id:
-			touch_id = -1
-			touch_vector = Vector2.ZERO
-			touch_knob.position = (touch_stick.size - touch_knob.size) * 0.5
+		if touch.pressed:
+			if has_ak and fire_button.visible and fire_button.get_global_rect().has_point(touch.position):
+				fire_touch_id = touch.index
+				fire_button_held = true
+				_try_fire_ak47()
+			elif touch_id == -1 and touch.position.x < get_viewport().get_visible_rect().size.x * 0.55:
+				touch_id = touch.index
+				touch_origin = touch.position
+				touch_vector = Vector2.ZERO
+				touch_stick.visible = true
+				touch_stick.position = touch_origin - touch_stick.size * 0.5
+		else:
+			if touch.index == fire_touch_id:
+				fire_touch_id = -1
+				fire_button_held = false
+			if touch.index == touch_id:
+				touch_id = -1
+				touch_vector = Vector2.ZERO
+				touch_knob.position = (touch_stick.size - touch_knob.size) * 0.5
 	elif event is InputEventScreenDrag and event.index == touch_id:
 		var drag := event as InputEventScreenDrag
 		var radius := touch_stick.size.x * 0.34
 		var offset := (drag.position - touch_origin).limit_length(radius)
 		touch_vector = offset / radius
 		touch_knob.position = (touch_stick.size - touch_knob.size) * 0.5 + offset
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and has_ak:
-		_try_fire_ak47()
