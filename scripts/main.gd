@@ -1,7 +1,6 @@
 extends Node3D
 
 const MOVE_SPEED := 5.2
-const MAP_LIMIT := 43.5
 const OCCLUSION_LATERAL_LIMIT := 5.1
 const OCCLUSION_DEPTH_LIMIT := 14.0
 const SILHOUETTE_COLOR := Color("#26343b")
@@ -93,6 +92,7 @@ var gunshot_players: Array[AudioStreamPlayer3D] = []
 var gunshot_index := 0
 var building_canvas: CanvasLayer
 var building_overlays := {}
+var vehicle_overlays := {}
 var survivor_overlay: Sprite2D
 var weapon_overlay: Sprite2D
 var unarmed_sprite_frames: SpriteFrames
@@ -183,8 +183,9 @@ func _physics_process(delta: float) -> void:
 	_update_weapon_pose()
 
 	player.move_and_slide()
-	player.position.x = clampf(player.position.x, -MAP_LIMIT, MAP_LIMIT)
-	player.position.z = clampf(player.position.z, -MAP_LIMIT, MAP_LIMIT)
+	var map_limit := ($World as ProceduralCityMap).get_map_limit()
+	player.position.x = clampf(player.position.x, -map_limit, map_limit)
+	player.position.z = clampf(player.position.z, -map_limit, map_limit)
 	_update_pickup(delta)
 	_update_ammo_pickups(delta)
 	_update_firing(delta)
@@ -1095,6 +1096,19 @@ func _setup_building_overlays() -> void:
 		building_canvas.add_child(overlay)
 		building_overlays[building] = overlay
 		source.visible = false
+	for node in get_tree().get_nodes_in_group("vehicle_obstacle"):
+		var vehicle := node as Node3D
+		var source := vehicle.get_node_or_null("VehicleSprite") as Sprite3D
+		if source == null or source.texture == null:
+			continue
+		var overlay := Sprite2D.new()
+		overlay.name = "%sOverlay" % vehicle.name
+		overlay.texture = source.texture
+		overlay.centered = true
+		overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+		building_canvas.add_child(overlay)
+		vehicle_overlays[vehicle] = overlay
+		source.visible = false
 	survivor_overlay = Sprite2D.new()
 	survivor_overlay.name = "SurvivorOverlay"
 	survivor_overlay.centered = true
@@ -1126,6 +1140,19 @@ func _update_building_overlays() -> void:
 		overlay.scale = Vector2.ONE * source.pixel_size * screen_scale
 		overlay.offset = source.offset
 		overlay.modulate = source.modulate
+		overlay.z_index = roundi((building.global_position.x + building.global_position.z) * 10.0)
+	for vehicle in vehicle_overlays:
+		if not is_instance_valid(vehicle):
+			continue
+		var source := vehicle.get_node_or_null("VehicleSprite") as Sprite3D
+		var overlay := vehicle_overlays[vehicle] as Sprite2D
+		if source == null or overlay == null:
+			continue
+		overlay.position = camera.unproject_position(source.global_position)
+		overlay.scale = Vector2.ONE * source.pixel_size * screen_scale
+		overlay.offset = source.offset
+		overlay.modulate = source.modulate
+		overlay.z_index = roundi((vehicle.global_position.x + vehicle.global_position.z) * 10.0)
 	var player_depth := roundi((player.global_position.x + player.global_position.z) * 10.0)
 	var survivor_texture := survivor.sprite_frames.get_frame_texture(survivor.animation, survivor.frame)
 	if survivor_texture:

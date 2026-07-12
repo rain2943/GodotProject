@@ -3,15 +3,16 @@ extends Node3D
 
 signal shelter_portal_entered
 
-const GRID_SIZE := 9
+const GRID_SIZE := 18
 const CELL_SIZE := 10.0
 const MAP_SIZE := GRID_SIZE * CELL_SIZE
-const MAP_MODULES := 90
+const MAP_MODULES := GRID_SIZE * 10
 const SIDEWALK_WIDTH := 2.0
 const ISOMETRIC_VERTICAL_PROJECTION := 0.816496580927726
 const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
 const ASPHALT_TEXTURE := preload("res://assets/tiles/asphalt.png")
 const CONCRETE_TEXTURE := preload("res://assets/tiles/concrete.png")
+const RIVER_TEXTURE_PATH := "res://assets/tiles/river_water_generated.png"
 const VEHICLE_TEXTURES := {
 	"sedan": preload("res://assets/vehicles/wrecked_sedan.png"),
 	"truck": preload("res://assets/vehicles/wrecked_truck.png"),
@@ -41,6 +42,7 @@ var riverbank_material: StandardMaterial3D
 var bridge_material: StandardMaterial3D
 var shelter_material: StandardMaterial3D
 var shelter_glow_material: StandardMaterial3D
+var vehicle_collision_material: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -56,29 +58,51 @@ func _ready() -> void:
 
 
 func _generate_layout() -> void:
-	vertical_roads = [2, rng.randi_range(5, 7)]
-	horizontal_roads = [2, rng.randi_range(5, 7)]
+	vertical_roads = [2, rng.randi_range(6, 7), rng.randi_range(10, 12), rng.randi_range(15, 16)]
+	horizontal_roads = [2, rng.randi_range(6, 7), rng.randi_range(10, 12), rng.randi_range(15, 16)]
 	vertical_roads.sort()
 	horizontal_roads.sort()
 
-	var river_x := rng.randi_range(4, 6)
+	var river_x := rng.randi_range(8, 10)
 	for z in range(GRID_SIZE):
 		if z > 0 and z % 2 == 0:
-			river_x = clampi(river_x + rng.randi_range(-1, 1), 3, 7)
+			river_x = clampi(river_x + rng.randi_range(-1, 1), 5, GRID_SIZE - 4)
 		river_columns.append(river_x)
 
+	var eligible_cells: Array[Vector2i] = []
 	for x in range(GRID_SIZE):
 		for z in range(GRID_SIZE):
 			var cell := Vector2i(x, z)
 			if cell == SHELTER_CELL or _is_road_cell(cell) or _is_river_cell(cell):
 				continue
-			var roll := rng.randf()
-			if roll < 0.62:
+			eligible_cells.append(cell)
+			if rng.randf() < 0.44:
 				building_cells[cell] = true
-			elif roll < 0.84:
+
+	for cell in eligible_cells:
+		if building_cells.has(cell):
+			continue
+		if _has_building_within(cell, 1):
+			open_cells[cell] = true
+		elif _touches_road(cell) and rng.randf() < 0.58:
 				parking_cells[cell] = true
-			else:
-				open_cells[cell] = true
+		else:
+			open_cells[cell] = true
+
+
+func _has_building_within(cell: Vector2i, radius: int) -> bool:
+	for offset_x in range(-radius, radius + 1):
+		for offset_z in range(-radius, radius + 1):
+			if building_cells.has(cell + Vector2i(offset_x, offset_z)):
+				return true
+	return false
+
+
+func _touches_road(cell: Vector2i) -> bool:
+	for direction in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+		if _is_road_cell(cell + direction):
+			return true
+	return false
 
 
 func _build_materials() -> void:
@@ -88,9 +112,12 @@ func _build_materials() -> void:
 	sidewalk_edge_material = _color_material(Color("#64645f"))
 	marking_material = _color_material(Color("#d1c87d"))
 	curb_material = _color_material(Color("#8b8981"))
-	water_material = _color_material(Color("#264d59"))
-	water_material.metallic = 0.18
-	water_material.roughness = 0.32
+	if ResourceLoader.exists(RIVER_TEXTURE_PATH):
+		water_material = _texture_material(load(RIVER_TEXTURE_PATH) as Texture2D, Color("#b9dce2"))
+	else:
+		water_material = _color_material(Color("#264d59"))
+	water_material.metallic = 0.12
+	water_material.roughness = 0.38
 	riverbank_material = _color_material(Color("#4f5146"))
 	bridge_material = _color_material(Color("#575b5d"))
 	shelter_material = _color_material(Color("#3f4d49"))
@@ -98,6 +125,11 @@ func _build_materials() -> void:
 	shelter_glow_material.emission_enabled = true
 	shelter_glow_material.emission = Color("#42d990")
 	shelter_glow_material.emission_energy_multiplier = 2.6
+	vehicle_collision_material = _color_material(Color(1.0, 0.02, 0.02, 0.46))
+	vehicle_collision_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	vehicle_collision_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	vehicle_collision_material.no_depth_test = true
+	vehicle_collision_material.render_priority = 120
 
 
 func _build_floor_collision() -> void:
@@ -189,12 +221,10 @@ func _build_parking_lot(cell: Vector2i) -> void:
 	_add_plane("ParkingAsphalt", center, Vector2(8.2, 8.2), asphalt_material, 0.045)
 	for offset in [-3.0, -1.5, 0.0, 1.5, 3.0]:
 		_add_plane("ParkingStripe", center + Vector3(offset, 0, 0), Vector2(0.07, 3.4), marking_material, 0.055)
-	var count := rng.randi_range(1, 3)
-	for index in range(count):
-		var types := VEHICLE_TEXTURES.keys()
-		var vehicle_type: String = types[rng.randi_range(0, types.size() - 1)]
-		var position := center + Vector3(-2.25 + index * 2.25, 0.1, rng.randf_range(-1.2, 1.2))
-		_spawn_vehicle("Parked_%d_%d_%d" % [cell.x, cell.y, index], vehicle_type, position)
+	var types := VEHICLE_TEXTURES.keys()
+	var vehicle_type: String = types[rng.randi_range(0, types.size() - 1)]
+	var position := center + Vector3(0, 0.1, rng.randf_range(-0.55, 0.55))
+	_spawn_vehicle("Parked_%d_%d" % [cell.x, cell.y], vehicle_type, position)
 
 
 func _build_open_lot(cell: Vector2i) -> void:
@@ -283,6 +313,7 @@ func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3) 
 	body.add_to_group("vehicle_obstacle")
 	add_child(body)
 	var sprite := Sprite3D.new()
+	sprite.name = "VehicleSprite"
 	sprite.texture = texture
 	var width := 4.6 if vehicle_type == "sedan" else (6.2 if vehicle_type == "truck" else 7.8)
 	sprite.pixel_size = width / float(texture.get_width())
@@ -293,13 +324,28 @@ func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3) 
 	sprite.no_depth_test = true
 	sprite.render_priority = 5
 	body.add_child(sprite)
+	var footprint := Vector3(3.9, 1.25, 1.8)
+	if vehicle_type == "truck":
+		footprint = Vector3(5.4, 1.8, 2.2)
+	elif vehicle_type == "bus":
+		footprint = Vector3(7.1, 2.2, 2.35)
 	var collision := CollisionShape3D.new()
+	collision.name = "VehicleCollision"
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(width * 0.78, 1.35, 1.8)
-	collision.position.y = 0.62
+	shape.size = footprint
+	collision.position.y = footprint.y * 0.5 - position.y
 	collision.rotation.y = deg_to_rad(45.0)
 	collision.shape = shape
 	body.add_child(collision)
+	var debug_mesh := MeshInstance3D.new()
+	debug_mesh.name = "VehicleCollisionDebug"
+	debug_mesh.position = collision.position
+	debug_mesh.rotation = collision.rotation
+	var box := BoxMesh.new()
+	box.size = footprint + Vector3(0.03, 0.03, 0.03)
+	box.material = vehicle_collision_material
+	debug_mesh.mesh = box
+	body.add_child(debug_mesh)
 
 
 func _build_shelter() -> void:
@@ -351,6 +397,10 @@ func _on_shelter_portal_body_entered(body: Node3D) -> void:
 
 func get_shelter_exit_position() -> Vector3:
 	return _cell_center(SHELTER_CELL) + Vector3(6.2, 0.78, 0)
+
+
+func get_map_limit() -> float:
+	return MAP_SIZE * 0.5 - 1.5
 
 
 func is_position_in_safe_zone(world_position: Vector3) -> bool:
