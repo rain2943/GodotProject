@@ -15,6 +15,12 @@ const CONCRETE_TEXTURE := preload("res://assets/tiles/concrete.png")
 const RIVER_TEXTURE_PATH := "res://assets/tiles/river_water_generated.png"
 const PARKING_TEXTURE_PATH := "res://assets/tiles/parking_lot_generated.png"
 const SHELTER_TEXTURE_PATH := "res://assets/buildings/shelter_exterior_generated.png"
+const BRIDGE_DECK_TEXTURE_PATH := "res://assets/tiles/bridge_deck_generated.png"
+const GUARDRAIL_TEXTURE_PATH := "res://assets/tiles/guardrail_metal_generated.png"
+const OPEN_LOT_TEXTURE_PATHS := [
+	"res://assets/tiles/open_lot_demolition_generated.png",
+	"res://assets/tiles/open_lot_courtyard_generated.png",
+]
 const VEHICLE_TEXTURES := {
 	"sedan": preload("res://assets/vehicles/wrecked_sedan.png"),
 	"truck": preload("res://assets/vehicles/wrecked_truck.png"),
@@ -32,6 +38,8 @@ var building_cells := {}
 var parking_cells := {}
 var open_cells := {}
 var portal_locked := false
+var elevated_orientation := "horizontal"
+var elevated_road_index := 0
 
 var asphalt_material: StandardMaterial3D
 var lot_material: StandardMaterial3D
@@ -44,6 +52,10 @@ var riverbank_material: StandardMaterial3D
 var bridge_material: StandardMaterial3D
 var vehicle_collision_material: StandardMaterial3D
 var parking_material: StandardMaterial3D
+var bridge_deck_material: StandardMaterial3D
+var bridge_rail_material: StandardMaterial3D
+var overpass_concrete_material: StandardMaterial3D
+var open_lot_materials: Array[StandardMaterial3D] = []
 
 
 func _ready() -> void:
@@ -54,6 +66,7 @@ func _ready() -> void:
 	_build_materials()
 	_build_floor_collision()
 	_build_tiles()
+	_build_elevated_highway()
 	_build_zoned_lots()
 	_build_shelter()
 
@@ -63,6 +76,11 @@ func _generate_layout() -> void:
 	horizontal_roads = [2, rng.randi_range(6, 7), rng.randi_range(10, 12), rng.randi_range(15, 16)]
 	vertical_roads.sort()
 	horizontal_roads.sort()
+	elevated_orientation = "horizontal" if rng.randf() < 0.5 else "vertical"
+	if elevated_orientation == "horizontal":
+		elevated_road_index = horizontal_roads[rng.randi_range(1, horizontal_roads.size() - 1)]
+	else:
+		elevated_road_index = vertical_roads[rng.randi_range(1, vertical_roads.size() - 1)]
 
 	var river_x := rng.randi_range(8, 10)
 	for z in range(GRID_SIZE):
@@ -125,6 +143,22 @@ func _build_materials() -> void:
 		parking_material = asphalt_material
 	riverbank_material = _color_material(Color("#4f5146"))
 	bridge_material = _color_material(Color("#575b5d"))
+	if ResourceLoader.exists(BRIDGE_DECK_TEXTURE_PATH):
+		bridge_deck_material = _texture_material(load(BRIDGE_DECK_TEXTURE_PATH) as Texture2D)
+	else:
+		bridge_deck_material = asphalt_material
+	if ResourceLoader.exists(GUARDRAIL_TEXTURE_PATH):
+		bridge_rail_material = _texture_material(load(GUARDRAIL_TEXTURE_PATH) as Texture2D)
+	else:
+		bridge_rail_material = _color_material(Color("#796d58"))
+	bridge_rail_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	overpass_concrete_material = _texture_material(CONCRETE_TEXTURE, Color("#626560"))
+	overpass_concrete_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	for texture_path in OPEN_LOT_TEXTURE_PATHS:
+		if ResourceLoader.exists(texture_path):
+			open_lot_materials.append(_texture_material(load(texture_path) as Texture2D))
+	if open_lot_materials.is_empty():
+		open_lot_materials.append(lot_material)
 	vehicle_collision_material = _color_material(Color(1.0, 0.02, 0.02, 0.46))
 	vehicle_collision_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	vehicle_collision_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -200,11 +234,52 @@ func _build_river_cell(center: Vector3, block_movement: bool) -> void:
 
 func _build_bridge_cell(center: Vector3, vertical: bool, horizontal: bool) -> void:
 	_add_plane("BridgeDeck", center, Vector2(CELL_SIZE, CELL_SIZE), bridge_material, 0.13)
-	_add_plane("BridgeRoad", center, Vector2(CELL_SIZE - 0.8, CELL_SIZE), asphalt_material, 0.145)
-	if horizontal and not vertical:
-		_add_lane_dash(center + Vector3(0, 0.15, 0), false)
+	_add_oriented_plane("BridgeRoadArt", center, Vector2(CELL_SIZE, 8.8), bridge_deck_material, 0.15, false)
+	_build_guardrails(center, false, 0.15, CELL_SIZE, 4.35, true)
+
+
+func _build_elevated_highway() -> void:
+	var vertical := elevated_orientation == "vertical"
+	for route_cell in range(GRID_SIZE):
+		var cell := Vector2i(elevated_road_index, route_cell) if vertical else Vector2i(route_cell, elevated_road_index)
+		var center := _cell_center(cell)
+		var deck_size := Vector3(8.4, 0.38, CELL_SIZE) if vertical else Vector3(CELL_SIZE, 0.38, 8.4)
+		_add_box("ElevatedDeck", center + Vector3(0, 3.8, 0), deck_size, overpass_concrete_material)
+		_add_oriented_plane("ElevatedRoadArt", center, Vector2(CELL_SIZE, 8.0), bridge_deck_material, 4.01, vertical)
+		_build_guardrails(center, vertical, 4.01, CELL_SIZE, 4.0, false)
+		if route_cell % 2 == 1:
+			_build_overpass_pillars(center, vertical)
+
+
+func _build_guardrails(
+	center: Vector3,
+	vertical: bool,
+	deck_height: float,
+	segment_length: float,
+	half_width: float,
+	with_collision: bool
+) -> void:
 	for side in [-1.0, 1.0]:
-		_add_box("BridgeRail", center + Vector3(0, 0.48, side * 4.65), Vector3(CELL_SIZE, 0.7, 0.22), curb_material)
+		var side_offset := Vector3(side * half_width, 0, 0) if vertical else Vector3(0, 0, side * half_width)
+		var rail_size := Vector3(0.16, 0.14, segment_length) if vertical else Vector3(segment_length, 0.14, 0.16)
+		for rail_height in [0.42, 0.72]:
+			_add_box("GuardrailBeam", center + side_offset + Vector3(0, deck_height + rail_height, 0), rail_size, bridge_rail_material)
+		for post_offset in [-4.0, -2.0, 0.0, 2.0, 4.0]:
+			var post_position := center + side_offset
+			if vertical:
+				post_position.z += post_offset
+			else:
+				post_position.x += post_offset
+			_add_box("GuardrailPost", post_position + Vector3(0, deck_height + 0.39, 0), Vector3(0.2, 0.78, 0.2), bridge_rail_material)
+		if with_collision:
+			var collision_size := Vector3(0.32, 1.0, segment_length) if vertical else Vector3(segment_length, 1.0, 0.32)
+			_add_static_collision_box("BridgeGuardCollision", center + side_offset + Vector3(0, deck_height + 0.48, 0), collision_size)
+
+
+func _build_overpass_pillars(center: Vector3, vertical: bool) -> void:
+	for side in [-1.0, 1.0]:
+		var position := center + (Vector3(side * 2.65, 1.85, 0) if vertical else Vector3(0, 1.85, side * 2.65))
+		_add_static_box("OverpassPillar", position, Vector3(0.9, 3.7, 0.9), overpass_concrete_material)
 
 
 func _build_zoned_lots() -> void:
@@ -231,11 +306,8 @@ func _build_parking_lot(cell: Vector2i) -> void:
 
 func _build_open_lot(cell: Vector2i) -> void:
 	var center := _cell_center(cell)
-	var dirt := _color_material(Color("#666357"))
-	_add_plane("OpenLot", center, Vector2(7.2, 7.2), dirt, 0.035)
-	for index in range(rng.randi_range(2, 5)):
-		var size := rng.randf_range(0.25, 0.6)
-		_add_box("Debris", center + Vector3(rng.randf_range(-3, 3), size * 0.25, rng.randf_range(-3, 3)), Vector3(size, size * 0.5, size), curb_material)
+	var material := open_lot_materials[rng.randi_range(0, open_lot_materials.size() - 1)]
+	_add_plane("UrbanOpenLotArt", center, Vector2(9.4, 9.4), material, 0.035)
 
 
 func _try_build_building(cell: Vector2i) -> void:
@@ -497,6 +569,59 @@ func _add_plane(node_name: String, position: Vector3, size: Vector2, material: M
 	instance.mesh = mesh
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(instance)
+
+
+func _add_oriented_plane(
+	node_name: String,
+	position: Vector3,
+	size: Vector2,
+	material: Material,
+	height: float,
+	vertical: bool
+) -> void:
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	instance.position = position + Vector3(0, height, 0)
+	if vertical:
+		instance.rotation.y = PI * 0.5
+	var mesh := PlaneMesh.new()
+	mesh.size = size
+	mesh.material = material
+	instance.mesh = mesh
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(instance)
+
+
+func _add_static_collision_box(node_name: String, position: Vector3, size: Vector3) -> void:
+	var body := StaticBody3D.new()
+	body.name = node_name
+	body.position = position
+	body.collision_layer = 1
+	add_child(body)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = size
+	collision.shape = shape
+	body.add_child(collision)
+
+
+func _add_static_box(node_name: String, position: Vector3, size: Vector3, material: Material) -> void:
+	var body := StaticBody3D.new()
+	body.name = node_name
+	body.position = position
+	body.collision_layer = 1
+	add_child(body)
+	var mesh_instance := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mesh.material = material
+	mesh_instance.mesh = mesh
+	body.add_child(mesh_instance)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = size
+	collision.shape = shape
+	body.add_child(collision)
 
 
 func _add_box(node_name: String, position: Vector3, size: Vector3, material: Material) -> void:

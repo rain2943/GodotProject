@@ -13,10 +13,10 @@ const ANIMATION_SHEETS := {
 	"n": preload("res://assets/characters/survivor_anim_n.png"),
 }
 const STATIONS := {
-	"bed": {"position": Vector2(-5.4, -2.2), "label": "휴식하기", "radius": 2.2},
-	"craft": {"position": Vector2(0.0, -3.8), "label": "응급키트 제작", "radius": 2.0},
-	"upgrade": {"position": Vector2(5.2, -3.6), "label": "무기 강화", "radius": 2.0},
-	"exit": {"position": Vector2(2.8, 4.5), "label": "도시로 나가기", "radius": 1.8},
+	"bed": {"position": Vector2(-3.15, -2.2), "label": "휴식하기", "radius": 1.25},
+	"craft": {"position": Vector2(0.0, -3.25), "label": "응급키트 제작", "radius": 1.35},
+	"upgrade": {"position": Vector2(5.2, -3.15), "label": "무기 강화", "radius": 1.35},
+	"exit": {"position": Vector2(2.8, 4.45), "label": "도시로 나가기", "radius": 1.45},
 }
 
 var player: CharacterBody3D
@@ -85,19 +85,15 @@ func _build_room() -> void:
 	else:
 		floor_material = _material(Color("#242c2a"))
 	_add_plane("ShelterInteriorArt", Vector3(0, 0, 0), Vector2(20, 14), floor_material, self)
-	var wall_material := _material(Color("#1b2422"))
-	_add_box("NorthWall", Vector3(0, 1.4, -5.7), Vector3(17, 2.8, 0.3), wall_material, self)
-	_add_box("SouthWallLeft", Vector3(-3.0, 1.4, 5.7), Vector3(11.0, 2.8, 0.3), wall_material, self)
-	_add_box("SouthWallRight", Vector3(6.0, 1.4, 5.7), Vector3(5.0, 2.8, 0.3), wall_material, self)
-	_add_box("WestWall", Vector3(-8.5, 1.4, 0), Vector3(0.3, 2.8, 11.7), wall_material, self)
-	_add_box("EastWall", Vector3(8.5, 1.4, -1.5), Vector3(0.3, 2.8, 8.7), wall_material, self)
-	_add_station_marker("BedMarker", Vector3(-5.4, 0.05, -2.2), Color("#65a9c9"))
-	_add_station_marker("CraftMarker", Vector3(0, 0.05, -3.8), Color("#e1b65e"))
-	_add_station_marker("UpgradeMarker", Vector3(5.2, 0.05, -3.6), Color("#65df9e"))
-	_add_station_marker("ExitMarker", Vector3(2.8, 0.05, 4.5), Color("#63e5c6"))
+	_add_obstacle("NorthWallCollision", Vector3(0, 1.5, -5.45), Vector3(17.0, 3.0, 0.5))
+	_add_obstacle("SouthWallLeftCollision", Vector3(-3.0, 1.5, 5.45), Vector3(11.0, 3.0, 0.5))
+	_add_obstacle("SouthWallRightCollision", Vector3(6.0, 1.5, 5.45), Vector3(5.0, 3.0, 0.5))
+	_add_obstacle("WestWallCollision", Vector3(-8.25, 1.5, 0), Vector3(0.5, 3.0, 11.4))
+	_add_obstacle("EastWallCollision", Vector3(8.25, 1.5, 0), Vector3(0.5, 3.0, 11.4))
 	_add_obstacle("BedCollision", Vector3(-5.4, 0.45, -2.2), Vector3(3.7, 0.9, 1.8))
 	_add_obstacle("WorkbenchCollision", Vector3(0, 0.55, -4.35), Vector3(3.8, 1.1, 1.0))
 	_add_obstacle("UpgradeCollision", Vector3(5.2, 0.8, -4.35), Vector3(2.5, 1.6, 1.0))
+	_add_obstacle("WestStorageCollision", Vector3(-7.25, 0.65, 2.0), Vector3(1.35, 1.3, 4.1))
 	var camera := Camera3D.new()
 	add_child(camera)
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
@@ -340,24 +336,6 @@ func _input(event: InputEvent) -> void:
 		touch_knob.position = Vector2(40, 40) + offset
 
 
-func _add_station_marker(node_name: String, position: Vector3, color: Color) -> void:
-	var material := _material(Color(color.r, color.g, color.b, 0.24))
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.emission_enabled = true
-	material.emission = color
-	material.emission_energy_multiplier = 1.4
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.8
-	mesh.bottom_radius = 0.8
-	mesh.height = 0.035
-	mesh.material = material
-	var marker := MeshInstance3D.new()
-	marker.name = node_name
-	marker.position = position
-	marker.mesh = mesh
-	add_child(marker)
-
-
 func _add_obstacle(node_name: String, position: Vector3, size: Vector3) -> void:
 	var body := StaticBody3D.new()
 	body.name = node_name
@@ -376,17 +354,6 @@ func _add_plane(node_name: String, position: Vector3, size: Vector2, material: M
 	instance.name = node_name
 	instance.position = position
 	var mesh := PlaneMesh.new()
-	mesh.size = size
-	mesh.material = material
-	instance.mesh = mesh
-	parent.add_child(instance)
-
-
-func _add_box(node_name: String, position: Vector3, size: Vector3, material: Material, parent: Node) -> void:
-	var instance := MeshInstance3D.new()
-	instance.name = node_name
-	instance.position = position
-	var mesh := BoxMesh.new()
 	mesh.size = size
 	mesh.material = material
 	instance.mesh = mesh
