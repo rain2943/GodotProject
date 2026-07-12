@@ -19,12 +19,19 @@ const ARMED_ANIMATION_SHEETS := {
 	"ne": preload("res://assets/characters/survivor_armed_ne.png"),
 	"n": preload("res://assets/characters/survivor_armed_n.png"),
 }
-const FIRE_ANIMATION_SHEETS := {
-	"s": preload("res://assets/characters/survivor_fire_s.png"),
-	"se": preload("res://assets/characters/survivor_fire_se.png"),
-	"e": preload("res://assets/characters/survivor_fire_e.png"),
-	"ne": preload("res://assets/characters/survivor_fire_ne.png"),
-	"n": preload("res://assets/characters/survivor_fire_n.png"),
+const FIRE_IDLE_ANIMATION_SHEETS := {
+	"s": preload("res://assets/characters/survivor_fire_idle_s.png"),
+	"se": preload("res://assets/characters/survivor_fire_idle_se.png"),
+	"e": preload("res://assets/characters/survivor_fire_idle_e.png"),
+	"ne": preload("res://assets/characters/survivor_fire_idle_ne.png"),
+	"n": preload("res://assets/characters/survivor_fire_idle_n.png"),
+}
+const FIRE_WALK_ANIMATION_SHEETS := {
+	"s": preload("res://assets/characters/survivor_fire_walk_s.png"),
+	"se": preload("res://assets/characters/survivor_fire_walk_se.png"),
+	"e": preload("res://assets/characters/survivor_fire_walk_e.png"),
+	"ne": preload("res://assets/characters/survivor_fire_walk_ne.png"),
+	"n": preload("res://assets/characters/survivor_fire_walk_n.png"),
 }
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const FRAME_SIZE := Vector2(384, 384)
@@ -33,6 +40,9 @@ const AK_DROP_TEXTURE := preload("res://assets/weapons/ak47_drop.png")
 const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
+const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
+const ENEMY_MELEE_TEXTURE := preload("res://assets/enemies/enemy_melee.png")
+const ENEMY_PISTOL_TEXTURE := preload("res://assets/enemies/enemy_pistol.png")
 const AK_PICKUP_POSITION := Vector3(1.15, 0.32, 0.7)
 const PICKUP_DISTANCE := 1.75
 const PICKUP_HOLD_DURATION := 0.9
@@ -82,6 +92,7 @@ var equipment_panel: PanelContainer
 var equipment_label: Label
 var fire_button: Button
 var fire_cooldown := 0.0
+var fire_pose_time := 0.0
 var fire_button_held := false
 var has_ak := false
 var magazine_ammo := 30
@@ -98,10 +109,17 @@ var is_firing_animation := false
 var ammo_pickups: Array[Node3D] = []
 var ammo_notice: Label
 var ammo_notice_time := 0.0
+var ammo_prompt_panel: PanelContainer
+var nearby_ammo_pickup: Node3D
+var visibility_material: ShaderMaterial
+var smoke_particle_texture: ImageTexture
+var player_health := 82
+var enemies: Array[CharacterBody3D] = []
 
 
 func _ready() -> void:
 	camera.size = 28.0
+	player.collision_mask = 3
 	camera.position = Vector3(10.5, 10.5, 10.5)
 	camera.look_at(Vector3.ZERO)
 	$SmokeA.emitting = false
@@ -116,7 +134,9 @@ func _ready() -> void:
 	_spawn_ammo_pickups()
 	_build_weapon_hud()
 	_build_gunshot_audio()
+	_spawn_enemies()
 	_setup_building_overlays()
+	_build_visibility_fog()
 	_set_facing("s")
 
 
@@ -151,6 +171,7 @@ func _physics_process(delta: float) -> void:
 	_update_camera_occluders(delta)
 	camera_rig.position = camera_rig.position.lerp(Vector3(player.position.x, 0, player.position.z), 1.0 - exp(-7.0 * delta))
 	_update_building_overlays()
+	_update_visibility_fog()
 	$CameraRig/Rain.position.y = 8.0
 	location_label.text = "종로 생존구역  ·  %02d / %02d" % [roundi(player.position.x + 32), roundi(player.position.z + 32)]
 
@@ -177,6 +198,7 @@ func _set_motion_state(next_state: String) -> void:
 
 func _play_directional_animation() -> void:
 	if is_firing_animation:
+		_play_survivor_fire_animation()
 		return
 	var source := facing
 	var flipped := false
@@ -194,7 +216,6 @@ func _build_sprite_frames() -> void:
 	unarmed_sprite_frames = _create_character_frames(ANIMATION_SHEETS, false)
 	armed_sprite_frames = _create_character_frames(ARMED_ANIMATION_SHEETS, true)
 	survivor.sprite_frames = unarmed_sprite_frames
-	survivor.animation_finished.connect(_on_survivor_animation_finished)
 
 
 func _create_character_frames(sheets: Dictionary, include_fire: bool) -> SpriteFrames:
@@ -220,22 +241,23 @@ func _create_character_frames(sheets: Dictionary, include_fire: bool) -> SpriteF
 				var duration := 1.6 if state == "walk" and direction_name == "ne" and cycle_index in [2, 6] else 1.0
 				frames.add_frame(animation_name, atlas, duration)
 		if include_fire:
-			var fire_name := "fire_%s" % direction_name
-			frames.add_animation(fire_name)
-			frames.set_animation_loop(fire_name, false)
-			frames.set_animation_speed(fire_name, 16.0)
-			for frame_index in 4:
-				var fire_atlas := AtlasTexture.new()
-				fire_atlas.atlas = FIRE_ANIMATION_SHEETS[direction_name]
-				fire_atlas.region = Rect2(frame_index * FRAME_SIZE.x, 0, FRAME_SIZE.x, FRAME_SIZE.y)
-				frames.add_frame(fire_name, fire_atlas)
+			for fire_state in ["idle", "walk"]:
+				var fire_name := "fire_%s_%s" % [fire_state, direction_name]
+				var fire_sheets := FIRE_IDLE_ANIMATION_SHEETS if fire_state == "idle" else FIRE_WALK_ANIMATION_SHEETS
+				frames.add_animation(fire_name)
+				frames.set_animation_loop(fire_name, true)
+				frames.set_animation_speed(fire_name, 11.0 if fire_state == "idle" else 9.0)
+				for frame_index in 8:
+					var fire_atlas := AtlasTexture.new()
+					fire_atlas.atlas = fire_sheets[direction_name]
+					fire_atlas.region = Rect2(
+						(frame_index % 4) * FRAME_SIZE.x,
+						(frame_index / 4) * FRAME_SIZE.y,
+						FRAME_SIZE.x,
+						FRAME_SIZE.y
+					)
+					frames.add_frame(fire_name, fire_atlas)
 	return frames
-
-
-func _on_survivor_animation_finished() -> void:
-	if is_firing_animation:
-		is_firing_animation = false
-		_play_directional_animation()
 
 
 func _play_survivor_fire_animation() -> void:
@@ -247,7 +269,16 @@ func _play_survivor_fire_animation() -> void:
 		"nw": source = "ne"; flipped = true
 	is_firing_animation = true
 	survivor.flip_h = flipped
-	survivor.play("fire_%s" % source)
+	var animation_name := "fire_%s_%s" % [motion_state, source]
+	if survivor.animation != animation_name or not survivor.is_playing():
+		survivor.play(animation_name)
+
+
+func _stop_survivor_fire_animation() -> void:
+	if not is_firing_animation:
+		return
+	is_firing_animation = false
+	_play_directional_animation()
 
 
 func _setup_weapon_layer() -> void:
@@ -357,6 +388,8 @@ func _update_ammo_pickups(delta: float) -> void:
 	if ammo_notice and ammo_notice_time <= 0.0:
 		ammo_notice.visible = false
 	var player_ground := Vector2(player.position.x, player.position.z)
+	var nearest_distance := INF
+	nearby_ammo_pickup = null
 	for pickup in ammo_pickups.duplicate():
 		if not is_instance_valid(pickup):
 			ammo_pickups.erase(pickup)
@@ -364,14 +397,26 @@ func _update_ammo_pickups(delta: float) -> void:
 		var base_y := float(pickup.get_meta("base_y", 0.3))
 		pickup.position.y = base_y + sin(Time.get_ticks_msec() * 0.004 + pickup.position.x) * 0.04
 		var pickup_ground := Vector2(pickup.position.x, pickup.position.z)
-		if player_ground.distance_to(pickup_ground) <= 1.15:
-			reserve_ammo += AMMO_PICKUP_AMOUNT
-			ammo_notice.text = "+%d  7.62mm 탄약   잔탄 %d" % [AMMO_PICKUP_AMOUNT, reserve_ammo]
-			ammo_notice.visible = true
-			ammo_notice_time = 2.2
-			_update_equipment_ui()
-			ammo_pickups.erase(pickup)
-			pickup.queue_free()
+		var distance := player_ground.distance_to(pickup_ground)
+		if distance <= PICKUP_DISTANCE and distance < nearest_distance:
+			nearest_distance = distance
+			nearby_ammo_pickup = pickup
+	if ammo_prompt_panel:
+		ammo_prompt_panel.visible = is_instance_valid(nearby_ammo_pickup)
+
+
+func _collect_nearby_ammo() -> void:
+	if not is_instance_valid(nearby_ammo_pickup):
+		return
+	reserve_ammo += AMMO_PICKUP_AMOUNT
+	ammo_notice.text = "+%d  7.62mm 탄약   잔탄 %d" % [AMMO_PICKUP_AMOUNT, reserve_ammo]
+	ammo_notice.visible = true
+	ammo_notice_time = 2.2
+	_update_equipment_ui()
+	ammo_pickups.erase(nearby_ammo_pickup)
+	nearby_ammo_pickup.queue_free()
+	nearby_ammo_pickup = null
+	ammo_prompt_panel.visible = false
 
 
 func _build_weapon_hud() -> void:
@@ -403,6 +448,25 @@ func _build_weapon_hud() -> void:
 	pickup_progress.max_value = PICKUP_HOLD_DURATION
 	pickup_progress.show_percentage = false
 	pickup_box.add_child(pickup_progress)
+
+	ammo_prompt_panel = PanelContainer.new()
+	ammo_prompt_panel.name = "AmmoPickupPrompt"
+	ammo_prompt_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	ammo_prompt_panel.offset_left = -170
+	ammo_prompt_panel.offset_top = -112
+	ammo_prompt_panel.offset_right = 170
+	ammo_prompt_panel.offset_bottom = -58
+	ammo_prompt_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.02, 0.025, 0.028, 0.94), Color("#b8a66d")))
+	ammo_prompt_panel.visible = false
+	$HUD.add_child(ammo_prompt_panel)
+	var ammo_pickup_button := Button.new()
+	ammo_pickup_button.custom_minimum_size = Vector2(330, 48)
+	ammo_pickup_button.text = "7.62mm 탄약 획득  [E]"
+	ammo_pickup_button.focus_mode = Control.FOCUS_NONE
+	ammo_pickup_button.add_theme_font_override("font", font)
+	ammo_pickup_button.add_theme_font_size_override("font_size", 15)
+	ammo_pickup_button.pressed.connect(_collect_nearby_ammo)
+	ammo_prompt_panel.add_child(ammo_pickup_button)
 
 	equipment_panel = PanelContainer.new()
 	equipment_panel.name = "EquipmentPanel"
@@ -508,8 +572,11 @@ func _equip_ak47() -> void:
 
 func _update_firing(delta: float) -> void:
 	fire_cooldown = maxf(0.0, fire_cooldown - delta)
+	fire_pose_time = maxf(0.0, fire_pose_time - delta)
 	if fire_button_held and has_ak and fire_cooldown <= 0.0:
 		_fire_ak47()
+	elif is_firing_animation and not fire_button_held and fire_pose_time <= 0.0:
+		_stop_survivor_fire_animation()
 
 
 func _on_fire_button_down() -> void:
@@ -532,6 +599,7 @@ func _fire_ak47() -> void:
 		return
 	magazine_ammo -= 1
 	fire_cooldown = FIRE_INTERVAL
+	fire_pose_time = 0.14
 	_play_survivor_fire_animation()
 	var screen_direction: Vector2 = DIRECTION_VECTORS[facing]
 	var world_direction := Vector3(
@@ -544,6 +612,7 @@ func _fire_ak47() -> void:
 	projectile.set_script(BULLET_PROJECTILE)
 	projectile.set("direction", world_direction)
 	projectile.set("source_body", player)
+	projectile.set("damage", 24)
 	projectile.position = player.position + world_direction * 0.82 + Vector3(0, 0.05, 0)
 	add_child(projectile)
 	_play_gunshot()
@@ -585,8 +654,71 @@ func _spawn_muzzle_light(direction: Vector3) -> void:
 
 func _spawn_launch_fx(direction: Vector3) -> void:
 	var origin := player.position + direction * 0.86 + Vector3(0, 0.18, 0)
-	_spawn_particle_burst(origin, direction, Color("#ffd36a"), 14, 0.16, 2.8, 6.0, 0.08, 0.24)
-	_spawn_particle_burst(origin, direction + Vector3.UP * 0.25, Color(0.42, 0.44, 0.46, 0.58), 7, 0.42, 0.35, 1.2, 0.18, 0.52)
+	_spawn_particle_burst(origin, direction, Color("#ffd98a"), 6, 0.09, 2.0, 4.2, 0.04, 0.12)
+	_spawn_smoke_cloud(origin, direction)
+	get_tree().create_timer(0.055).timeout.connect(func() -> void:
+		_spawn_smoke_cloud(origin + direction * 0.08, direction)
+	)
+
+
+func _spawn_smoke_cloud(origin: Vector3, direction: Vector3) -> void:
+	if smoke_particle_texture == null:
+		smoke_particle_texture = _create_smoke_texture()
+	var particles := GPUParticles3D.new()
+	particles.position = origin
+	particles.amount = 9
+	particles.lifetime = 0.72
+	particles.one_shot = true
+	particles.explosiveness = 0.82
+	particles.randomness = 0.7
+	particles.local_coords = false
+	particles.visibility_aabb = AABB(Vector3(-2, -2, -2), Vector3(4, 4, 4))
+	var process := ParticleProcessMaterial.new()
+	process.direction = (direction * 0.28 + Vector3.UP * 0.72).normalized()
+	process.spread = 38.0
+	process.gravity = Vector3(0, 0.42, 0)
+	process.initial_velocity_min = 0.18
+	process.initial_velocity_max = 0.8
+	process.damping_min = 0.4
+	process.damping_max = 1.1
+	process.scale_min = 0.35
+	process.scale_max = 0.85
+	var alpha_gradient := Gradient.new()
+	alpha_gradient.offsets = PackedFloat32Array([0.0, 0.18, 1.0])
+	alpha_gradient.colors = PackedColorArray([
+		Color(0.32, 0.34, 0.35, 0.0),
+		Color(0.32, 0.34, 0.35, 0.52),
+		Color(0.18, 0.2, 0.21, 0.0),
+	])
+	var color_ramp := GradientTexture1D.new()
+	color_ramp.gradient = alpha_gradient
+	process.color_ramp = color_ramp
+	particles.process_material = process
+	var material := StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.vertex_color_use_as_albedo = true
+	material.albedo_texture = smoke_particle_texture
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(0.42, 0.42)
+	mesh.material = material
+	particles.draw_pass_1 = mesh
+	add_child(particles)
+	particles.finished.connect(particles.queue_free)
+	particles.emitting = true
+
+
+func _create_smoke_texture() -> ImageTexture:
+	var image := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	for y in 64:
+		for x in 64:
+			var uv := (Vector2(x, y) + Vector2(0.5, 0.5)) / 64.0
+			var radius := uv.distance_to(Vector2(0.5, 0.5)) * 2.0
+			var noise := sin(float(x * 17 + y * 31)) * 0.035
+			var alpha := clampf((1.0 - radius + noise) * 2.3, 0.0, 1.0)
+			image.set_pixel(x, y, Color(1, 1, 1, alpha * alpha))
+	return ImageTexture.create_from_image(image)
 
 
 func _spawn_particle_burst(
@@ -679,6 +811,86 @@ func _play_gunshot() -> void:
 	var audio := gunshot_players[gunshot_index]
 	gunshot_index = (gunshot_index + 1) % gunshot_players.size()
 	audio.play()
+
+
+func _spawn_enemies() -> void:
+	var spawn_points := [
+		Vector2(-8, -6),
+		Vector2(10, -6),
+		Vector2(-11, 7),
+		Vector2(13, 4),
+		Vector2(-18, -15),
+		Vector2(20, -15),
+		Vector2(-20, 18),
+		Vector2(22, 18),
+	]
+	spawn_points.shuffle()
+	for index in 6:
+		var kind := "melee" if index < 3 else "pistol"
+		var texture := ENEMY_MELEE_TEXTURE if kind == "melee" else ENEMY_PISTOL_TEXTURE
+		var enemy := CharacterBody3D.new()
+		enemy.name = "%sEnemy%d" % [kind.capitalize(), index]
+		enemy.set_script(ENEMY_SCRIPT)
+		enemy.position = Vector3(spawn_points[index].x, 0.78, spawn_points[index].y)
+		enemy.call("configure", kind, player, texture)
+		add_child(enemy)
+		enemies.append(enemy)
+
+
+func _build_visibility_fog() -> void:
+	$HUD.layer = 3
+	var fog_layer := CanvasLayer.new()
+	fog_layer.name = "VisibilityFog"
+	fog_layer.layer = 2
+	add_child(fog_layer)
+	var darkness := ColorRect.new()
+	darkness.name = "Darkness"
+	darkness.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	darkness.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fog_layer.add_child(darkness)
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+uniform vec2 viewport_size = vec2(1280.0, 720.0);
+uniform vec2 player_screen = vec2(640.0, 360.0);
+uniform float inner_radius = 245.0;
+uniform float outer_radius = 430.0;
+uniform float darkness = 0.86;
+
+void fragment() {
+	vec2 pixel_position = UV * viewport_size;
+	float distance_from_player = length(pixel_position - player_screen);
+	float fog_alpha = smoothstep(inner_radius, outer_radius, distance_from_player) * darkness;
+	COLOR = vec4(0.008, 0.012, 0.015, fog_alpha);
+}
+"""
+	visibility_material = ShaderMaterial.new()
+	visibility_material.shader = shader
+	darkness.material = visibility_material
+	_update_visibility_fog()
+
+
+func _update_visibility_fog() -> void:
+	if visibility_material == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	visibility_material.set_shader_parameter("viewport_size", viewport_size)
+	visibility_material.set_shader_parameter("player_screen", camera.unproject_position(player.global_position))
+
+
+func take_damage(amount: int) -> void:
+	player_health = maxi(0, player_health - amount)
+	var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
+	if health_bar:
+		health_bar.value = player_health
+	if ammo_notice:
+		ammo_notice.text = "피격  -%d   체력 %d/100" % [amount, player_health]
+		ammo_notice.visible = true
+		ammo_notice_time = 1.1
+	if player_health <= 0:
+		fire_button_held = false
+		player.velocity = Vector3.ZERO
+		state_label.text = "행동 불능"
 
 
 func _setup_building_overlays() -> void:
@@ -803,7 +1015,11 @@ func _input(event: InputEvent) -> void:
 		var key_event := event as InputEventKey
 		var key := key_event.keycode if key_event.keycode != 0 else key_event.physical_keycode
 		if key == KEY_E:
-			pickup_keyboard_held = key_event.pressed
+			if key_event.pressed and is_instance_valid(nearby_ammo_pickup):
+				_collect_nearby_ammo()
+				pickup_keyboard_held = false
+			else:
+				pickup_keyboard_held = key_event.pressed
 		elif key == KEY_SPACE and key_event.pressed:
 			_try_fire_ak47()
 	elif event is InputEventScreenTouch:
@@ -833,3 +1049,12 @@ func _input(event: InputEvent) -> void:
 		var offset := (drag.position - touch_origin).limit_length(radius)
 		touch_vector = offset / radius
 		touch_knob.position = (touch_stick.size - touch_knob.size) * 0.5 + offset
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			fire_button_held = mouse_event.pressed
+			if mouse_event.pressed:
+				_try_fire_ak47()

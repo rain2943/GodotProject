@@ -17,12 +17,12 @@ const ALLEY_SEGMENTS := [
 ]
 const BUILDING_LAYOUT := [
 	{
-		"building_id": "academy_8x8",
-		"module_origin": Vector2i(40, 50),
+		"building_id": "academy_tower_6x4",
+		"module_origin": Vector2i(42, 54),
 	},
 	{
-		"building_id": "hanbit_8x8",
-		"module_origin": Vector2i(50, 50),
+		"building_id": "hanbit_apartment_8x4",
+		"module_origin": Vector2i(50, 54),
 	}
 ]
 

@@ -5,31 +5,31 @@ const MODULE_SIZE := 1.0
 const MODULES_PER_CELL := 10
 
 const DEFINITIONS := {
-	"hanbit_8x8": {
-		"node_name": "HanbitBuilding",
-		"texture_path": "res://assets/buildings/hanbit_building_v2.png",
-		"footprint_modules": Vector2i(8, 8),
-		"height_world": 14.5,
+	"hanbit_apartment_8x4": {
+		"node_name": "HanbitApartment",
+		"texture_path": "res://assets/buildings/hanbit_apartment_8x4.png",
+		"footprint_modules": Vector2i(8, 4),
+		"height_world": 12.5,
 		"footprint_corners_px": [
-			Vector2(409, 1148),
-			Vector2(768, 941),
-			Vector2(1127, 1148),
+			Vector2(289, 1116),
+			Vector2(528, 996),
+			Vector2(1007, 1235),
 			Vector2(768, 1355),
 		],
-		"occlusion_depth": 14.0,
+		"occlusion_depth": 11.0,
 	},
-	"academy_8x8": {
-		"node_name": "AcademyBuilding",
-		"texture_path": "res://assets/buildings/academy_building_v2.png",
-		"footprint_modules": Vector2i(8, 8),
-		"height_world": 15.0,
+	"academy_tower_6x4": {
+		"node_name": "AcademyTower",
+		"texture_path": "res://assets/buildings/academy_tower_6x4.png",
+		"footprint_modules": Vector2i(6, 4),
+		"height_world": 16.0,
 		"footprint_corners_px": [
-			Vector2(409, 1148),
-			Vector2(768, 941),
-			Vector2(1127, 1148),
+			Vector2(337, 1140),
+			Vector2(624, 996),
+			Vector2(1055, 1211),
 			Vector2(768, 1355),
 		],
-		"occlusion_depth": 14.5,
+		"occlusion_depth": 13.0,
 	}
 }
 
