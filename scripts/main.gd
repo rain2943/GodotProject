@@ -12,27 +12,6 @@ const ANIMATION_SHEETS := {
 	"ne": preload("res://assets/characters/survivor_anim_ne.png"),
 	"n": preload("res://assets/characters/survivor_anim_n.png"),
 }
-const ARMED_ANIMATION_SHEETS := {
-	"s": preload("res://assets/characters/survivor_armed_s.png"),
-	"se": preload("res://assets/characters/survivor_armed_se.png"),
-	"e": preload("res://assets/characters/survivor_armed_e.png"),
-	"ne": preload("res://assets/characters/survivor_armed_ne.png"),
-	"n": preload("res://assets/characters/survivor_armed_n.png"),
-}
-const FIRE_IDLE_ANIMATION_SHEETS := {
-	"s": preload("res://assets/characters/survivor_fire_idle_s.png"),
-	"se": preload("res://assets/characters/survivor_fire_idle_se.png"),
-	"e": preload("res://assets/characters/survivor_fire_idle_e.png"),
-	"ne": preload("res://assets/characters/survivor_fire_idle_ne.png"),
-	"n": preload("res://assets/characters/survivor_fire_idle_n.png"),
-}
-const FIRE_WALK_ANIMATION_SHEETS := {
-	"s": preload("res://assets/characters/survivor_fire_walk_s.png"),
-	"se": preload("res://assets/characters/survivor_fire_walk_se.png"),
-	"e": preload("res://assets/characters/survivor_fire_walk_e.png"),
-	"ne": preload("res://assets/characters/survivor_fire_walk_ne.png"),
-	"n": preload("res://assets/characters/survivor_fire_walk_n.png"),
-}
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const FRAME_SIZE := Vector2(384, 384)
 const WEAPON_FRAME_SIZE := Vector2(192, 192)
@@ -104,7 +83,6 @@ var equipment_panel: PanelContainer
 var equipment_label: Label
 var fire_button: Button
 var fire_cooldown := 0.0
-var fire_pose_time := 0.0
 var fire_button_held := false
 var mouse_fire_held := false
 var has_ak := false
@@ -117,8 +95,6 @@ var building_overlays := {}
 var survivor_overlay: Sprite2D
 var weapon_overlay: Sprite2D
 var unarmed_sprite_frames: SpriteFrames
-var armed_sprite_frames: SpriteFrames
-var is_firing_animation := false
 var ammo_pickups: Array[Node3D] = []
 var ammo_notice: Label
 var ammo_notice_time := 0.0
@@ -168,7 +144,8 @@ func _physics_process(delta: float) -> void:
 	if world_direction.length_squared() > 0.01:
 		world_direction = world_direction.normalized()
 		player.velocity = world_direction * MOVE_SPEED
-		_update_facing(input_vector)
+		if not _uses_mouse_aim():
+			_update_facing(input_vector)
 		_set_motion_state("walk")
 		state_label.text = "이동 중"
 	else:
@@ -176,8 +153,9 @@ func _physics_process(delta: float) -> void:
 		_set_motion_state("idle")
 		state_label.text = "경계 중"
 
-	if mouse_fire_held and has_ak:
+	if _uses_mouse_aim():
 		_set_facing_from_world_direction(_get_mouse_world_direction())
+	_update_weapon_pose()
 
 	player.move_and_slide()
 	player.position.x = clampf(player.position.x, -MAP_LIMIT, MAP_LIMIT)
@@ -209,6 +187,10 @@ func _set_facing_from_world_direction(world_direction: Vector3) -> void:
 	_update_facing(screen_direction)
 
 
+func _uses_mouse_aim() -> bool:
+	return not DisplayServer.is_touchscreen_available()
+
+
 func _set_facing(direction_name: String) -> void:
 	if facing == direction_name and survivor.is_playing():
 		return
@@ -224,9 +206,6 @@ func _set_motion_state(next_state: String) -> void:
 
 
 func _play_directional_animation() -> void:
-	if is_firing_animation:
-		_play_survivor_fire_animation()
-		return
 	var source := facing
 	var flipped := false
 	match facing:
@@ -237,15 +216,15 @@ func _play_directional_animation() -> void:
 	survivor.play("%s_%s" % [motion_state, source])
 	if weapon_sprite and has_ak and not weapon_sprite.animation.begins_with("fire_"):
 		weapon_sprite.play("idle_%s" % facing)
+	_update_weapon_pose()
 
 
 func _build_sprite_frames() -> void:
-	unarmed_sprite_frames = _create_character_frames(ANIMATION_SHEETS, false)
-	armed_sprite_frames = _create_character_frames(ARMED_ANIMATION_SHEETS, true)
+	unarmed_sprite_frames = _create_character_frames(ANIMATION_SHEETS)
 	survivor.sprite_frames = unarmed_sprite_frames
 
 
-func _create_character_frames(sheets: Dictionary, include_fire: bool) -> SpriteFrames:
+func _create_character_frames(sheets: Dictionary) -> SpriteFrames:
 	var frames := SpriteFrames.new()
 	frames.remove_animation("default")
 	for direction_name in sheets:
@@ -267,45 +246,7 @@ func _create_character_frames(sheets: Dictionary, include_fire: bool) -> SpriteF
 				var cycle_index := frame_index - first_frame
 				var duration := 1.6 if state == "walk" and direction_name == "ne" and cycle_index in [2, 6] else 1.0
 				frames.add_frame(animation_name, atlas, duration)
-		if include_fire:
-			for fire_state in ["idle", "walk"]:
-				var fire_name := "fire_%s_%s" % [fire_state, direction_name]
-				var fire_sheets := FIRE_IDLE_ANIMATION_SHEETS if fire_state == "idle" else FIRE_WALK_ANIMATION_SHEETS
-				frames.add_animation(fire_name)
-				frames.set_animation_loop(fire_name, true)
-				frames.set_animation_speed(fire_name, 11.0 if fire_state == "idle" else 9.0)
-				for frame_index in 8:
-					var fire_atlas := AtlasTexture.new()
-					fire_atlas.atlas = fire_sheets[direction_name]
-					fire_atlas.region = Rect2(
-						(frame_index % 4) * FRAME_SIZE.x,
-						(frame_index / 4) * FRAME_SIZE.y,
-						FRAME_SIZE.x,
-						FRAME_SIZE.y
-					)
-					frames.add_frame(fire_name, fire_atlas)
 	return frames
-
-
-func _play_survivor_fire_animation() -> void:
-	var source := facing
-	var flipped := false
-	match facing:
-		"sw": source = "se"; flipped = true
-		"w": source = "e"; flipped = true
-		"nw": source = "ne"; flipped = true
-	is_firing_animation = true
-	survivor.flip_h = flipped
-	var animation_name := "fire_%s_%s" % [motion_state, source]
-	if survivor.animation != animation_name or not survivor.is_playing():
-		survivor.play(animation_name)
-
-
-func _stop_survivor_fire_animation() -> void:
-	if not is_firing_animation:
-		return
-	is_firing_animation = false
-	_play_directional_animation()
 
 
 func _setup_weapon_layer() -> void:
@@ -657,10 +598,10 @@ func _equip_ak47() -> void:
 	pickup_panel.visible = false
 	if is_instance_valid(ak_pickup):
 		ak_pickup.queue_free()
-	weapon_sprite.visible = false
-	survivor.sprite_frames = armed_sprite_frames
-	is_firing_animation = false
+	weapon_sprite.visible = true
+	survivor.sprite_frames = unarmed_sprite_frames
 	_play_directional_animation()
+	_update_weapon_pose()
 	equipment_panel.visible = true
 	fire_button.visible = true
 	var slot_label := get_node_or_null("HUD/QuickSlots/Slot1/Label") as Label
@@ -671,12 +612,9 @@ func _equip_ak47() -> void:
 
 func _update_firing(delta: float) -> void:
 	fire_cooldown = maxf(0.0, fire_cooldown - delta)
-	fire_pose_time = maxf(0.0, fire_pose_time - delta)
 	var firing_held := fire_button_held or mouse_fire_held
 	if firing_held and has_ak and fire_cooldown <= 0.0:
 		_fire_ak47()
-	elif is_firing_animation and not firing_held and fire_pose_time <= 0.0:
-		_stop_survivor_fire_animation()
 
 
 func _on_fire_button_down() -> void:
@@ -699,17 +637,18 @@ func _fire_ak47() -> void:
 		return
 	magazine_ammo -= 1
 	fire_cooldown = FIRE_INTERVAL
-	fire_pose_time = 0.14
 	var world_direction := _get_current_fire_direction()
 	_set_facing_from_world_direction(world_direction)
-	_play_survivor_fire_animation()
+	_update_weapon_pose()
+	if weapon_sprite:
+		weapon_sprite.play("fire_%s" % facing)
 	var projectile := Area3D.new()
 	projectile.name = "AK47Bullet"
 	projectile.set_script(BULLET_PROJECTILE)
 	projectile.set("direction", world_direction)
 	projectile.set("source_body", player)
 	projectile.set("damage", 24)
-	projectile.position = player.position + world_direction * 0.82 + Vector3(0, 0.05, 0)
+	projectile.position = _get_weapon_muzzle_position(world_direction)
 	add_child(projectile)
 	_play_gunshot()
 	_spawn_muzzle_light(world_direction)
@@ -718,7 +657,7 @@ func _fire_ak47() -> void:
 
 
 func _get_current_fire_direction() -> Vector3:
-	if mouse_fire_held:
+	if _uses_mouse_aim():
 		return _get_mouse_world_direction()
 	var screen_direction: Vector2 = DIRECTION_VECTORS[facing]
 	return Vector3(
@@ -726,6 +665,37 @@ func _get_current_fire_direction() -> Vector3:
 		0,
 		-screen_direction.x + screen_direction.y
 	).normalized()
+
+
+func _update_weapon_pose() -> void:
+	if weapon_sprite == null:
+		return
+	weapon_sprite.visible = has_ak and building_canvas == null
+	if not has_ak:
+		return
+	var direction := _get_current_facing_world_direction()
+	weapon_sprite.position = direction * 0.34 + Vector3(0, 0.34, 0)
+	weapon_sprite.offset = _get_weapon_screen_offset()
+	if not weapon_sprite.animation.begins_with("fire_"):
+		weapon_sprite.play("idle_%s" % facing)
+
+
+func _get_weapon_screen_offset() -> Vector2:
+	match facing:
+		"n": return Vector2(0, -34)
+		"ne": return Vector2(24, -30)
+		"e": return Vector2(34, -18)
+		"se": return Vector2(28, -8)
+		"s": return Vector2(0, -6)
+		"sw": return Vector2(-28, -8)
+		"w": return Vector2(-34, -18)
+		"nw": return Vector2(-24, -30)
+	return Vector2(0, -18)
+
+
+func _get_weapon_muzzle_position(world_direction: Vector3) -> Vector3:
+	var weapon_origin := weapon_sprite.global_position if weapon_sprite and has_ak else player.global_position
+	return weapon_origin + world_direction * 0.48 + Vector3(0, 0.02, 0)
 
 
 func _get_mouse_world_direction() -> Vector3:
@@ -1084,7 +1054,18 @@ func _update_building_overlays() -> void:
 	survivor_overlay.flip_h = survivor.flip_h
 	survivor_overlay.modulate = survivor.modulate
 	survivor_overlay.z_index = player_depth
-	weapon_overlay.visible = false
+	if has_ak and weapon_sprite and weapon_sprite.sprite_frames:
+		var weapon_texture := weapon_sprite.sprite_frames.get_frame_texture(weapon_sprite.animation, weapon_sprite.frame)
+		if weapon_texture:
+			weapon_overlay.texture = weapon_texture
+		weapon_overlay.visible = true
+		weapon_overlay.position = camera.unproject_position(weapon_sprite.global_position)
+		weapon_overlay.scale = Vector2.ONE * weapon_sprite.pixel_size * screen_scale
+		weapon_overlay.offset = weapon_sprite.offset
+		weapon_overlay.modulate = weapon_sprite.modulate
+		weapon_overlay.z_index = player_depth + 1
+	else:
+		weapon_overlay.visible = false
 
 
 func _update_camera_occluders(delta: float) -> void:
