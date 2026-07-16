@@ -1,6 +1,7 @@
 extends Node3D
 
 const MOVE_SPEED := 5.2
+const CAMERA_DIAGONAL_OFFSET := 13.5
 const OCCLUSION_LATERAL_LIMIT := 5.1
 const OCCLUSION_DEPTH_LIMIT := 14.0
 const SILHOUETTE_COLOR := Color("#26343b")
@@ -154,7 +155,7 @@ func _ready() -> void:
 	has_ak = false
 	camera.size = 28.0
 	player.collision_mask = 3
-	camera.position = Vector3(10.5, 10.5, 10.5)
+	camera.position = Vector3.ONE * CAMERA_DIAGONAL_OFFSET
 	camera.look_at(Vector3.ZERO)
 	$SmokeA.emitting = false
 	$SmokeB.emitting = false
