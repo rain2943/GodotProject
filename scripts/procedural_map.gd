@@ -629,10 +629,11 @@ func _spawn_landmark_at(center: Vector3, landmark_id: String, instance_suffix: S
 	for box_definition in definition.get("collision_boxes", []):
 		var offset: Vector2 = box_definition["offset"]
 		var size: Vector2 = box_definition["size"]
+		var collision_height := float(box_definition.get("height", 1.2))
 		_add_static_collision_box(
 			"%sCollision" % str(definition["node_name"]),
-			center + Vector3(offset.x * module_world_size, 0.6, offset.y * module_world_size),
-			Vector3(size.x * module_world_size, 1.2, size.y * module_world_size)
+			center + Vector3(offset.x * module_world_size, collision_height * 0.5, offset.y * module_world_size),
+			Vector3(size.x * module_world_size, collision_height, size.y * module_world_size)
 		)
 	return landmark
 

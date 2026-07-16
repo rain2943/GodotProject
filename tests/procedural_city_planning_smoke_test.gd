@@ -9,15 +9,61 @@ func _block_distance(a: Vector2i, b: Vector2i) -> int:
 	return maxi(absi(a.x - b.x), absi(a.y - b.y))
 
 
+func _assert_isometric_footprint(definition: Dictionary) -> void:
+	var corners: Array = definition["footprint_corners_px"]
+	var left: Vector2 = corners[0]
+	var top: Vector2 = corners[1]
+	var right: Vector2 = corners[2]
+	var bottom: Vector2 = corners[3]
+	assert(left + right == top + bottom)
+	assert(absf((right.y - top.y) / (right.x - top.x) - 0.5) < 0.002)
+	assert(absf((left.y - top.y) / (left.x - top.x) + 0.5) < 0.002)
+	assert(absf((bottom.y - left.y) / (bottom.x - left.x) - 0.5) < 0.002)
+	assert(absf((bottom.y - right.y) / (bottom.x - right.x) + 0.5) < 0.002)
+
+
+func _assert_sealed_landmark(city: Node3D, cell: Vector2i, node_prefix: String) -> void:
+	var matching_bodies: Array[StaticBody3D] = []
+	for child in city.get_children():
+		if child is StaticBody3D and str(child.name).begins_with(node_prefix):
+			matching_bodies.append(child)
+	assert(not matching_bodies.is_empty())
+	var collision := matching_bodies[0].get_child(0) as CollisionShape3D
+	assert(collision != null)
+	var box := collision.shape as BoxShape3D
+	assert(box != null)
+	assert(box.size == Vector3(16.0, 2.4, 16.0))
+	assert(matching_bodies[0].collision_layer == 1)
+
+	var center: Vector3 = city.call("_cell_center", cell)
+	var query := PhysicsRayQueryParameters3D.create(
+		center + Vector3(-8.5, 1.0, 0.0),
+		center + Vector3(8.5, 1.0, 0.0),
+		1
+	)
+	var hit := city.get_world_3d().direct_space_state.intersect_ray(query)
+	assert(not hit.is_empty())
+	var hit_name := str((hit["collider"] as Node).name)
+	assert(hit_name.begins_with(node_prefix), "Expected %s, hit %s" % [node_prefix, hit_name])
+
+
 func _run() -> void:
 	var map_script: Script = load("res://scripts/procedural_map.gd")
 	var building_catalog = load("res://scripts/building_catalog.gd")
+	var landmark_catalog = load("res://scripts/urban_landmark_catalog.gd")
+	for landmark_id in ["pocket_park", "playground"]:
+		var definition: Dictionary = landmark_catalog.get_definition(landmark_id)
+		_assert_isometric_footprint(definition)
+		assert(definition["collision_boxes"].size() == 1)
+		assert(definition["collision_boxes"][0]["size"] == Vector2(8.0, 8.0))
+		assert(float(definition["collision_boxes"][0]["height"]) == 2.4)
 	var generated_lowrise_ids := {}
 	for seed in [1, 7, 42, 1337, 24681357]:
 		var city: Node3D = map_script.new()
 		city.set("map_seed", seed)
 		root.add_child(city)
 		await process_frame
+		await physics_frame
 
 		var parks: Array = city.get("park_cells")
 		var playgrounds: Array = city.get("playground_cells")
@@ -30,6 +76,8 @@ func _run() -> void:
 		assert(get_nodes_in_group("urban_pocket_park").size() == 2)
 		assert(get_nodes_in_group("urban_playground").size() == 2)
 		assert(get_nodes_in_group("urban_subway_entrance").size() == 2)
+		_assert_sealed_landmark(city, parks[0], "PocketParkCollision")
+		_assert_sealed_landmark(city, playgrounds[0], "UrbanPlaygroundCollision")
 		assert(apartment_cells.size() == 4)
 		assert(get_nodes_in_group("urban_apartment_complex").size() == 1)
 		assert(get_nodes_in_group("apartment_gate").size() == 2)
