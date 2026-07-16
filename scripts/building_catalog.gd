@@ -83,7 +83,9 @@ const DEFINITIONS := {
 	"gangnam_lowrise_commercial_8x4_aligned": {
 		"node_name": "GangnamLowriseCommercial",
 		"texture_path": "res://assets/buildings/gangnam_lowrise_commercial_8x4_aligned.png",
-		"footprint_modules": Vector2i(8, 4),
+		# The generated artwork's long axis runs along world Z. Treating it as
+		# 8x4 rotated its collision box ninety degrees away from the storefront.
+		"footprint_modules": Vector2i(4, 8),
 		"height_world": 5.6,
 		"footprint_corners_px": [
 			Vector2(263, 927),
