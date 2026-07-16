@@ -1,7 +1,7 @@
 extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
-const INTERIOR_TEXTURE_PATH := "res://assets/interiors/shelter_stage1_shell_generated.png"
+const INTERIOR_TEXTURE_PATH := "res://assets/interiors/shelter_stage1_modular_shell_v2.png"
 const BED_MODULE_SCENE := preload("res://scenes/modules/shelter_bed_module.tscn")
 const MOVE_SPEED := 4.6
 const CAT_ANIMATION_ROOT := "res://assets/characters/cat_8way"
@@ -16,18 +16,19 @@ const CAT_DIRECTION_STATES := {
 	"nw": "up_left",
 }
 const CAT_FRAME_COUNT := 4
-const ROOM_ART_SIZE := Vector2(34.0, 19.125)
-const PLAYER_BOUNDS := Vector2(14.5, 7.45)
+const ROOM_ART_SIZE := Vector2(36.0, 20.25)
+const PLAYER_BOUNDS := Vector2(15.65, 8.1)
+const BED_MODULE_PLATE_SIZE := Vector2(3.45, 2.65)
 const STAGE_ONE_BED_POSITIONS := [
-	Vector3(-12.25, 0, -5.2),
-	Vector3(-12.25, 0, -2.6),
-	Vector3(-12.25, 0, 0.0),
-	Vector3(-12.25, 0, 2.6),
-	Vector3(-12.25, 0, 5.2),
+	Vector3(-12.45, 0, -5.6),
+	Vector3(-12.45, 0, -2.8),
+	Vector3(-12.45, 0, 0.0),
+	Vector3(-12.45, 0, 2.8),
+	Vector3(-12.45, 0, 5.6),
 ]
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const STATIONS := {
-	"exit": {"position": Vector2(0.0, 7.65), "label": "탐색 출발", "radius": 1.6},
+	"exit": {"position": Vector2(7.7, 8.0), "label": "탐색 출발", "radius": 1.9},
 }
 
 var player: CharacterBody3D
@@ -53,7 +54,7 @@ func _ready() -> void:
 	_build_player()
 	_build_interface()
 	_update_stats()
-	_show_status("1단계 쉘터입니다. 다섯 개의 침대가 설치되어 있습니다.")
+	_show_status("1단계 쉘터입니다. 5개의 침대 모듈이 설치되어 있습니다.")
 
 
 func _physics_process(delta: float) -> void:
@@ -98,15 +99,15 @@ func _build_room() -> void:
 	else:
 		floor_material = _material(Color("#242c2a"))
 	_add_plane("ShelterInteriorArt", Vector3(0, 0, 0), ROOM_ART_SIZE, floor_material, self)
-	_add_obstacle("NorthWallCollision", Vector3(0, 1.5, -8.25), Vector3(31.0, 3.0, 0.55))
-	_add_obstacle("SouthWallLeftCollision", Vector3(-8.4, 1.5, 8.25), Vector3(13.8, 3.0, 0.55))
-	_add_obstacle("SouthWallRightCollision", Vector3(8.4, 1.5, 8.25), Vector3(13.8, 3.0, 0.55))
-	_add_obstacle("WestWallCollision", Vector3(-15.55, 1.5, 0), Vector3(0.55, 3.0, 17.0))
-	_add_obstacle("EastWallCollision", Vector3(15.55, 1.5, 0), Vector3(0.55, 3.0, 17.0))
+	_add_obstacle("NorthWallCollision", Vector3(0, 1.5, -8.75), Vector3(32.7, 3.0, 0.55))
+	_add_obstacle("SouthWallLeftCollision", Vector3(-5.15, 1.5, 8.75), Vector3(22.4, 3.0, 0.55))
+	_add_obstacle("SouthWallRightCollision", Vector3(13.05, 1.5, 8.75), Vector3(6.5, 3.0, 0.55))
+	_add_obstacle("WestWallCollision", Vector3(-16.35, 1.5, 0), Vector3(0.55, 3.0, 18.05))
+	_add_obstacle("EastWallCollision", Vector3(16.35, 1.5, 0), Vector3(0.55, 3.0, 18.05))
 	var camera := Camera3D.new()
 	add_child(camera)
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 28.0
+	camera.size = 29.0
 	camera.position = Vector3(15.5, 18.0, 15.5)
 	camera.look_at(Vector3(0, 0, 0))
 	camera.current = true
@@ -121,8 +122,10 @@ func _build_stage_one_modules() -> void:
 	module_root.name = "StageOneModules"
 	module_root.set_meta("stage", 1)
 	module_root.set_meta("cat_capacity", 5)
+	module_root.set_meta("module_grid_size", BED_MODULE_PLATE_SIZE)
 	add_child(module_root)
 	for index in STAGE_ONE_BED_POSITIONS.size():
+		_build_module_plate(module_root, STAGE_ONE_BED_POSITIONS[index], index + 1)
 		var bed := BED_MODULE_SCENE.instantiate() as Node3D
 		bed.name = "BedModule%02d" % (index + 1)
 		bed.position = STAGE_ONE_BED_POSITIONS[index]
@@ -133,7 +136,7 @@ func _build_stage_one_modules() -> void:
 func _build_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "ShelterPlayer"
-	player.position = Vector3(0, 0.78, 6.6)
+	player.position = Vector3(7.7, 0.78, 6.35)
 	player.collision_layer = 1
 	player.collision_mask = 1
 	add_child(player)
@@ -288,6 +291,28 @@ func _update_stats() -> void:
 	stats_label.text = "SHELTER 01  ·  1단계\n수용 규모  5마리    침대  5개\n체력  %d / 100    고철  %d" % [GameState.player_health, GameState.scrap]
 
 
+func _build_module_plate(parent: Node3D, position: Vector3, slot_index: int) -> void:
+	var slot := Node3D.new()
+	slot.name = "BedSlot%02d" % slot_index
+	slot.position = position + Vector3(0.0, 0.028, 0.0)
+	slot.add_to_group("shelter_module_slot")
+	slot.set_meta("slot_index", slot_index)
+	slot.set_meta("module_kind", "bed")
+	slot.set_meta("replaceable", true)
+	parent.add_child(slot)
+	var plate_material := _material(Color(0.035, 0.075, 0.09, 0.82))
+	plate_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	plate_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_add_plane("ModuleFloorPlate", Vector3.ZERO, BED_MODULE_PLATE_SIZE, plate_material, slot)
+	var border_material := _material(Color(0.14, 0.5, 0.58, 0.75))
+	border_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	border_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_add_visual_box("NorthBorder", Vector3(0, 0.025, -BED_MODULE_PLATE_SIZE.y * 0.5), Vector3(BED_MODULE_PLATE_SIZE.x, 0.045, 0.045), border_material, slot)
+	_add_visual_box("SouthBorder", Vector3(0, 0.025, BED_MODULE_PLATE_SIZE.y * 0.5), Vector3(BED_MODULE_PLATE_SIZE.x, 0.045, 0.045), border_material, slot)
+	_add_visual_box("WestBorder", Vector3(-BED_MODULE_PLATE_SIZE.x * 0.5, 0.025, 0), Vector3(0.045, 0.045, BED_MODULE_PLATE_SIZE.y), border_material, slot)
+	_add_visual_box("EastBorder", Vector3(BED_MODULE_PLATE_SIZE.x * 0.5, 0.025, 0), Vector3(0.045, 0.045, BED_MODULE_PLATE_SIZE.y), border_material, slot)
+
+
 func _show_status(message: String) -> void:
 	status_label.text = message
 	status_label.modulate.a = 1.0
@@ -384,6 +409,18 @@ func _add_plane(node_name: String, position: Vector3, size: Vector2, material: M
 	mesh.size = size
 	mesh.material = material
 	instance.mesh = mesh
+	parent.add_child(instance)
+
+
+func _add_visual_box(node_name: String, position: Vector3, size: Vector3, material: Material, parent: Node) -> void:
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	instance.position = position
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mesh.material = material
+	instance.mesh = mesh
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(instance)
 
 

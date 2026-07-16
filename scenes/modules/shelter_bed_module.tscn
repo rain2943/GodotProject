@@ -1,10 +1,10 @@
 [gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/shelter_bed_module.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/interiors/shelter_bed_module_generated.png" id="2_texture"]
+[ext_resource type="Texture2D" path="res://assets/interiors/shelter_bed_module_v2.png" id="2_texture"]
 
 [sub_resource type="BoxShape3D" id="BoxShape_bed"]
-size = Vector3(2.8, 0.8, 1.4)
+size = Vector3(2.55, 0.9, 2.05)
 
 [node name="ShelterBedModule" type="Node3D"]
 script = ExtResource("1_script")
@@ -19,9 +19,9 @@ position = Vector3(0, 0.4, 0)
 shape = SubResource("BoxShape_bed")
 
 [node name="BedSprite" type="Sprite3D" parent="."]
-position = Vector3(0, 0.62, 0)
+position = Vector3(0, 0.7, 0)
 texture = ExtResource("2_texture")
-pixel_size = 0.0032
+pixel_size = 0.00255
 billboard = 1
 shaded = false
 transparent = true
