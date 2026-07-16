@@ -1,22 +1,33 @@
 extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
-const INTERIOR_TEXTURE_PATH := "res://assets/interiors/shelter_interior_generated.png"
+const INTERIOR_TEXTURE_PATH := "res://assets/interiors/shelter_stage1_shell_generated.png"
+const BED_MODULE_SCENE := preload("res://scenes/modules/shelter_bed_module.tscn")
 const MOVE_SPEED := 4.6
-const FRAME_SIZE := Vector2(384, 384)
-const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
-const ANIMATION_SHEETS := {
-	"s": preload("res://assets/characters/survivor_anim_s.png"),
-	"se": preload("res://assets/characters/survivor_anim_se.png"),
-	"e": preload("res://assets/characters/survivor_anim_e.png"),
-	"ne": preload("res://assets/characters/survivor_anim_ne.png"),
-	"n": preload("res://assets/characters/survivor_anim_n.png"),
+const CAT_ANIMATION_ROOT := "res://assets/characters/cat_8way"
+const CAT_DIRECTION_STATES := {
+	"n": "up",
+	"ne": "up_right",
+	"e": "right",
+	"se": "down_right",
+	"s": "down",
+	"sw": "down_left",
+	"w": "left",
+	"nw": "up_left",
 }
+const CAT_FRAME_COUNT := 4
+const ROOM_ART_SIZE := Vector2(34.0, 19.125)
+const PLAYER_BOUNDS := Vector2(14.5, 7.45)
+const STAGE_ONE_BED_POSITIONS := [
+	Vector3(-12.25, 0, -5.2),
+	Vector3(-12.25, 0, -2.6),
+	Vector3(-12.25, 0, 0.0),
+	Vector3(-12.25, 0, 2.6),
+	Vector3(-12.25, 0, 5.2),
+]
+const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const STATIONS := {
-	"bed": {"position": Vector2(-3.15, -2.2), "label": "휴식하기", "radius": 1.25},
-	"craft": {"position": Vector2(0.0, -3.25), "label": "응급키트 제작", "radius": 1.35},
-	"upgrade": {"position": Vector2(5.2, -3.15), "label": "무기 강화", "radius": 1.35},
-	"exit": {"position": Vector2(2.8, 4.45), "label": "도시로 나가기", "radius": 1.45},
+	"exit": {"position": Vector2(0.0, 7.65), "label": "탐색 출발", "radius": 1.6},
 }
 
 var player: CharacterBody3D
@@ -24,6 +35,7 @@ var survivor: AnimatedSprite3D
 var facing := "s"
 var motion_state := "idle"
 var current_station := ""
+var current_module: Node3D
 var prompt_label: Label
 var status_label: Label
 var stats_label: Label
@@ -37,10 +49,11 @@ var touch_vector := Vector2.ZERO
 
 func _ready() -> void:
 	_build_room()
+	_build_stage_one_modules()
 	_build_player()
 	_build_interface()
 	_update_stats()
-	_show_status("쉘터 내부입니다. 침대와 작업 설비에 가까이 가세요.")
+	_show_status("1단계 쉘터입니다. 다섯 개의 침대가 설치되어 있습니다.")
 
 
 func _physics_process(delta: float) -> void:
@@ -62,8 +75,8 @@ func _physics_process(delta: float) -> void:
 		player.velocity = Vector3.ZERO
 		_set_motion_state("idle")
 	player.move_and_slide()
-	player.position.x = clampf(player.position.x, -7.7, 7.7)
-	player.position.z = clampf(player.position.z, -4.8, 4.8)
+	player.position.x = clampf(player.position.x, -PLAYER_BOUNDS.x, PLAYER_BOUNDS.x)
+	player.position.z = clampf(player.position.z, -PLAYER_BOUNDS.y, PLAYER_BOUNDS.y)
 	_update_nearby_station()
 	status_label.modulate.a = move_toward(status_label.modulate.a, 0.0, delta * 0.08)
 
@@ -78,27 +91,23 @@ func _build_room() -> void:
 	environment_resource.ambient_light_energy = 0.72
 	environment.environment = environment_resource
 	add_child(environment)
-	_add_plane("BlackOutside", Vector3(0, -0.12, 0), Vector2(52, 52), _material(Color.BLACK), self)
+	_add_plane("BlackOutside", Vector3(0, -0.12, 0), Vector2(72, 72), _material(Color.BLACK), self)
 	var floor_material: StandardMaterial3D
 	if ResourceLoader.exists(INTERIOR_TEXTURE_PATH):
 		floor_material = _texture_material(load(INTERIOR_TEXTURE_PATH) as Texture2D)
 	else:
 		floor_material = _material(Color("#242c2a"))
-	_add_plane("ShelterInteriorArt", Vector3(0, 0, 0), Vector2(20, 14), floor_material, self)
-	_add_obstacle("NorthWallCollision", Vector3(0, 1.5, -5.45), Vector3(17.0, 3.0, 0.5))
-	_add_obstacle("SouthWallLeftCollision", Vector3(-3.0, 1.5, 5.45), Vector3(11.0, 3.0, 0.5))
-	_add_obstacle("SouthWallRightCollision", Vector3(6.0, 1.5, 5.45), Vector3(5.0, 3.0, 0.5))
-	_add_obstacle("WestWallCollision", Vector3(-8.25, 1.5, 0), Vector3(0.5, 3.0, 11.4))
-	_add_obstacle("EastWallCollision", Vector3(8.25, 1.5, 0), Vector3(0.5, 3.0, 11.4))
-	_add_obstacle("BedCollision", Vector3(-5.4, 0.45, -2.2), Vector3(3.7, 0.9, 1.8))
-	_add_obstacle("WorkbenchCollision", Vector3(0, 0.55, -4.35), Vector3(3.8, 1.1, 1.0))
-	_add_obstacle("UpgradeCollision", Vector3(5.2, 0.8, -4.35), Vector3(2.5, 1.6, 1.0))
-	_add_obstacle("WestStorageCollision", Vector3(-7.25, 0.65, 2.0), Vector3(1.35, 1.3, 4.1))
+	_add_plane("ShelterInteriorArt", Vector3(0, 0, 0), ROOM_ART_SIZE, floor_material, self)
+	_add_obstacle("NorthWallCollision", Vector3(0, 1.5, -8.25), Vector3(31.0, 3.0, 0.55))
+	_add_obstacle("SouthWallLeftCollision", Vector3(-8.4, 1.5, 8.25), Vector3(13.8, 3.0, 0.55))
+	_add_obstacle("SouthWallRightCollision", Vector3(8.4, 1.5, 8.25), Vector3(13.8, 3.0, 0.55))
+	_add_obstacle("WestWallCollision", Vector3(-15.55, 1.5, 0), Vector3(0.55, 3.0, 17.0))
+	_add_obstacle("EastWallCollision", Vector3(15.55, 1.5, 0), Vector3(0.55, 3.0, 17.0))
 	var camera := Camera3D.new()
 	add_child(camera)
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 20.5
-	camera.position = Vector3(10.5, 12.0, 10.5)
+	camera.size = 28.0
+	camera.position = Vector3(15.5, 18.0, 15.5)
 	camera.look_at(Vector3(0, 0, 0))
 	camera.current = true
 	var light := DirectionalLight3D.new()
@@ -107,10 +116,24 @@ func _build_room() -> void:
 	add_child(light)
 
 
+func _build_stage_one_modules() -> void:
+	var module_root := Node3D.new()
+	module_root.name = "StageOneModules"
+	module_root.set_meta("stage", 1)
+	module_root.set_meta("cat_capacity", 5)
+	add_child(module_root)
+	for index in STAGE_ONE_BED_POSITIONS.size():
+		var bed := BED_MODULE_SCENE.instantiate() as Node3D
+		bed.name = "BedModule%02d" % (index + 1)
+		bed.position = STAGE_ONE_BED_POSITIONS[index]
+		bed.set("bed_index", index + 1)
+		module_root.add_child(bed)
+
+
 func _build_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "ShelterPlayer"
-	player.position = Vector3(2.8, 0.78, 3.5)
+	player.position = Vector3(0, 0.78, 6.6)
 	player.collision_layer = 1
 	player.collision_mask = 1
 	add_child(player)
@@ -123,13 +146,14 @@ func _build_player() -> void:
 	survivor = AnimatedSprite3D.new()
 	survivor.name = "Survivor"
 	survivor.position = Vector3(0, 0.3, 0)
-	survivor.pixel_size = 0.0068
+	survivor.pixel_size = 0.0098
 	survivor.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	survivor.shaded = false
 	survivor.transparent = true
+	survivor.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	survivor.no_depth_test = true
 	survivor.render_priority = 127
-	survivor.sprite_frames = _create_character_frames()
+	survivor.sprite_frames = _create_cat_frames()
 	player.add_child(survivor)
 	_play_directional_animation()
 
@@ -214,49 +238,54 @@ func _update_nearby_station() -> void:
 	var player_ground := Vector2(player.position.x, player.position.z)
 	var nearest := ""
 	var nearest_distance := INF
+	var nearest_module: Node3D
 	for station_name in STATIONS:
 		var station: Dictionary = STATIONS[station_name]
 		var distance := player_ground.distance_to(station["position"])
 		if distance <= float(station["radius"]) and distance < nearest_distance:
 			nearest = station_name
 			nearest_distance = distance
+	for node in get_tree().get_nodes_in_group("shelter_module"):
+		if not (node is Node3D):
+			continue
+		var module := node as Node3D
+		var module_radius := float(module.call("get_interaction_radius")) if module.has_method("get_interaction_radius") else 1.5
+		var module_distance := player.global_position.distance_to(module.global_position)
+		if module_distance <= module_radius and module_distance < nearest_distance:
+			nearest = "module"
+			nearest_distance = module_distance
+			nearest_module = module
+	if current_module != nearest_module:
+		if is_instance_valid(current_module) and current_module.has_method("set_interaction_focus"):
+			current_module.call("set_interaction_focus", false)
+		current_module = nearest_module
+		if is_instance_valid(current_module) and current_module.has_method("set_interaction_focus"):
+			current_module.call("set_interaction_focus", true)
 	current_station = nearest
 	interact_button.visible = not current_station.is_empty()
 	prompt_label.visible = not current_station.is_empty()
 	if current_station.is_empty():
 		prompt_label.text = ""
+	elif current_station == "module" and is_instance_valid(current_module):
+		prompt_label.text = "[E]  %s" % str(current_module.call("get_interaction_prompt"))
 	else:
 		prompt_label.text = "[E]  %s" % STATIONS[current_station]["label"]
 
 
 func _interact() -> void:
 	match current_station:
-		"bed":
-			GameState.player_health = 100
-			_show_status("충분히 쉬었습니다. 체력이 모두 회복되었습니다.")
-		"craft":
-			if GameState.scrap < 15:
-				_show_status("고철이 부족합니다. 응급키트 제작에는 고철 15개가 필요합니다.")
-			else:
-				GameState.scrap -= 15
-				GameState.medkits += 1
-				_show_status("응급키트 1개를 제작했습니다.")
-		"upgrade":
-			var cost := GameState.weapon_level * 25
-			if GameState.scrap < cost:
-				_show_status("고철이 부족합니다. 강화에는 고철 %d개가 필요합니다." % cost)
-			else:
-				GameState.scrap -= cost
-				GameState.weapon_level += 1
-				_show_status("무기를 Lv.%d로 강화했습니다." % GameState.weapon_level)
+		"module":
+			if is_instance_valid(current_module) and current_module.has_method("interact"):
+				_show_status(str(current_module.call("interact")))
 		"exit":
+			GameState.start_new_raid()
 			GameState.returning_from_shelter = true
 			get_tree().change_scene_to_file("res://scenes/main.tscn")
 	_update_stats()
 
 
 func _update_stats() -> void:
-	stats_label.text = "SHELTER 01  ·  안전가옥\n체력  %d / 100    고철  %d\n무기  Lv.%d    응급키트  %d" % [GameState.player_health, GameState.scrap, GameState.weapon_level, GameState.medkits]
+	stats_label.text = "SHELTER 01  ·  1단계\n수용 규모  5마리    침대  5개\n체력  %d / 100    고철  %d" % [GameState.player_health, GameState.scrap]
 
 
 func _show_status(message: String) -> void:
@@ -283,31 +312,29 @@ func _set_motion_state(next_state: String) -> void:
 func _play_directional_animation() -> void:
 	if survivor == null:
 		return
-	var source := facing
-	var flipped := false
-	match facing:
-		"sw": source = "se"; flipped = true
-		"w": source = "e"; flipped = true
-		"nw": source = "ne"; flipped = true
-	survivor.flip_h = flipped
-	survivor.play("%s_%s" % [motion_state, source])
+	survivor.flip_h = false
+	survivor.play("%s_%s" % [motion_state, facing])
 
 
-func _create_character_frames() -> SpriteFrames:
+func _create_cat_frames() -> SpriteFrames:
 	var frames := SpriteFrames.new()
 	frames.remove_animation("default")
-	for direction_name in ANIMATION_SHEETS:
+	for direction_name in SCREEN_DIRECTION_NAMES:
+		var state_prefix: String = CAT_DIRECTION_STATES[direction_name]
 		for state in ["idle", "walk"]:
 			var animation_name := "%s_%s" % [state, direction_name]
 			frames.add_animation(animation_name)
 			frames.set_animation_loop(animation_name, true)
-			frames.set_animation_speed(animation_name, 7.0 if state == "idle" else 8.5)
-			var first_frame := 0 if state == "idle" else 8
-			for frame_index in range(first_frame, first_frame + 8):
-				var atlas := AtlasTexture.new()
-				atlas.atlas = ANIMATION_SHEETS[direction_name]
-				atlas.region = Rect2((frame_index % 4) * FRAME_SIZE.x, (frame_index / 4) * FRAME_SIZE.y, FRAME_SIZE.x, FRAME_SIZE.y)
-				frames.add_frame(animation_name, atlas)
+			frames.set_animation_speed(animation_name, 4.0 if state == "idle" else 8.0)
+			for frame_index in CAT_FRAME_COUNT:
+				var texture_path := "%s/%s_%s_%d.png" % [
+					CAT_ANIMATION_ROOT, state_prefix, state, frame_index
+				]
+				var texture := load(texture_path) as Texture2D
+				if texture == null:
+					push_error("Missing cat animation frame: %s" % texture_path)
+					continue
+				frames.add_frame(animation_name, texture)
 	return frames
 
 

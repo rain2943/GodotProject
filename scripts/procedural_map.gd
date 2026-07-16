@@ -4,10 +4,11 @@ extends Node3D
 signal shelter_portal_entered
 
 const GRID_SIZE := 18
-const CELL_SIZE := 10.0
+const WORLD_SCALE := 2.0
+const BASE_CELL_SIZE := 10.0
+const CELL_SIZE := BASE_CELL_SIZE * WORLD_SCALE
 const MAP_SIZE := GRID_SIZE * CELL_SIZE
-const MAP_MODULES := GRID_SIZE * 10
-const SIDEWALK_WIDTH := 2.0
+const SIDEWALK_WIDTH := 2.0 * WORLD_SCALE
 const ISOMETRIC_VERTICAL_PROJECTION := 0.816496580927726
 const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
 const ASPHALT_TEXTURE := preload("res://assets/tiles/asphalt.png")
@@ -34,12 +35,12 @@ var rng := RandomNumberGenerator.new()
 var vertical_roads: Array[int] = []
 var horizontal_roads: Array[int] = []
 var river_columns := PackedInt32Array()
+var river_center_x := 0
 var building_cells := {}
 var parking_cells := {}
 var open_cells := {}
+var waterfront_cells := {}
 var portal_locked := false
-var elevated_orientation := "horizontal"
-var elevated_road_index := 0
 
 var asphalt_material: StandardMaterial3D
 var lot_material: StandardMaterial3D
@@ -54,7 +55,6 @@ var vehicle_collision_material: StandardMaterial3D
 var parking_material: StandardMaterial3D
 var bridge_deck_material: StandardMaterial3D
 var bridge_rail_material: StandardMaterial3D
-var overpass_concrete_material: StandardMaterial3D
 var open_lot_materials: Array[StandardMaterial3D] = []
 
 
@@ -66,7 +66,6 @@ func _ready() -> void:
 	_build_materials()
 	_build_floor_collision()
 	_build_tiles()
-	_build_elevated_highway()
 	_build_zoned_lots()
 	_build_shelter()
 
@@ -76,23 +75,19 @@ func _generate_layout() -> void:
 	horizontal_roads = [2, rng.randi_range(6, 7), rng.randi_range(10, 12), rng.randi_range(15, 16)]
 	vertical_roads.sort()
 	horizontal_roads.sort()
-	elevated_orientation = "horizontal" if rng.randf() < 0.5 else "vertical"
-	if elevated_orientation == "horizontal":
-		elevated_road_index = horizontal_roads[rng.randi_range(1, horizontal_roads.size() - 1)]
-	else:
-		elevated_road_index = vertical_roads[rng.randi_range(1, vertical_roads.size() - 1)]
 
-	var river_x := rng.randi_range(8, 10)
+	river_center_x = GRID_SIZE / 2 + rng.randi_range(-1, 0)
 	for z in range(GRID_SIZE):
-		if z > 0 and z % 2 == 0:
-			river_x = clampi(river_x + rng.randi_range(-1, 1), 5, GRID_SIZE - 4)
-		river_columns.append(river_x)
+		river_columns.append(river_center_x)
 
 	var eligible_cells: Array[Vector2i] = []
 	for x in range(GRID_SIZE):
 		for z in range(GRID_SIZE):
 			var cell := Vector2i(x, z)
 			if cell == SHELTER_CELL or _is_road_cell(cell) or _is_river_cell(cell):
+				continue
+			if _is_waterfront_cell(cell):
+				waterfront_cells[cell] = true
 				continue
 			eligible_cells.append(cell)
 			if rng.randf() < 0.44:
@@ -152,8 +147,6 @@ func _build_materials() -> void:
 	else:
 		bridge_rail_material = _color_material(Color("#796d58"))
 	bridge_rail_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-	overpass_concrete_material = _texture_material(CONCRETE_TEXTURE, Color("#626560"))
-	overpass_concrete_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 	for texture_path in OPEN_LOT_TEXTURE_PATHS:
 		if ResourceLoader.exists(texture_path):
 			open_lot_materials.append(_texture_material(load(texture_path) as Texture2D))
@@ -213,12 +206,14 @@ func _build_road_cell(center: Vector3, vertical: bool, horizontal: bool) -> void
 		_add_lane_dash(center, true)
 	else:
 		_add_lane_dash(center, false)
+	if vertical != horizontal and rng.randf() < 0.2:
+		_spawn_road_cover_vehicle(center, vertical)
 
 
 func _build_river_cell(center: Vector3, block_movement: bool) -> void:
 	_add_plane("RiverWater", center, Vector2(CELL_SIZE, CELL_SIZE), water_material, -0.04)
-	_add_plane("RiverBankLeft", center + Vector3(-4.65, 0, 0), Vector2(0.7, CELL_SIZE), riverbank_material, 0.015)
-	_add_plane("RiverBankRight", center + Vector3(4.65, 0, 0), Vector2(0.7, CELL_SIZE), riverbank_material, 0.015)
+	_add_plane("RiverBankLeft", center + Vector3(-4.65 * WORLD_SCALE, 0, 0), Vector2(0.7 * WORLD_SCALE, CELL_SIZE), riverbank_material, 0.015)
+	_add_plane("RiverBankRight", center + Vector3(4.65 * WORLD_SCALE, 0, 0), Vector2(0.7 * WORLD_SCALE, CELL_SIZE), riverbank_material, 0.015)
 	if block_movement:
 		var blocker := StaticBody3D.new()
 		blocker.name = "RiverBarrier"
@@ -227,28 +222,15 @@ func _build_river_cell(center: Vector3, block_movement: bool) -> void:
 		add_child(blocker)
 		var collision := CollisionShape3D.new()
 		var shape := BoxShape3D.new()
-		shape.size = Vector3(CELL_SIZE - 0.8, 0.9, CELL_SIZE)
+		shape.size = Vector3(CELL_SIZE - 0.8 * WORLD_SCALE, 0.9, CELL_SIZE)
 		collision.shape = shape
 		blocker.add_child(collision)
 
 
-func _build_bridge_cell(center: Vector3, vertical: bool, horizontal: bool) -> void:
+func _build_bridge_cell(center: Vector3, _vertical: bool, _horizontal: bool) -> void:
 	_add_plane("BridgeDeck", center, Vector2(CELL_SIZE, CELL_SIZE), bridge_material, 0.13)
-	_add_oriented_plane("BridgeRoadArt", center, Vector2(CELL_SIZE, 8.8), bridge_deck_material, 0.15, false)
-	_build_guardrails(center, false, 0.15, CELL_SIZE, 4.35, true)
-
-
-func _build_elevated_highway() -> void:
-	var vertical := elevated_orientation == "vertical"
-	for route_cell in range(GRID_SIZE):
-		var cell := Vector2i(elevated_road_index, route_cell) if vertical else Vector2i(route_cell, elevated_road_index)
-		var center := _cell_center(cell)
-		var deck_size := Vector3(8.4, 0.38, CELL_SIZE) if vertical else Vector3(CELL_SIZE, 0.38, 8.4)
-		_add_box("ElevatedDeck", center + Vector3(0, 3.8, 0), deck_size, overpass_concrete_material)
-		_add_oriented_plane("ElevatedRoadArt", center, Vector2(CELL_SIZE, 8.0), bridge_deck_material, 4.01, vertical)
-		_build_guardrails(center, vertical, 4.01, CELL_SIZE, 4.0, false)
-		if route_cell % 2 == 1:
-			_build_overpass_pillars(center, vertical)
+	_add_oriented_plane("BridgeRoadArt", center, Vector2(CELL_SIZE, 8.8 * WORLD_SCALE), bridge_deck_material, 0.15, false)
+	_build_guardrails(center, false, 0.15, CELL_SIZE, 4.35 * WORLD_SCALE, true)
 
 
 func _build_guardrails(
@@ -264,7 +246,8 @@ func _build_guardrails(
 		var rail_size := Vector3(0.16, 0.14, segment_length) if vertical else Vector3(segment_length, 0.14, 0.16)
 		for rail_height in [0.42, 0.72]:
 			_add_box("GuardrailBeam", center + side_offset + Vector3(0, deck_height + rail_height, 0), rail_size, bridge_rail_material)
-		for post_offset in [-4.0, -2.0, 0.0, 2.0, 4.0]:
+		for post_index in range(5):
+			var post_offset := lerpf(-segment_length * 0.4, segment_length * 0.4, post_index / 4.0)
 			var post_position := center + side_offset
 			if vertical:
 				post_position.z += post_offset
@@ -274,15 +257,9 @@ func _build_guardrails(
 		if with_collision:
 			var collision_size := Vector3(0.32, 1.0, segment_length) if vertical else Vector3(segment_length, 1.0, 0.32)
 			_add_static_collision_box("BridgeGuardCollision", center + side_offset + Vector3(0, deck_height + 0.48, 0), collision_size)
-
-
-func _build_overpass_pillars(center: Vector3, vertical: bool) -> void:
-	for side in [-1.0, 1.0]:
-		var position := center + (Vector3(side * 2.65, 1.85, 0) if vertical else Vector3(0, 1.85, side * 2.65))
-		_add_static_box("OverpassPillar", position, Vector3(0.9, 3.7, 0.9), overpass_concrete_material)
-
-
 func _build_zoned_lots() -> void:
+	for cell in waterfront_cells:
+		_build_waterfront_lot(cell)
 	for cell in parking_cells:
 		_build_parking_lot(cell)
 	for cell in building_cells:
@@ -291,14 +268,37 @@ func _build_zoned_lots() -> void:
 		_build_open_lot(cell)
 
 
+func _build_waterfront_lot(cell: Vector2i) -> void:
+	var center := _cell_center(cell)
+	var promenade_size := CELL_SIZE - 0.6 * WORLD_SCALE
+	_add_plane("RiverfrontPromenade", center, Vector2(promenade_size, promenade_size), sidewalk_material, 0.04)
+	var river_side := signf(float(river_center_x - cell.x))
+	var edge_position := center + Vector3(river_side * (CELL_SIZE * 0.5 - 0.55), 0, 0)
+	_add_plane("RiverfrontEdge", edge_position, Vector2(0.65, promenade_size), riverbank_material, 0.055)
+
+
+func _spawn_road_cover_vehicle(center: Vector3, vertical: bool) -> void:
+	var vehicle_roll := rng.randf()
+	var vehicle_type := "sedan"
+	if vehicle_roll > 0.9:
+		vehicle_type = "bus"
+	elif vehicle_roll > 0.66:
+		vehicle_type = "truck"
+	var lane_offset := (3.0 if rng.randf() < 0.5 else -3.0) * WORLD_SCALE
+	var travel_offset := rng.randf_range(-2.2, 2.2) * WORLD_SCALE
+	var position := center + (Vector3(lane_offset, 0.1, travel_offset) if vertical else Vector3(travel_offset, 0.1, lane_offset))
+	_spawn_vehicle("RoadCover_%d_%d" % [roundi(center.x), roundi(center.z)], vehicle_type, position)
+
+
 func _build_parking_lot(cell: Vector2i) -> void:
 	var center := _cell_center(cell)
-	_add_plane("ParkingLotArt", center, Vector2(9.4, 9.4), parking_material, 0.045)
+	var lot_art_size := CELL_SIZE - 0.6 * WORLD_SCALE
+	_add_plane("ParkingLotArt", center, Vector2(lot_art_size, lot_art_size), parking_material, 0.045)
 	var slots := [
-		Vector3(-2.45, 0.1, -2.15),
-		Vector3(-2.45, 0.1, 2.15),
-		Vector3(2.45, 0.1, -2.15),
-		Vector3(2.45, 0.1, 2.15),
+		Vector3(-2.45 * WORLD_SCALE, 0.1, -2.15 * WORLD_SCALE),
+		Vector3(-2.45 * WORLD_SCALE, 0.1, 2.15 * WORLD_SCALE),
+		Vector3(2.45 * WORLD_SCALE, 0.1, -2.15 * WORLD_SCALE),
+		Vector3(2.45 * WORLD_SCALE, 0.1, 2.15 * WORLD_SCALE),
 	]
 	var slot: Vector3 = slots[rng.randi_range(0, slots.size() - 1)]
 	_spawn_vehicle("Parked_%d_%d" % [cell.x, cell.y], "sedan", center + slot)
@@ -307,15 +307,17 @@ func _build_parking_lot(cell: Vector2i) -> void:
 func _build_open_lot(cell: Vector2i) -> void:
 	var center := _cell_center(cell)
 	var material := open_lot_materials[rng.randi_range(0, open_lot_materials.size() - 1)]
-	_add_plane("UrbanOpenLotArt", center, Vector2(9.4, 9.4), material, 0.035)
+	var lot_art_size := CELL_SIZE - 0.6 * WORLD_SCALE
+	_add_plane("UrbanOpenLotArt", center, Vector2(lot_art_size, lot_art_size), material, 0.035)
 
 
 func _try_build_building(cell: Vector2i) -> void:
+	var modules_per_cell := BUILDING_CATALOG.MODULES_PER_CELL
 	var left_margin := 2 if _is_road_cell(cell + Vector2i.LEFT) else 1
 	var right_margin := 2 if _is_road_cell(cell + Vector2i.RIGHT) else 1
 	var top_margin := 2 if _is_road_cell(cell + Vector2i.UP) else 1
 	var bottom_margin := 2 if _is_road_cell(cell + Vector2i.DOWN) else 1
-	var usable_size := Vector2i(10 - left_margin - right_margin, 10 - top_margin - bottom_margin)
+	var usable_size := Vector2i(modules_per_cell - left_margin - right_margin, modules_per_cell - top_margin - bottom_margin)
 	var definitions: Array[Dictionary] = []
 	for building_id in BUILDING_CATALOG.DEFINITIONS:
 		var definition: Dictionary = BUILDING_CATALOG.get_definition(building_id)
@@ -327,9 +329,9 @@ func _try_build_building(cell: Vector2i) -> void:
 	var selected: Dictionary = definitions[rng.randi_range(0, definitions.size() - 1)]
 	var definition: Dictionary = selected["definition"]
 	var footprint: Vector2i = definition["footprint_modules"]
-	var cell_origin := cell * 10
+	var cell_origin := cell * modules_per_cell
 	var min_offset := Vector2i(left_margin, top_margin)
-	var max_offset := Vector2i(10 - right_margin - footprint.x, 10 - bottom_margin - footprint.y)
+	var max_offset := Vector2i(modules_per_cell - right_margin - footprint.x, modules_per_cell - bottom_margin - footprint.y)
 	var module_origin := cell_origin + Vector2i(
 		rng.randi_range(min_offset.x, maxi(min_offset.x, max_offset.x)),
 		rng.randi_range(min_offset.y, maxi(min_offset.y, max_offset.y))
@@ -339,9 +341,10 @@ func _try_build_building(cell: Vector2i) -> void:
 
 func _spawn_building(building_id: String, definition: Dictionary, module_origin: Vector2i) -> void:
 	var footprint_modules: Vector2i = definition["footprint_modules"]
-	var footprint_world := Vector2(footprint_modules) * BUILDING_CATALOG.MODULE_SIZE
-	var center_x := -MAP_SIZE * 0.5 + (module_origin.x + footprint_modules.x * 0.5) * BUILDING_CATALOG.MODULE_SIZE
-	var center_z := -MAP_SIZE * 0.5 + (module_origin.y + footprint_modules.y * 0.5) * BUILDING_CATALOG.MODULE_SIZE
+	var module_world_size := CELL_SIZE / float(BUILDING_CATALOG.MODULES_PER_CELL)
+	var footprint_world := Vector2(footprint_modules) * module_world_size
+	var center_x := -MAP_SIZE * 0.5 + (module_origin.x + footprint_modules.x * 0.5) * module_world_size
+	var center_z := -MAP_SIZE * 0.5 + (module_origin.y + footprint_modules.y * 0.5) * module_world_size
 	var texture := load(definition["texture_path"]) as Texture2D
 	if texture == null:
 		return
@@ -367,13 +370,13 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	body.add_child(sprite)
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	var height := float(definition["height_world"])
+	var height := float(definition["height_world"]) * WORLD_SCALE
 	shape.size = Vector3(footprint_world.x, height, footprint_world.y)
 	collision.position.y = height * 0.5
 	collision.shape = shape
 	body.add_child(collision)
 	body.set_meta("occlusion_lateral_limit", (footprint_world.x + footprint_world.y) / (2.0 * sqrt(2.0)))
-	body.set_meta("occlusion_depth_limit", float(definition["occlusion_depth"]))
+	body.set_meta("occlusion_depth_limit", float(definition["occlusion_depth"]) * WORLD_SCALE)
 
 
 func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3) -> void:
@@ -435,8 +438,8 @@ func _build_shelter() -> void:
 		var sprite := Sprite3D.new()
 		sprite.name = "BuildingSprite"
 		sprite.texture = load(SHELTER_TEXTURE_PATH) as Texture2D
-		sprite.pixel_size = 0.0088
-		sprite.position.y = 4.3
+		sprite.pixel_size = 0.0088 * WORLD_SCALE
+		sprite.position.y = 4.3 * WORLD_SCALE
 		sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		sprite.transparent = true
 		sprite.shaded = false
@@ -446,27 +449,27 @@ func _build_shelter() -> void:
 	var shelter_collision := CollisionShape3D.new()
 	shelter_collision.name = "ShelterCollision"
 	var shelter_shape := BoxShape3D.new()
-	shelter_shape.size = Vector3(6.0, 4.2, 6.0)
-	shelter_collision.position.y = 2.1
+	shelter_shape.size = Vector3(6.0, 4.2, 6.0) * WORLD_SCALE
+	shelter_collision.position.y = 2.1 * WORLD_SCALE
 	shelter_collision.shape = shelter_shape
 	shelter.add_child(shelter_collision)
-	shelter.set_meta("occlusion_lateral_limit", 5.0)
-	shelter.set_meta("occlusion_depth_limit", 9.0)
+	shelter.set_meta("occlusion_lateral_limit", 5.0 * WORLD_SCALE)
+	shelter.set_meta("occlusion_depth_limit", 9.0 * WORLD_SCALE)
 	var light := OmniLight3D.new()
-	light.position = Vector3(3.4, 1.2, 0)
+	light.position = Vector3(3.4, 1.2, 0) * WORLD_SCALE
 	light.light_color = Color("#5dffb2")
 	light.light_energy = 2.0
-	light.omni_range = 6.0
+	light.omni_range = 6.0 * WORLD_SCALE
 	shelter.add_child(light)
 	var portal := Area3D.new()
 	portal.name = "ShelterPortal"
-	portal.position = Vector3(3.6, 0.9, 0)
+	portal.position = Vector3(3.6, 0.9, 0) * WORLD_SCALE
 	portal.collision_layer = 0
 	portal.collision_mask = 1
 	shelter.add_child(portal)
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(1.8, 1.8, 2.2)
+	shape.size = Vector3(1.8, 1.8, 2.2) * WORLD_SCALE
 	collision.shape = shape
 	portal.add_child(collision)
 	portal.body_entered.connect(_on_shelter_portal_body_entered)
@@ -480,7 +483,7 @@ func _on_shelter_portal_body_entered(body: Node3D) -> void:
 
 
 func get_shelter_exit_position() -> Vector3:
-	return _cell_center(SHELTER_CELL) + Vector3(6.2, 0.78, 0)
+	return _cell_center(SHELTER_CELL) + Vector3(6.2 * WORLD_SCALE, 0.78, 0)
 
 
 func get_map_limit() -> float:
@@ -489,7 +492,7 @@ func get_map_limit() -> float:
 
 func is_position_in_safe_zone(world_position: Vector3) -> bool:
 	var shelter_center := _cell_center(SHELTER_CELL)
-	return Vector2(world_position.x, world_position.z).distance_to(Vector2(shelter_center.x, shelter_center.z)) <= 6.0
+	return Vector2(world_position.x, world_position.z).distance_to(Vector2(shelter_center.x, shelter_center.z)) <= 6.0 * WORLD_SCALE
 
 
 func find_nearest_open_position(world_position: Vector3) -> Vector3:
@@ -515,6 +518,10 @@ func _is_river_cell(cell: Vector2i) -> bool:
 	return _cell_in_bounds(cell) and river_columns[cell.y] == cell.x
 
 
+func _is_waterfront_cell(cell: Vector2i) -> bool:
+	return _cell_in_bounds(cell) and abs(cell.x - river_center_x) == 1
+
+
 func _cell_in_bounds(cell: Vector2i) -> bool:
 	return cell.x >= 0 and cell.y >= 0 and cell.x < GRID_SIZE and cell.y < GRID_SIZE
 
@@ -528,35 +535,37 @@ func _world_to_cell(position: Vector3) -> Vector2i:
 
 
 func _add_lane_dash(center: Vector3, vertical: bool) -> void:
-	for offset in [-3.5, 0.0, 3.5]:
+	for base_offset in [-3.5, 0.0, 3.5]:
+		var offset: float = float(base_offset) * WORLD_SCALE
 		var position := center
 		if vertical:
 			position.z += offset
-			_add_plane("LaneDash", position, Vector2(0.12, 1.7), marking_material, 0.032)
+			_add_plane("LaneDash", position, Vector2(0.12, 1.7) * WORLD_SCALE, marking_material, 0.032)
 		else:
 			position.x += offset
-			_add_plane("LaneDash", position, Vector2(1.7, 0.12), marking_material, 0.032)
+			_add_plane("LaneDash", position, Vector2(1.7, 0.12) * WORLD_SCALE, marking_material, 0.032)
 
 
 func _add_crosswalks(center: Vector3) -> void:
 	for stripe in range(-4, 5):
-		var offset := stripe * 0.5
-		_add_plane("Crosswalk", center + Vector3(offset, 0, -3.65), Vector2(0.28, 1.35), marking_material, 0.034)
-		_add_plane("Crosswalk", center + Vector3(offset, 0, 3.65), Vector2(0.28, 1.35), marking_material, 0.034)
-		_add_plane("Crosswalk", center + Vector3(-3.65, 0, offset), Vector2(1.35, 0.28), marking_material, 0.034)
-		_add_plane("Crosswalk", center + Vector3(3.65, 0, offset), Vector2(1.35, 0.28), marking_material, 0.034)
+		var offset := stripe * 0.5 * WORLD_SCALE
+		var edge_offset := 3.65 * WORLD_SCALE
+		_add_plane("Crosswalk", center + Vector3(offset, 0, -edge_offset), Vector2(0.28, 1.35) * WORLD_SCALE, marking_material, 0.034)
+		_add_plane("Crosswalk", center + Vector3(offset, 0, edge_offset), Vector2(0.28, 1.35) * WORLD_SCALE, marking_material, 0.034)
+		_add_plane("Crosswalk", center + Vector3(-edge_offset, 0, offset), Vector2(1.35, 0.28) * WORLD_SCALE, marking_material, 0.034)
+		_add_plane("Crosswalk", center + Vector3(edge_offset, 0, offset), Vector2(1.35, 0.28) * WORLD_SCALE, marking_material, 0.034)
 
 
 func _add_lot_sidewalk(center: Vector3, direction: Vector3) -> void:
 	var edge_offset := CELL_SIZE * 0.5 - SIDEWALK_WIDTH * 0.5
 	var sidewalk_center := center + direction * edge_offset
-	var curb_center := center + direction * (CELL_SIZE * 0.5 - 0.07)
+	var curb_center := center + direction * (CELL_SIZE * 0.5 - 0.07 * WORLD_SCALE)
 	if abs(direction.x) > 0.5:
 		_add_plane("Sidewalk", sidewalk_center, Vector2(SIDEWALK_WIDTH, CELL_SIZE), sidewalk_material, 0.022)
-		_add_plane("Curb", curb_center, Vector2(0.14, CELL_SIZE), curb_material, 0.034)
+		_add_plane("Curb", curb_center, Vector2(0.14 * WORLD_SCALE, CELL_SIZE), curb_material, 0.034)
 	else:
 		_add_plane("Sidewalk", sidewalk_center, Vector2(CELL_SIZE, SIDEWALK_WIDTH), sidewalk_material, 0.022)
-		_add_plane("Curb", curb_center, Vector2(CELL_SIZE, 0.14), curb_material, 0.034)
+		_add_plane("Curb", curb_center, Vector2(CELL_SIZE, 0.14 * WORLD_SCALE), curb_material, 0.034)
 
 
 func _add_plane(node_name: String, position: Vector3, size: Vector2, material: Material, height: float) -> void:

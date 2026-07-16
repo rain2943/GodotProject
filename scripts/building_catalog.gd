@@ -30,6 +30,45 @@ const DEFINITIONS := {
 			Vector2(768, 1355),
 		],
 		"occlusion_depth": 13.0,
+	},
+	"gangnam_single_story_8x4_aligned": {
+		"node_name": "GangnamSingleStory",
+		"texture_path": "res://assets/buildings/gangnam_single_story_8x4_aligned.png",
+		"footprint_modules": Vector2i(8, 4),
+		"height_world": 3.6,
+		"footprint_corners_px": [
+			Vector2(40, 678),
+			Vector2(399, 498),
+			Vector2(1229, 913),
+			Vector2(870, 1102),
+		],
+		"occlusion_depth": 5.5,
+	},
+	"gangnam_ruined_lowrise_6x8_aligned": {
+		"node_name": "GangnamRuinedLowrise",
+		"texture_path": "res://assets/buildings/gangnam_ruined_lowrise_6x8_aligned.png",
+		"footprint_modules": Vector2i(6, 8),
+		"height_world": 8.5,
+		"footprint_corners_px": [
+			Vector2(40, 1013),
+			Vector2(694, 686),
+			Vector2(1219, 949),
+			Vector2(563, 1220),
+		],
+		"occlusion_depth": 10.0,
+	},
+	"gangnam_glass_tower_6x4_aligned": {
+		"node_name": "GangnamGlassTower",
+		"texture_path": "res://assets/buildings/gangnam_glass_tower_6x4_aligned.png",
+		"footprint_modules": Vector2i(6, 4),
+		"height_world": 15.5,
+		"footprint_corners_px": [
+			Vector2(332, 1021),
+			Vector2(549, 912),
+			Vector2(922, 1099),
+			Vector2(695, 1227),
+		],
+		"occlusion_depth": 14.0,
 	}
 }
 

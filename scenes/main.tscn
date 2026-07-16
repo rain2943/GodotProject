@@ -138,7 +138,7 @@ process_material = SubResource("Particles_rain")
 draw_pass_1 = SubResource("Mesh_rain")
 
 [node name="SmokeA" type="GPUParticles3D" parent="."]
-position = Vector3(15.5, 0.5, 6)
+position = Vector3(31, 0.5, 12)
 amount = 28
 lifetime = 4.5
 randomness = 0.8
@@ -146,7 +146,7 @@ process_material = SubResource("Particles_smoke")
 draw_pass_1 = SubResource("Mesh_smoke")
 
 [node name="SmokeB" type="GPUParticles3D" parent="."]
-position = Vector3(-16, 0.5, -8)
+position = Vector3(-32, 0.5, -16)
 amount = 22
 lifetime = 4.0
 randomness = 0.85
@@ -165,7 +165,7 @@ mesh = SubResource("Mesh_shadow")
 
 [node name="Survivor" type="AnimatedSprite3D" parent="Player"]
 position = Vector3(0, 0.3, 0)
-pixel_size = 0.0068
+pixel_size = 0.0098
 billboard = 1
 shaded = false
 alpha_cut = 1

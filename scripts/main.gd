@@ -4,15 +4,19 @@ const MOVE_SPEED := 5.2
 const OCCLUSION_LATERAL_LIMIT := 5.1
 const OCCLUSION_DEPTH_LIMIT := 14.0
 const SILHOUETTE_COLOR := Color("#26343b")
-const ANIMATION_SHEETS := {
-	"s": preload("res://assets/characters/survivor_anim_s.png"),
-	"se": preload("res://assets/characters/survivor_anim_se.png"),
-	"e": preload("res://assets/characters/survivor_anim_e.png"),
-	"ne": preload("res://assets/characters/survivor_anim_ne.png"),
-	"n": preload("res://assets/characters/survivor_anim_n.png"),
-}
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
-const FRAME_SIZE := Vector2(384, 384)
+const CAT_ANIMATION_ROOT := "res://assets/characters/cat_8way"
+const CAT_DIRECTION_STATES := {
+	"n": "up",
+	"ne": "up_right",
+	"e": "right",
+	"se": "down_right",
+	"s": "down",
+	"sw": "down_left",
+	"w": "left",
+	"nw": "up_left",
+}
+const CAT_FRAME_COUNT := 4
 const WEAPON_FRAME_SIZE := Vector2(192, 192)
 const AK_DROP_TEXTURE := preload("res://assets/weapons/ak47_drop.png")
 const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
@@ -20,6 +24,7 @@ const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
+const PERCEPTION_SYSTEM_SCRIPT := preload("res://scripts/perception_system.gd")
 const ENEMY_MELEE_SHEETS := {
 	"s": preload("res://assets/enemies/enemy_melee_anim_s.png"),
 	"se": preload("res://assets/enemies/enemy_melee_anim_se.png"),
@@ -38,7 +43,14 @@ const AK_PICKUP_POSITION := Vector3(1.15, 0.32, 0.7)
 const PICKUP_DISTANCE := 1.75
 const PICKUP_HOLD_DURATION := 0.9
 const FIRE_INTERVAL := 0.12
+const AIM_HOLD_DURATION := 0.55
 const AMMO_PICKUP_AMOUNT := 30
+const MAP_CONTENT_SCALE := ProceduralCityMap.WORLD_SCALE
+const SECONDS_PER_GAME_HOUR := 36.0
+const NIGHT_START_HOUR := 19.0
+const DEEP_NIGHT_HOUR := 22.0
+const BASE_ENEMY_COUNT := 6
+const MAX_NIGHT_ENEMY_COUNT := 16
 const AMMO_PICKUP_POSITIONS := [
 	Vector3(2, 0.3, 2),
 	Vector3(15, 0.3, -4),
@@ -64,6 +76,9 @@ const DIRECTION_VECTORS := {
 @onready var touch_knob: Control = $HUD/TouchStick/Knob
 @onready var location_label: Label = $HUD/TopRight/Location
 @onready var state_label: Label = $HUD/TopRight/State
+@onready var time_label: Label = $HUD/TopRight/Time
+@onready var sun: DirectionalLight3D = $Sun
+@onready var world_environment: WorldEnvironment = $WorldEnvironment
 
 var touch_id := -1
 var fire_touch_id := -1
@@ -105,13 +120,26 @@ var ammo_prompt_panel: PanelContainer
 var nearby_ammo_pickup: Node3D
 var inventory_ui: Control
 var visibility_material: ShaderMaterial
+var perception_system: CanvasLayer
+var aim_hold_time := 0.0
+var locked_aim_direction := Vector3.ZERO
 var smoke_particle_texture: ImageTexture
 var loot_glow_texture: ImageTexture
 var player_health := 82
 var enemies: Array[CharacterBody3D] = []
+var world_time_hours := 9.0
+var night_intensity := 0.0
+var enemy_spawn_serial := 0
+var reinforcement_timer := 8.0
+var day_night_tint: ColorRect
+var current_day_phase := ""
+var spawn_random := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
+	world_time_hours = GameState.world_time_hours
+	night_intensity = _get_night_intensity(world_time_hours)
+	spawn_random.seed = GameState.map_seed + 9137
 	player_health = GameState.player_health
 	magazine_ammo = GameState.magazine_ammo
 	reserve_ammo = GameState.reserve_ammo
@@ -124,6 +152,7 @@ func _ready() -> void:
 	$SmokeA.emitting = false
 	$SmokeB.emitting = false
 	survivor.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+	survivor.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	survivor.render_priority = 127
 	survivor.no_depth_test = true
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
@@ -135,7 +164,10 @@ func _ready() -> void:
 	_build_gunshot_audio()
 	_spawn_enemies()
 	_setup_building_overlays()
+	_build_day_night_tint()
 	_build_visibility_fog()
+	_install_perception_system()
+	_update_day_night(0.0)
 	_set_facing("s")
 	var world := $World as ProceduralCityMap
 	world.shelter_portal_entered.connect(_on_shelter_portal_entered)
@@ -152,6 +184,10 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_update_day_night(delta)
+	_update_enemy_pressure(delta)
+	aim_hold_time = maxf(0.0, aim_hold_time - delta)
+	var aim_is_locked := has_ak and (fire_button_held or mouse_fire_held or aim_hold_time > 0.0)
 	if _is_inventory_open():
 		player.velocity = Vector3.ZERO
 		player.move_and_slide()
@@ -169,7 +205,7 @@ func _physics_process(delta: float) -> void:
 	if world_direction.length_squared() > 0.01:
 		world_direction = world_direction.normalized()
 		player.velocity = world_direction * MOVE_SPEED
-		if not _uses_mouse_aim():
+		if not aim_is_locked:
 			_update_facing(input_vector)
 		_set_motion_state("walk")
 		state_label.text = "이동 중"
@@ -178,8 +214,8 @@ func _physics_process(delta: float) -> void:
 		_set_motion_state("idle")
 		state_label.text = "경계 중"
 
-	if _uses_mouse_aim():
-		_set_facing_from_world_direction(_get_mouse_world_direction())
+	if aim_is_locked and locked_aim_direction.length_squared() > 0.01:
+		_set_facing_from_world_direction(locked_aim_direction)
 	_update_weapon_pose()
 
 	player.move_and_slide()
@@ -193,6 +229,8 @@ func _physics_process(delta: float) -> void:
 	camera_rig.position = camera_rig.position.lerp(Vector3(player.position.x, 0, player.position.z), 1.0 - exp(-7.0 * delta))
 	_update_building_overlays()
 	_update_visibility_fog()
+	if perception_system:
+		perception_system.call("set_aim_direction", _get_perception_aim_direction())
 	$CameraRig/Rain.position.y = 8.0
 	location_label.text = "종로 생존구역  ·  %02d / %02d" % [roundi(player.position.x + 32), roundi(player.position.z + 32)]
 
@@ -217,6 +255,20 @@ func _uses_mouse_aim() -> bool:
 	return not DisplayServer.is_touchscreen_available()
 
 
+func _lock_aim_direction(world_direction: Vector3) -> void:
+	world_direction.y = 0.0
+	if world_direction.length_squared() <= 0.01:
+		return
+	locked_aim_direction = world_direction.normalized()
+	aim_hold_time = AIM_HOLD_DURATION
+
+
+func _get_perception_aim_direction() -> Vector3:
+	if has_ak and (fire_button_held or mouse_fire_held or aim_hold_time > 0.0) and locked_aim_direction.length_squared() > 0.01:
+		return locked_aim_direction
+	return _get_current_facing_world_direction()
+
+
 func _set_facing(direction_name: String) -> void:
 	if facing == direction_name and survivor.is_playing():
 		return
@@ -232,46 +284,38 @@ func _set_motion_state(next_state: String) -> void:
 
 
 func _play_directional_animation() -> void:
-	var source := facing
-	var flipped := false
-	match facing:
-		"sw": source = "se"; flipped = true
-		"w": source = "e"; flipped = true
-		"nw": source = "ne"; flipped = true
-	survivor.flip_h = flipped
-	survivor.play("%s_%s" % [motion_state, source])
+	# The cat owns all eight views; never mirror one direction into another.
+	survivor.flip_h = false
+	survivor.play("%s_%s" % [motion_state, facing])
 	if weapon_sprite and has_ak and not weapon_sprite.animation.begins_with("fire_"):
 		weapon_sprite.play("idle_%s" % facing)
 	_update_weapon_pose()
 
 
 func _build_sprite_frames() -> void:
-	unarmed_sprite_frames = _create_character_frames(ANIMATION_SHEETS)
+	unarmed_sprite_frames = _create_cat_frames()
 	survivor.sprite_frames = unarmed_sprite_frames
 
 
-func _create_character_frames(sheets: Dictionary) -> SpriteFrames:
+func _create_cat_frames() -> SpriteFrames:
 	var frames := SpriteFrames.new()
 	frames.remove_animation("default")
-	for direction_name in sheets:
+	for direction_name in SCREEN_DIRECTION_NAMES:
+		var state_prefix: String = CAT_DIRECTION_STATES[direction_name]
 		for state in ["idle", "walk"]:
 			var animation_name := "%s_%s" % [state, direction_name]
 			frames.add_animation(animation_name)
 			frames.set_animation_loop(animation_name, true)
-			frames.set_animation_speed(animation_name, 7.0 if state == "idle" else 8.5)
-			var first_frame := 0 if state == "idle" else 8
-			for frame_index in range(first_frame, first_frame + 8):
-				var atlas := AtlasTexture.new()
-				atlas.atlas = sheets[direction_name]
-				atlas.region = Rect2(
-					(frame_index % 4) * FRAME_SIZE.x,
-					(frame_index / 4) * FRAME_SIZE.y,
-					FRAME_SIZE.x,
-					FRAME_SIZE.y
-				)
-				var cycle_index := frame_index - first_frame
-				var duration := 1.6 if state == "walk" and direction_name == "ne" and cycle_index in [2, 6] else 1.0
-				frames.add_frame(animation_name, atlas, duration)
+			frames.set_animation_speed(animation_name, 4.0 if state == "idle" else 8.0)
+			for frame_index in CAT_FRAME_COUNT:
+				var texture_path := "%s/%s_%s_%d.png" % [
+					CAT_ANIMATION_ROOT, state_prefix, state, frame_index
+				]
+				var texture := load(texture_path) as Texture2D
+				if texture == null:
+					push_error("Missing cat animation frame: %s" % texture_path)
+					continue
+				frames.add_frame(animation_name, texture)
 	return frames
 
 
@@ -326,7 +370,7 @@ func _on_weapon_animation_finished() -> void:
 func _spawn_ak_pickup() -> void:
 	ak_pickup = Node3D.new()
 	ak_pickup.name = "AK47Pickup"
-	ak_pickup.position = _safe_map_position(AK_PICKUP_POSITION)
+	ak_pickup.position = _safe_map_position(_scale_map_position(AK_PICKUP_POSITION))
 	add_child(ak_pickup)
 
 	var sprite := Sprite3D.new()
@@ -363,7 +407,7 @@ func _spawn_ammo_pickups() -> void:
 	for index in AMMO_PICKUP_POSITIONS.size():
 		var pickup := Node3D.new()
 		pickup.name = "Ammo762_%d" % index
-		pickup.position = _safe_map_position(AMMO_PICKUP_POSITIONS[index])
+		pickup.position = _safe_map_position(_scale_map_position(AMMO_PICKUP_POSITIONS[index]))
 		pickup.set_meta("base_y", pickup.position.y)
 		add_child(pickup)
 		var sprite := Sprite3D.new()
@@ -688,6 +732,7 @@ func _fire_ak47() -> void:
 	GameState.magazine_ammo = magazine_ammo
 	fire_cooldown = FIRE_INTERVAL
 	var world_direction := _get_current_fire_direction()
+	_lock_aim_direction(world_direction)
 	_set_facing_from_world_direction(world_direction)
 	_update_weapon_pose()
 	if weapon_sprite:
@@ -1008,16 +1053,153 @@ func _spawn_enemies() -> void:
 		Vector2(22, 18),
 	]
 	spawn_points.shuffle()
-	for index in 6:
+	for index in BASE_ENEMY_COUNT:
 		var kind := "melee" if index < 3 else "pistol"
-		var sheets := ENEMY_MELEE_SHEETS if kind == "melee" else ENEMY_PISTOL_SHEETS
-		var enemy := CharacterBody3D.new()
-		enemy.name = "%sEnemy%d" % [kind.capitalize(), index]
-		enemy.set_script(ENEMY_SCRIPT)
-		enemy.position = _safe_map_position(Vector3(spawn_points[index].x, 0.78, spawn_points[index].y))
-		enemy.call("configure", kind, player, sheets)
-		add_child(enemy)
-		enemies.append(enemy)
+		var spawn_position := Vector3(spawn_points[index].x * MAP_CONTENT_SCALE, 0.78, spawn_points[index].y * MAP_CONTENT_SCALE)
+		_spawn_enemy(kind, _safe_map_position(spawn_position), night_intensity)
+
+
+func _spawn_enemy(kind: String, spawn_position: Vector3, threat: float) -> CharacterBody3D:
+	var sheets := ENEMY_MELEE_SHEETS if kind == "melee" else ENEMY_PISTOL_SHEETS
+	var enemy := CharacterBody3D.new()
+	enemy.name = "%sEnemy%d" % [kind.capitalize(), enemy_spawn_serial]
+	enemy_spawn_serial += 1
+	enemy.set_script(ENEMY_SCRIPT)
+	enemy.add_to_group("sound_source")
+	enemy.position = spawn_position
+	enemy.call("configure", kind, player, sheets, threat)
+	add_child(enemy)
+	enemy.died.connect(_on_enemy_died)
+	enemies.append(enemy)
+	return enemy
+
+
+func _on_enemy_died(enemy: CharacterBody3D) -> void:
+	enemies.erase(enemy)
+	reinforcement_timer = minf(reinforcement_timer, 2.5)
+
+
+func _update_enemy_pressure(delta: float) -> void:
+	for index in range(enemies.size() - 1, -1, -1):
+		var enemy := enemies[index]
+		if not is_instance_valid(enemy):
+			enemies.remove_at(index)
+			continue
+		enemy.call("set_threat_level", night_intensity)
+
+	var target_count := BASE_ENEMY_COUNT + roundi(night_intensity * float(MAX_NIGHT_ENEMY_COUNT - BASE_ENEMY_COUNT))
+	if enemies.size() >= target_count:
+		reinforcement_timer = minf(reinforcement_timer, 3.0)
+		return
+
+	reinforcement_timer -= delta
+	if reinforcement_timer > 0.0:
+		return
+	var spawn_position := _find_reinforcement_position()
+	if spawn_position != Vector3.INF:
+		var pistol_chance := lerpf(0.34, 0.52, night_intensity)
+		var kind := "pistol" if spawn_random.randf() < pistol_chance else "melee"
+		_spawn_enemy(kind, spawn_position, night_intensity)
+	reinforcement_timer = lerpf(18.0, 3.8, night_intensity)
+
+
+func _find_reinforcement_position() -> Vector3:
+	var world := $World as ProceduralCityMap
+	var map_limit := world.get_map_limit() - 4.0
+	for attempt in 16:
+		var angle := spawn_random.randf_range(0.0, TAU)
+		var distance := spawn_random.randf_range(20.0, 34.0)
+		var requested := player.global_position + Vector3(cos(angle), 0.0, sin(angle)) * distance
+		requested.x = clampf(requested.x, -map_limit, map_limit)
+		requested.z = clampf(requested.z, -map_limit, map_limit)
+		requested.y = 0.78
+		var candidate := world.find_nearest_open_position(requested)
+		if candidate.distance_to(player.global_position) < 17.0:
+			continue
+		if world.is_position_in_safe_zone(candidate):
+			continue
+		var overlaps_enemy := false
+		for enemy in enemies:
+			if is_instance_valid(enemy) and enemy.global_position.distance_to(candidate) < 2.2:
+				overlaps_enemy = true
+				break
+		if not overlaps_enemy:
+			return candidate
+	return Vector3.INF
+
+
+func _build_day_night_tint() -> void:
+	var tint_layer := CanvasLayer.new()
+	tint_layer.name = "DayNightTint"
+	tint_layer.layer = 1
+	add_child(tint_layer)
+	day_night_tint = ColorRect.new()
+	day_night_tint.name = "NightColor"
+	day_night_tint.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	day_night_tint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tint_layer.add_child(day_night_tint)
+
+
+func _update_day_night(delta: float) -> void:
+	world_time_hours = fposmod(world_time_hours + delta / SECONDS_PER_GAME_HOUR, 24.0)
+	GameState.world_time_hours = world_time_hours
+	night_intensity = _get_night_intensity(world_time_hours)
+	var next_phase := _get_day_phase(world_time_hours)
+	if next_phase != current_day_phase:
+		current_day_phase = next_phase
+	_update_day_night_visuals()
+	_update_time_hud()
+	if perception_system:
+		perception_system.call("set_vision_range", lerpf(13.5, 5.0, night_intensity))
+
+
+func _get_night_intensity(hour: float) -> float:
+	if hour >= 19.0:
+		return clampf(inverse_lerp(17.0, 24.0, hour), 0.0, 1.0)
+	if hour < 4.5:
+		return 1.0
+	if hour < 7.0:
+		return 1.0 - inverse_lerp(4.5, 7.0, hour)
+	if hour >= 17.0:
+		return inverse_lerp(17.0, 24.0, hour)
+	return 0.0
+
+
+func _get_day_phase(hour: float) -> String:
+	if hour >= DEEP_NIGHT_HOUR or hour < 4.5:
+		return "심야"
+	if hour >= NIGHT_START_HOUR or hour < 6.0:
+		return "밤"
+	if hour >= 17.0:
+		return "황혼"
+	if hour < 7.0:
+		return "새벽"
+	return "낮"
+
+
+func _update_day_night_visuals() -> void:
+	if day_night_tint:
+		var tint_color := Color(0.025, 0.055, 0.12, lerpf(0.0, 0.48, night_intensity))
+		day_night_tint.color = tint_color
+	if sun:
+		sun.light_energy = lerpf(1.15, 0.18, night_intensity)
+		sun.light_color = Color(0.72, 0.77, 0.8).lerp(Color(0.25, 0.34, 0.52), night_intensity)
+	if world_environment and world_environment.environment:
+		var environment := world_environment.environment
+		environment.ambient_light_energy = lerpf(0.72, 0.2, night_intensity)
+		environment.ambient_light_color = Color(0.54, 0.59, 0.62).lerp(Color(0.12, 0.18, 0.28), night_intensity)
+		environment.fog_light_energy = lerpf(0.65, 0.18, night_intensity)
+		environment.fog_light_color = Color(0.32, 0.36, 0.38).lerp(Color(0.08, 0.12, 0.2), night_intensity)
+		environment.fog_density = lerpf(0.008, 0.014, night_intensity)
+
+
+func _update_time_hud() -> void:
+	var hour := floori(world_time_hours)
+	var minute := floori((world_time_hours - float(hour)) * 60.0)
+	var danger_tier := 1 + floori(night_intensity * 3.99)
+	time_label.text = "%s  %02d:%02d  ·  위험 %d" % [current_day_phase, hour, minute, danger_tier]
+	var phase_color := Color("#d6c891").lerp(Color("#ff6f5c"), night_intensity)
+	time_label.add_theme_color_override("font_color", phase_color)
 
 
 func _build_visibility_fog() -> void:
@@ -1057,8 +1239,20 @@ func _update_visibility_fog() -> void:
 	if visibility_material == null:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
+	var inner_radius := lerpf(330.0, 125.0, night_intensity)
+	var outer_radius := lerpf(560.0, 265.0, night_intensity)
+	var edge_darkness := lerpf(0.68, 0.94, night_intensity)
 	visibility_material.set_shader_parameter("viewport_size", viewport_size)
 	visibility_material.set_shader_parameter("player_screen", camera.unproject_position(player.global_position))
+	visibility_material.set_shader_parameter("inner_radius", inner_radius)
+	visibility_material.set_shader_parameter("outer_radius", outer_radius)
+	visibility_material.set_shader_parameter("darkness", edge_darkness)
+
+
+func _install_perception_system() -> void:
+	perception_system = PERCEPTION_SYSTEM_SCRIPT.new() as CanvasLayer
+	perception_system.call("setup", player, camera)
+	add_child(perception_system)
 
 
 func take_damage(amount: int) -> void:
@@ -1112,7 +1306,7 @@ func _setup_building_overlays() -> void:
 	survivor_overlay = Sprite2D.new()
 	survivor_overlay.name = "SurvivorOverlay"
 	survivor_overlay.centered = true
-	survivor_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	survivor_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	building_canvas.add_child(survivor_overlay)
 	weapon_overlay = Sprite2D.new()
 	weapon_overlay.name = "WeaponOverlay"
@@ -1236,6 +1430,10 @@ func _safe_map_position(requested_position: Vector3) -> Vector3:
 	if world == null:
 		return requested_position
 	return world.find_nearest_open_position(requested_position)
+
+
+func _scale_map_position(position: Vector3) -> Vector3:
+	return Vector3(position.x * MAP_CONTENT_SCALE, position.y, position.z * MAP_CONTENT_SCALE)
 
 
 func _save_run_state() -> void:

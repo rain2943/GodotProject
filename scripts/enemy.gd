@@ -5,6 +5,8 @@ signal died(enemy: CharacterBody3D)
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const MELEE_SPEED := 3.1
 const PISTOL_SPEED := 2.5
+const PATROL_SPEED := 1.35
+const PATROL_RADIUS := 6.5
 const FRAME_SIZE := Vector2(384, 384)
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const SPRITE_BASE_POSITION := Vector3(0, 0.25, 0)
@@ -29,13 +31,28 @@ var pending_attack_direction := Vector3.ZERO
 var stagger_velocity := Vector3.ZERO
 var dying := false
 var visual_tween: Tween
+var patrol_origin := Vector3.ZERO
+var patrol_target := Vector3.ZERO
+var patrol_pause := 0.0
+var patrol_repath_time := 0.0
+var threat_level := 0.0
+var alerted := false
+var alert_marker_time := 0.0
+var pursuit_time := 0.0
+var last_known_position := Vector3.ZERO
 
 
-func configure(kind: String, target_body: CharacterBody3D, sheets: Dictionary) -> void:
+func configure(kind: String, target_body: CharacterBody3D, sheets: Dictionary, initial_threat: float = 0.0) -> void:
 	enemy_kind = kind
 	target = target_body
 	animation_sheets = sheets
-	health = 70 if enemy_kind == "melee" else 50
+	threat_level = clampf(initial_threat, 0.0, 1.0)
+	var base_health := 70 if enemy_kind == "melee" else 50
+	health = base_health + roundi(35.0 * threat_level)
+
+
+func set_threat_level(value: float) -> void:
+	threat_level = clampf(value, 0.0, 1.0)
 
 
 func _ready() -> void:
@@ -82,21 +99,24 @@ func _ready() -> void:
 	threat_marker = Label3D.new()
 	threat_marker.name = "ThreatMarker"
 	threat_marker.text = "!"
-	threat_marker.position = Vector3(0, 1.48, 0)
-	threat_marker.font_size = 54
-	threat_marker.outline_size = 14
-	threat_marker.modulate = Color("#ffbf3f")
-	threat_marker.outline_modulate = Color(0.28, 0.025, 0.015, 0.96)
+	threat_marker.position = Vector3(0, 1.62, 0)
+	threat_marker.font_size = 72
+	threat_marker.outline_size = 18
+	threat_marker.modulate = Color("#ff4d3d")
+	threat_marker.outline_modulate = Color(0.12, 0.008, 0.004, 1.0)
 	threat_marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	threat_marker.no_depth_test = true
-	threat_marker.render_priority = 90
+	threat_marker.render_priority = 120
 	threat_marker.visible = false
 	add_child(threat_marker)
+	patrol_origin = global_position
+	_choose_patrol_target()
 	_play_animation()
 
 
 func _physics_process(delta: float) -> void:
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
+	_update_alert_marker(delta)
 	if dying:
 		velocity = velocity.move_toward(Vector3.ZERO, 7.0 * delta)
 		move_and_slide()
@@ -112,21 +132,31 @@ func _physics_process(delta: float) -> void:
 		_set_motion_state("idle")
 		return
 	if _target_is_in_safe_zone():
-		velocity = velocity.move_toward(Vector3.ZERO, 12.0 * delta)
 		combat_state = "normal"
-		threat_marker.visible = false
-		_set_motion_state("idle")
+		_clear_alert()
+		_update_patrol(delta)
 		move_and_slide()
 		return
 
 	var offset := target.global_position - global_position
 	offset.y = 0.0
 	var distance := offset.length()
-	var vision_range := 9.5 if enemy_kind == "melee" else 13.0
+	var base_vision_range := 9.5 if enemy_kind == "melee" else 13.0
+	var vision_range := base_vision_range + lerpf(0.0, 5.5, threat_level)
 	var can_see_target := distance <= vision_range and _has_line_of_sight()
-	if not can_see_target:
-		velocity = velocity.move_toward(Vector3.ZERO, 12.0 * delta)
-		_set_motion_state("idle")
+	if can_see_target:
+		last_known_position = target.global_position
+		pursuit_time = lerpf(4.5, 12.0, threat_level)
+		if not alerted:
+			_become_alerted()
+	elif alerted and pursuit_time > 0.0:
+		pursuit_time = maxf(0.0, pursuit_time - delta)
+		_pursue_last_known_position()
+		move_and_slide()
+		return
+	else:
+		_clear_alert()
+		_update_patrol(delta)
 		move_and_slide()
 		return
 
@@ -139,6 +169,74 @@ func _physics_process(delta: float) -> void:
 	if combat_state == "normal":
 		_set_motion_state("walk" if velocity.length_squared() > 0.05 else "idle")
 	move_and_slide()
+
+
+func _update_patrol(delta: float) -> void:
+	patrol_pause = maxf(0.0, patrol_pause - delta)
+	patrol_repath_time = maxf(0.0, patrol_repath_time - delta)
+	if patrol_pause > 0.0:
+		velocity = velocity.move_toward(Vector3.ZERO, 8.0 * delta)
+		_set_motion_state("idle")
+		return
+
+	var offset := patrol_target - global_position
+	offset.y = 0.0
+	if offset.length() <= 0.65 or patrol_repath_time <= 0.0 or is_on_wall():
+		velocity = Vector3.ZERO
+		patrol_pause = randf_range(0.25, 0.75)
+		_choose_patrol_target()
+		_set_motion_state("idle")
+		return
+
+	var direction := offset.normalized()
+	velocity = direction * PATROL_SPEED
+	_set_facing_from_world_direction(direction)
+	_set_motion_state("walk")
+
+
+func _choose_patrol_target() -> void:
+	var angle := randf_range(0.0, TAU)
+	var radius := randf_range(PATROL_RADIUS * 0.35, PATROL_RADIUS)
+	patrol_target = patrol_origin + Vector3(cos(angle), 0.0, sin(angle)) * radius
+	patrol_repath_time = randf_range(2.0, 4.5)
+
+
+func _become_alerted() -> void:
+	alerted = true
+	alert_marker_time = 1.25
+	threat_marker.text = "!"
+	threat_marker.visible = true
+	threat_marker.scale = Vector3.ONE * 1.45
+
+
+func _clear_alert() -> void:
+	alerted = false
+	pursuit_time = 0.0
+	if combat_state != "melee_windup":
+		threat_marker.visible = false
+
+
+func _update_alert_marker(delta: float) -> void:
+	if alert_marker_time > 0.0:
+		alert_marker_time = maxf(0.0, alert_marker_time - delta)
+		threat_marker.visible = true
+		_update_threat_marker()
+	elif combat_state != "melee_windup":
+		threat_marker.visible = false
+
+
+func _pursue_last_known_position() -> void:
+	var offset := last_known_position - global_position
+	offset.y = 0.0
+	if offset.length() <= 0.7:
+		velocity = Vector3.ZERO
+		_set_motion_state("idle")
+		return
+	var direction := offset.normalized()
+	var base_speed := MELEE_SPEED if enemy_kind == "melee" else PISTOL_SPEED
+	velocity = direction * base_speed * lerpf(1.0, 1.32, threat_level)
+	_set_facing_from_world_direction(direction)
+	_set_motion_state("walk")
 
 
 func _create_sprite_frames() -> SpriteFrames:
@@ -220,7 +318,7 @@ func _play_animation() -> void:
 
 func _update_melee(direction: Vector3, distance: float) -> void:
 	if distance > 1.4:
-		velocity = direction * MELEE_SPEED
+		velocity = direction * MELEE_SPEED * lerpf(1.0, 1.36, threat_level)
 	elif attack_cooldown <= 0.0:
 		_start_melee_windup(direction)
 	else:
@@ -231,7 +329,7 @@ func _start_melee_windup(direction: Vector3) -> void:
 	combat_state = "melee_windup"
 	state_timer = MELEE_WINDUP_TIME
 	pending_attack_direction = direction
-	attack_cooldown = 1.2
+	attack_cooldown = lerpf(1.2, 0.82, threat_level)
 	velocity = Vector3.ZERO
 	_set_motion_state("attack")
 	threat_marker.visible = true
@@ -240,13 +338,13 @@ func _start_melee_windup(direction: Vector3) -> void:
 
 func _update_pistol(direction: Vector3, distance: float) -> void:
 	if distance > 7.5:
-		velocity = direction * PISTOL_SPEED
+		velocity = direction * PISTOL_SPEED * lerpf(1.0, 1.3, threat_level)
 	elif distance < 4.2:
-		velocity = -direction * PISTOL_SPEED
+		velocity = -direction * PISTOL_SPEED * lerpf(1.0, 1.3, threat_level)
 	else:
 		velocity = Vector3.ZERO
 	if distance <= 11.5 and attack_cooldown <= 0.0:
-		attack_cooldown = 1.25
+		attack_cooldown = lerpf(1.25, 0.78, threat_level)
 		combat_state = "pistol_fire"
 		state_timer = 0.2
 		pending_attack_direction = direction
@@ -290,9 +388,9 @@ func _perform_melee_strike() -> void:
 	if offset.length() > 1.75 or not _has_line_of_sight():
 		return
 	if target.has_method("take_damage"):
-		target.call("take_damage", 12)
+		target.call("take_damage", 12 + roundi(6.0 * threat_level))
 	elif target.get_parent() != null and target.get_parent().has_method("take_damage"):
-		target.get_parent().call("take_damage", 12)
+		target.get_parent().call("take_damage", 12 + roundi(6.0 * threat_level))
 
 
 func _update_stagger(delta: float) -> void:
@@ -328,7 +426,7 @@ func _fire_pistol(direction: Vector3) -> void:
 	projectile.set_script(BULLET_PROJECTILE)
 	projectile.set("direction", direction)
 	projectile.set("source_body", self)
-	projectile.set("damage", 9)
+	projectile.set("damage", 9 + roundi(5.0 * threat_level))
 	projectile.set("hostile", true)
 	projectile.position = global_position + direction * 0.72 + Vector3(0, 0.05, 0)
 	get_parent().add_child(projectile)
@@ -340,7 +438,7 @@ func _update_threat_marker() -> void:
 		return
 	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.025) * 0.18
 	threat_marker.scale = Vector3.ONE * pulse
-	threat_marker.position.y = 1.48 + sin(Time.get_ticks_msec() * 0.012) * 0.06
+	threat_marker.position.y = 1.62 + sin(Time.get_ticks_msec() * 0.012) * 0.08
 
 
 func _start_windup_pose() -> void:

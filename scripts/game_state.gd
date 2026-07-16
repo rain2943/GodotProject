@@ -9,11 +9,16 @@ var scrap: int = 80
 var weapon_level: int = 1
 var medkits: int = 0
 var returning_from_shelter: bool = false
+var world_time_hours: float = 9.0
 
 
 func randomize_map() -> void:
 	map_seed = int(Time.get_unix_time_from_system()) ^ Time.get_ticks_msec()
 	map_seed = absi(map_seed) % 2_000_000_000
+
+
+func start_new_raid() -> void:
+	world_time_hours = 9.0
 
 
 func reset_run() -> void:
@@ -25,3 +30,4 @@ func reset_run() -> void:
 	weapon_level = 1
 	medkits = 0
 	returning_from_shelter = false
+	world_time_hours = 9.0
