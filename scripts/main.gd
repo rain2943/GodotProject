@@ -27,6 +27,7 @@ const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const PERCEPTION_SYSTEM_SCRIPT := preload("res://scripts/perception_system.gd")
+const OVERLAY_DEPTH_SORT := preload("res://scripts/overlay_depth_sort.gd")
 const ENEMY_MELEE_SHEETS := {
 	"s": preload("res://assets/enemies/enemy_melee_anim_s.png"),
 	"se": preload("res://assets/enemies/enemy_melee_anim_se.png"),
@@ -1459,6 +1460,7 @@ func _update_building_overlays() -> void:
 		return
 	var viewport_height := get_viewport().get_visible_rect().size.y
 	var screen_scale := viewport_height / camera.size
+	var player_depth := OVERLAY_DEPTH_SORT.world_depth(player.global_position)
 	for building in building_overlays:
 		if not is_instance_valid(building):
 			continue
@@ -1470,7 +1472,12 @@ func _update_building_overlays() -> void:
 		overlay.scale = Vector2.ONE * source.pixel_size * screen_scale
 		overlay.offset = source.offset
 		overlay.modulate = source.modulate
-		overlay.z_index = roundi((building.global_position.x + building.global_position.z) * 10.0)
+		overlay.z_index = OVERLAY_DEPTH_SORT.building_depth(
+			building.global_position,
+			player.global_position,
+			bool(building.get_meta("overlay_overlaps_player", false)),
+			bool(building.get_meta("overlay_occludes_player", false))
+		)
 	for vehicle in vehicle_overlays:
 		if not is_instance_valid(vehicle):
 			continue
@@ -1482,8 +1489,7 @@ func _update_building_overlays() -> void:
 		overlay.scale = Vector2.ONE * source.pixel_size * screen_scale
 		overlay.offset = source.offset
 		overlay.modulate = source.modulate
-		overlay.z_index = roundi((vehicle.global_position.x + vehicle.global_position.z) * 10.0)
-	var player_depth := roundi((player.global_position.x + player.global_position.z) * 10.0)
+		overlay.z_index = OVERLAY_DEPTH_SORT.world_depth(vehicle.global_position)
 	var survivor_texture := survivor.sprite_frames.get_frame_texture(survivor.animation, survivor.frame)
 	if survivor_texture:
 		survivor_overlay.texture = survivor_texture
@@ -1518,13 +1524,15 @@ func _update_camera_occluders(delta: float) -> void:
 		var lateral_limit := float(building.get_meta("occlusion_lateral_limit", OCCLUSION_LATERAL_LIMIT))
 		var depth_limit := float(building.get_meta("occlusion_depth_limit", OCCLUSION_DEPTH_LIMIT))
 		var sprite := building.get_node_or_null("BuildingSprite") as Sprite3D
+		var overlaps_player := sprite != null and _is_player_inside_sprite_screen_rect(sprite)
 		var is_occluding := (
-			sprite != null
+			overlaps_player
 			and depth > 0.8
 			and depth < depth_limit
 			and lateral < lateral_limit
-			and _is_player_inside_sprite_screen_rect(sprite)
 		)
+		building.set_meta("overlay_overlaps_player", overlaps_player)
+		building.set_meta("overlay_occludes_player", is_occluding)
 		player_is_occluded = player_is_occluded or is_occluding
 		if sprite:
 			var color := sprite.modulate
