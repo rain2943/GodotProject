@@ -11,6 +11,11 @@ const MAP_SIZE := GRID_SIZE * CELL_SIZE
 const SIDEWALK_WIDTH := 2.0 * WORLD_SCALE
 const ISOMETRIC_VERTICAL_PROJECTION := 0.816496580927726
 const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
+const LANDMARK_CATALOG := preload("res://scripts/urban_landmark_catalog.gd")
+const PARK_HIGH_RISE_BUFFER_CELLS := 2
+const PARK_MID_RISE_BUFFER_CELLS := 1
+const TARGET_PARK_COUNT := 2
+const TARGET_SUBWAY_COUNT := 2
 const ASPHALT_TEXTURE := preload("res://assets/tiles/asphalt.png")
 const CONCRETE_TEXTURE := preload("res://assets/tiles/concrete.png")
 const RIVER_TEXTURE_PATH := "res://assets/tiles/river_water_generated.png"
@@ -40,6 +45,9 @@ var building_cells := {}
 var parking_cells := {}
 var open_cells := {}
 var waterfront_cells := {}
+var park_cells: Array[Vector2i] = []
+var playground_cells: Array[Vector2i] = []
+var subway_cells: Array[Vector2i] = []
 var portal_locked := false
 
 var asphalt_material: StandardMaterial3D
@@ -90,8 +98,16 @@ func _generate_layout() -> void:
 				waterfront_cells[cell] = true
 				continue
 			eligible_cells.append(cell)
-			if rng.randf() < 0.44:
-				building_cells[cell] = true
+
+	_select_planned_landmarks(eligible_cells)
+	for cell in eligible_cells:
+		if _is_landmark_cell(cell):
+			continue
+		var building_chance := 0.48
+		if _distance_to_cells(cell, park_cells) <= 1:
+			building_chance = 0.28
+		if rng.randf() < building_chance:
+			building_cells[cell] = true
 
 	for cell in eligible_cells:
 		if building_cells.has(cell):
@@ -102,6 +118,69 @@ func _generate_layout() -> void:
 				parking_cells[cell] = true
 		else:
 			open_cells[cell] = true
+
+
+func _select_planned_landmarks(eligible_cells: Array[Vector2i]) -> void:
+	var shuffled := eligible_cells.duplicate()
+	shuffled.shuffle()
+	for require_intersection_access in [true, false]:
+		for cell in shuffled:
+			if park_cells.size() >= TARGET_PARK_COUNT:
+				break
+			if not _touches_road(cell) or _block_distance(cell, SHELTER_CELL) < 3:
+				continue
+			if _distance_to_cells(cell, park_cells) < 5:
+				continue
+			if require_intersection_access and not _is_near_road_intersection(cell, 2):
+				continue
+			park_cells.append(cell)
+		if park_cells.size() >= TARGET_PARK_COUNT:
+			break
+
+	for park_cell in park_cells:
+		var playground_candidates := shuffled.filter(func(candidate: Vector2i) -> bool:
+			var distance := _block_distance(candidate, park_cell)
+			return distance >= 1 and distance <= 2 and _touches_road(candidate) and not _is_landmark_cell(candidate)
+		)
+		if not playground_candidates.is_empty():
+			playground_cells.append(playground_candidates[0])
+
+	for cell in shuffled:
+		if subway_cells.size() >= TARGET_SUBWAY_COUNT:
+			break
+		if _is_landmark_cell(cell) or not _touches_road(cell):
+			continue
+		if not _is_near_road_intersection(cell, 1):
+			continue
+		if _distance_to_cells(cell, park_cells) <= 1 or _distance_to_cells(cell, subway_cells) < 4:
+			continue
+		subway_cells.append(cell)
+
+
+func _is_landmark_cell(cell: Vector2i) -> bool:
+	return park_cells.has(cell) or playground_cells.has(cell) or subway_cells.has(cell)
+
+
+func _block_distance(a: Vector2i, b: Vector2i) -> int:
+	return maxi(absi(a.x - b.x), absi(a.y - b.y))
+
+
+func _distance_to_cells(cell: Vector2i, cells: Array[Vector2i]) -> int:
+	if cells.is_empty():
+		return 999
+	var nearest := 999
+	for other_cell in cells:
+		nearest = mini(nearest, _block_distance(cell, other_cell))
+	return nearest
+
+
+func _is_near_road_intersection(cell: Vector2i, radius: int) -> bool:
+	for offset_x in range(-radius, radius + 1):
+		for offset_z in range(-radius, radius + 1):
+			var candidate := cell + Vector2i(offset_x, offset_z)
+			if vertical_roads.has(candidate.x) and horizontal_roads.has(candidate.y):
+				return true
+	return false
 
 
 func _has_building_within(cell: Vector2i, radius: int) -> bool:
@@ -258,6 +337,12 @@ func _build_guardrails(
 			var collision_size := Vector3(0.32, 1.0, segment_length) if vertical else Vector3(segment_length, 1.0, 0.32)
 			_add_static_collision_box("BridgeGuardCollision", center + side_offset + Vector3(0, deck_height + 0.48, 0), collision_size)
 func _build_zoned_lots() -> void:
+	for cell in park_cells:
+		_spawn_landmark(cell, "pocket_park")
+	for cell in playground_cells:
+		_spawn_landmark(cell, "playground")
+	for cell in subway_cells:
+		_spawn_landmark(cell, "subway_entrance")
 	for cell in waterfront_cells:
 		_build_waterfront_lot(cell)
 	for cell in parking_cells:
@@ -313,30 +398,109 @@ func _build_open_lot(cell: Vector2i) -> void:
 
 func _try_build_building(cell: Vector2i) -> void:
 	var modules_per_cell := BUILDING_CATALOG.MODULES_PER_CELL
-	var left_margin := 2 if _is_road_cell(cell + Vector2i.LEFT) else 1
-	var right_margin := 2 if _is_road_cell(cell + Vector2i.RIGHT) else 1
-	var top_margin := 2 if _is_road_cell(cell + Vector2i.UP) else 1
-	var bottom_margin := 2 if _is_road_cell(cell + Vector2i.DOWN) else 1
+	# One module equals two world units at the current scale. Keeping a single
+	# module setback preserves the sidewalk while allowing 8x4 street-front
+	# low-rise buildings to fit a ten-module city lot.
+	var left_margin := 1
+	var right_margin := 1
+	var top_margin := 1
+	var bottom_margin := 1
 	var usable_size := Vector2i(modules_per_cell - left_margin - right_margin, modules_per_cell - top_margin - bottom_margin)
 	var definitions: Array[Dictionary] = []
 	for building_id in BUILDING_CATALOG.DEFINITIONS:
 		var definition: Dictionary = BUILDING_CATALOG.get_definition(building_id)
 		var footprint: Vector2i = definition.get("footprint_modules", Vector2i.ZERO)
-		if footprint.x <= usable_size.x and footprint.y <= usable_size.y:
-			definitions.append({"id": building_id, "definition": definition})
+		if footprint.x > usable_size.x or footprint.y > usable_size.y:
+			continue
+		var height_class := str(definition.get("height_class", "mid"))
+		var park_distance := _distance_to_cells(cell, park_cells)
+		if height_class == "high":
+			if park_distance <= PARK_HIGH_RISE_BUFFER_CELLS or not _is_near_road_intersection(cell, 2):
+				continue
+		elif height_class == "mid" and park_distance <= PARK_MID_RISE_BUFFER_CELLS:
+			continue
+		definitions.append({
+			"id": building_id,
+			"definition": definition,
+			"weight": float(definition.get("density_weight", 1.0)),
+		})
 	if definitions.is_empty():
 		return
-	var selected: Dictionary = definitions[rng.randi_range(0, definitions.size() - 1)]
+	var total_weight := 0.0
+	for candidate in definitions:
+		total_weight += float(candidate["weight"])
+	var selection_roll := rng.randf() * total_weight
+	var selected: Dictionary = definitions.back()
+	for candidate in definitions:
+		selection_roll -= float(candidate["weight"])
+		if selection_roll <= 0.0:
+			selected = candidate
+			break
 	var definition: Dictionary = selected["definition"]
 	var footprint: Vector2i = definition["footprint_modules"]
 	var cell_origin := cell * modules_per_cell
 	var min_offset := Vector2i(left_margin, top_margin)
 	var max_offset := Vector2i(modules_per_cell - right_margin - footprint.x, modules_per_cell - bottom_margin - footprint.y)
-	var module_origin := cell_origin + Vector2i(
-		rng.randi_range(min_offset.x, maxi(min_offset.x, max_offset.x)),
-		rng.randi_range(min_offset.y, maxi(min_offset.y, max_offset.y))
-	)
+	var offset_x := rng.randi_range(min_offset.x, maxi(min_offset.x, max_offset.x))
+	var offset_y := rng.randi_range(min_offset.y, maxi(min_offset.y, max_offset.y))
+	if _is_road_cell(cell + Vector2i.LEFT):
+		offset_x = min_offset.x
+	elif _is_road_cell(cell + Vector2i.RIGHT):
+		offset_x = max_offset.x
+	if _is_road_cell(cell + Vector2i.UP):
+		offset_y = min_offset.y
+	elif _is_road_cell(cell + Vector2i.DOWN):
+		offset_y = max_offset.y
+	var module_origin := cell_origin + Vector2i(offset_x, offset_y)
 	_spawn_building(selected["id"], definition, module_origin)
+
+
+func _spawn_landmark(cell: Vector2i, landmark_id: String) -> void:
+	var definition := LANDMARK_CATALOG.get_definition(landmark_id)
+	if definition.is_empty():
+		return
+	var texture := load(str(definition["texture_path"])) as Texture2D
+	if texture == null:
+		return
+	var footprint_modules: Vector2i = definition["footprint_modules"]
+	var module_world_size := CELL_SIZE / float(LANDMARK_CATALOG.MODULES_PER_CELL)
+	var footprint_world := Vector2(footprint_modules) * module_world_size
+	var center := _cell_center(cell)
+	var landmark := Node3D.new()
+	landmark.name = "%s_%d_%d" % [str(definition["node_name"]), cell.x, cell.y]
+	landmark.position = center
+	landmark.add_to_group("urban_landmark")
+	landmark.add_to_group("urban_%s" % landmark_id)
+	landmark.set_meta("landmark_kind", landmark_id)
+	add_child(landmark)
+
+	var sprite := Sprite3D.new()
+	sprite.name = "LandmarkSprite"
+	sprite.texture = texture
+	var corners: Array = definition["footprint_corners_px"]
+	var base_pixel_width := absf((corners[2] as Vector2).x - (corners[0] as Vector2).x)
+	var projected_width := (footprint_world.x + footprint_world.y) / sqrt(2.0)
+	sprite.pixel_size = projected_width / base_pixel_width
+	sprite.position = Vector3(
+		footprint_world.x * 0.5,
+		((corners[3] as Vector2).y - texture.get_height() * 0.5) * sprite.pixel_size / ISOMETRIC_VERTICAL_PROJECTION,
+		footprint_world.y * 0.5
+	)
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.transparent = true
+	sprite.shaded = false
+	sprite.no_depth_test = true
+	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	landmark.add_child(sprite)
+
+	for box_definition in definition.get("collision_boxes", []):
+		var offset: Vector2 = box_definition["offset"]
+		var size: Vector2 = box_definition["size"]
+		_add_static_collision_box(
+			"%sCollision" % str(definition["node_name"]),
+			center + Vector3(offset.x * module_world_size, 0.6, offset.y * module_world_size),
+			Vector3(size.x * module_world_size, 1.2, size.y * module_world_size)
+		)
 
 
 func _spawn_building(building_id: String, definition: Dictionary, module_origin: Vector2i) -> void:
@@ -353,6 +517,12 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	body.position = Vector3(center_x, 0, center_z)
 	body.add_to_group("camera_occluder")
 	body.collision_layer = 1
+	body.set_meta("building_id", building_id)
+	body.set_meta("height_class", str(definition.get("height_class", "mid")))
+	body.set_meta("planning_cell", Vector2i(
+		module_origin.x / BUILDING_CATALOG.MODULES_PER_CELL,
+		module_origin.y / BUILDING_CATALOG.MODULES_PER_CELL
+	))
 	add_child(body)
 	var sprite := Sprite3D.new()
 	sprite.name = "BuildingSprite"

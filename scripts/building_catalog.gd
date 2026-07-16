@@ -17,6 +17,8 @@ const DEFINITIONS := {
 			Vector2(768, 1355),
 		],
 		"occlusion_depth": 11.0,
+		"height_class": "high",
+		"density_weight": 0.35,
 	},
 	"academy_tower_6x4": {
 		"node_name": "AcademyTower",
@@ -30,6 +32,8 @@ const DEFINITIONS := {
 			Vector2(768, 1355),
 		],
 		"occlusion_depth": 13.0,
+		"height_class": "high",
+		"density_weight": 0.25,
 	},
 	"gangnam_single_story_8x4_aligned": {
 		"node_name": "GangnamSingleStory",
@@ -43,6 +47,8 @@ const DEFINITIONS := {
 			Vector2(870, 1102),
 		],
 		"occlusion_depth": 5.5,
+		"height_class": "low",
+		"density_weight": 3.0,
 	},
 	"gangnam_ruined_lowrise_6x8_aligned": {
 		"node_name": "GangnamRuinedLowrise",
@@ -56,6 +62,8 @@ const DEFINITIONS := {
 			Vector2(563, 1220),
 		],
 		"occlusion_depth": 10.0,
+		"height_class": "mid",
+		"density_weight": 1.1,
 	},
 	"gangnam_glass_tower_6x4_aligned": {
 		"node_name": "GangnamGlassTower",
@@ -69,6 +77,38 @@ const DEFINITIONS := {
 			Vector2(695, 1227),
 		],
 		"occlusion_depth": 14.0,
+		"height_class": "high",
+		"density_weight": 0.2,
+	},
+	"gangnam_lowrise_commercial_8x4_aligned": {
+		"node_name": "GangnamLowriseCommercial",
+		"texture_path": "res://assets/buildings/gangnam_lowrise_commercial_8x4_aligned.png",
+		"footprint_modules": Vector2i(8, 4),
+		"height_world": 5.6,
+		"footprint_corners_px": [
+			Vector2(263, 927),
+			Vector2(1029, 544),
+			Vector2(1269, 663),
+			Vector2(502, 1047),
+		],
+		"occlusion_depth": 6.8,
+		"height_class": "low",
+		"density_weight": 3.2,
+	},
+	"gangnam_lowrise_garage_8x4_aligned": {
+		"node_name": "GangnamLowriseGarage",
+		"texture_path": "res://assets/buildings/gangnam_lowrise_garage_8x4_aligned.png",
+		"footprint_modules": Vector2i(8, 4),
+		"height_world": 3.8,
+		"footprint_corners_px": [
+			Vector2(93, 703),
+			Vector2(450, 525),
+			Vector2(1176, 888),
+			Vector2(819, 1066),
+		],
+		"occlusion_depth": 5.0,
+		"height_class": "low",
+		"density_weight": 3.5,
 	}
 }
 

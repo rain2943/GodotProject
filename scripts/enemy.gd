@@ -40,6 +40,12 @@ var alerted := false
 var alert_marker_time := 0.0
 var pursuit_time := 0.0
 var last_known_position := Vector3.ZERO
+var visual_contact_confirmed := false
+var burst_shots_remaining := 0
+var strafe_sign := 1.0
+var strafe_switch_time := 0.0
+var facing_world_direction := Vector3(1.0, 0.0, 1.0).normalized()
+var backstab_stunned := false
 
 
 func configure(kind: String, target_body: CharacterBody3D, sheets: Dictionary, initial_threat: float = 0.0) -> void:
@@ -121,6 +127,10 @@ func _physics_process(delta: float) -> void:
 		velocity = velocity.move_toward(Vector3.ZERO, 7.0 * delta)
 		move_and_slide()
 		return
+	if backstab_stunned:
+		velocity = Vector3.ZERO
+		move_and_slide()
+		return
 	if combat_state == "stagger":
 		_update_stagger(delta)
 		return
@@ -147,7 +157,7 @@ func _physics_process(delta: float) -> void:
 	if can_see_target:
 		last_known_position = target.global_position
 		pursuit_time = lerpf(4.5, 12.0, threat_level)
-		if not alerted:
+		if not visual_contact_confirmed:
 			_become_alerted()
 	elif alerted and pursuit_time > 0.0:
 		pursuit_time = maxf(0.0, pursuit_time - delta)
@@ -165,7 +175,7 @@ func _physics_process(delta: float) -> void:
 	if enemy_kind == "melee":
 		_update_melee(direction, distance)
 	else:
-		_update_pistol(direction, distance)
+		_update_pistol(direction, distance, delta)
 	if combat_state == "normal":
 		_set_motion_state("walk" if velocity.length_squared() > 0.05 else "idle")
 	move_and_slide()
@@ -203,14 +213,30 @@ func _choose_patrol_target() -> void:
 
 func _become_alerted() -> void:
 	alerted = true
+	visual_contact_confirmed = true
 	alert_marker_time = 1.25
 	threat_marker.text = "!"
+	threat_marker.modulate = Color("#ff4d3d")
 	threat_marker.visible = true
 	threat_marker.scale = Vector3.ONE * 1.45
 
 
+func hear_sound(world_position: Vector3, loudness: float = 1.0) -> void:
+	if dying or not is_instance_valid(target) or _target_is_in_safe_zone():
+		return
+	last_known_position = world_position
+	pursuit_time = maxf(pursuit_time, lerpf(5.5, 12.0, threat_level) * clampf(loudness, 0.35, 1.0))
+	alerted = true
+	if not visual_contact_confirmed:
+		alert_marker_time = 0.9
+		threat_marker.text = "?"
+		threat_marker.modulate = Color("#f3c65b")
+		threat_marker.visible = true
+
+
 func _clear_alert() -> void:
 	alerted = false
+	visual_contact_confirmed = false
 	pursuit_time = 0.0
 	if combat_state != "melee_windup":
 		threat_marker.visible = false
@@ -233,6 +259,9 @@ func _pursue_last_known_position() -> void:
 		_set_motion_state("idle")
 		return
 	var direction := offset.normalized()
+	if is_on_wall():
+		direction = Vector3(-direction.z, 0.0, direction.x) * strafe_sign
+		strafe_sign *= -1.0
 	var base_speed := MELEE_SPEED if enemy_kind == "melee" else PISTOL_SPEED
 	velocity = direction * base_speed * lerpf(1.0, 1.32, threat_level)
 	_set_facing_from_world_direction(direction)
@@ -292,6 +321,7 @@ func _set_facing(direction_name: String) -> void:
 func _set_facing_from_world_direction(world_direction: Vector3) -> void:
 	if world_direction.length_squared() <= 0.01:
 		return
+	facing_world_direction = world_direction.normalized()
 	var screen_direction := Vector2(
 		world_direction.x - world_direction.z,
 		world_direction.x + world_direction.z
@@ -336,17 +366,23 @@ func _start_melee_windup(direction: Vector3) -> void:
 	_start_windup_pose()
 
 
-func _update_pistol(direction: Vector3, distance: float) -> void:
-	if distance > 7.5:
-		velocity = direction * PISTOL_SPEED * lerpf(1.0, 1.3, threat_level)
-	elif distance < 4.2:
-		velocity = -direction * PISTOL_SPEED * lerpf(1.0, 1.3, threat_level)
+func _update_pistol(direction: Vector3, distance: float, delta: float) -> void:
+	var movement_speed := PISTOL_SPEED * lerpf(1.12, 1.48, threat_level)
+	strafe_switch_time = maxf(0.0, strafe_switch_time - delta)
+	if distance > 10.5:
+		velocity = direction * movement_speed
+	elif distance < 5.2:
+		velocity = -direction * movement_speed
 	else:
-		velocity = Vector3.ZERO
-	if distance <= 11.5 and attack_cooldown <= 0.0:
-		attack_cooldown = lerpf(1.25, 0.78, threat_level)
-		combat_state = "pistol_fire"
-		state_timer = 0.2
+		if strafe_switch_time <= 0.0 or is_on_wall():
+			strafe_sign = -strafe_sign if strafe_switch_time > 0.0 else (1.0 if randf() >= 0.5 else -1.0)
+			strafe_switch_time = randf_range(0.85, 1.55)
+		var strafe_direction := Vector3(-direction.z, 0.0, direction.x) * strafe_sign
+		velocity = strafe_direction * movement_speed * 0.78
+	if distance <= 14.5 and attack_cooldown <= 0.0:
+		burst_shots_remaining = 1 + roundi(2.0 * threat_level)
+		combat_state = "pistol_burst"
+		state_timer = 0.16
 		pending_attack_direction = direction
 		velocity = Vector3.ZERO
 		_set_motion_state("attack")
@@ -373,6 +409,24 @@ func _update_combat_state(delta: float) -> void:
 			combat_state = "melee_recovery"
 			state_timer = MELEE_RECOVERY_TIME
 			velocity = Vector3.ZERO
+	elif combat_state == "pistol_burst" and state_timer <= 0.0:
+		if burst_shots_remaining > 0 and is_instance_valid(target) and _has_line_of_sight():
+			var burst_direction := target.global_position - global_position
+			burst_direction.y = 0.0
+			if burst_direction.length_squared() > 0.01:
+				burst_direction = burst_direction.normalized()
+				pending_attack_direction = burst_direction
+				_set_facing_from_world_direction(burst_direction)
+				_fire_pistol(burst_direction)
+				_start_recoil_pose()
+			burst_shots_remaining -= 1
+			state_timer = lerpf(0.22, 0.12, threat_level)
+		else:
+			burst_shots_remaining = 0
+			attack_cooldown = lerpf(1.05, 0.48, threat_level)
+			combat_state = "normal"
+			_reset_sprite_pose()
+			_set_motion_state("idle")
 	elif combat_state in ["melee_recovery", "pistol_fire"] and state_timer <= 0.0:
 		combat_state = "normal"
 		_reset_sprite_pose()
@@ -426,10 +480,13 @@ func _fire_pistol(direction: Vector3) -> void:
 	projectile.set_script(BULLET_PROJECTILE)
 	projectile.set("direction", direction)
 	projectile.set("source_body", self)
-	projectile.set("damage", 9 + roundi(5.0 * threat_level))
+	projectile.set("damage", 11 + roundi(7.0 * threat_level))
 	projectile.set("hostile", true)
 	projectile.position = global_position + direction * 0.72 + Vector3(0, 0.05, 0)
 	get_parent().add_child(projectile)
+	var perception := get_tree().get_first_node_in_group("perception_system")
+	if perception:
+		perception.call("emit_enemy_gunshot", self)
 	_play_attack_feedback()
 
 
@@ -492,8 +549,43 @@ func take_damage(amount: int) -> void:
 	take_hit(amount, Vector3.ZERO)
 
 
+func is_backstab_from(attacker_position: Vector3) -> bool:
+	var direction_to_attacker := attacker_position - global_position
+	direction_to_attacker.y = 0.0
+	if direction_to_attacker.length_squared() <= 0.01:
+		return false
+	return facing_world_direction.dot(direction_to_attacker.normalized()) <= -0.42
+
+
+func take_melee_hit(amount: int, hit_direction: Vector3, backstab: bool) -> void:
+	if dying or backstab_stunned:
+		return
+	if not backstab:
+		take_hit(amount, hit_direction)
+		return
+	backstab_stunned = true
+	health = 0
+	combat_state = "stagger"
+	state_timer = 0.28
+	velocity = Vector3.ZERO
+	collision_layer = 0
+	collision_mask = 0
+	threat_marker.text = "★"
+	threat_marker.modulate = Color("#ffe17a")
+	threat_marker.visible = true
+	alert_marker_time = 0.28
+	_set_motion_state("hit")
+	_spawn_hit_burst(hit_direction, Color("#fff0a3"), 16, 0.34)
+	_play_hit_reaction(hit_direction)
+	get_tree().create_timer(0.24).timeout.connect(func() -> void:
+		if is_instance_valid(self) and not dying:
+			backstab_stunned = false
+			_start_death(hit_direction)
+	)
+
+
 func take_hit(amount: int, hit_direction: Vector3) -> void:
-	if dying:
+	if dying or backstab_stunned:
 		return
 	health -= amount
 	threat_marker.visible = false
@@ -527,7 +619,9 @@ func _play_hit_reaction(hit_direction: Vector3) -> void:
 
 func _start_death(hit_direction: Vector3) -> void:
 	dying = true
+	backstab_stunned = false
 	combat_state = "dying"
+	threat_marker.visible = false
 	collision_layer = 0
 	collision_mask = 0
 	velocity = hit_direction * 2.5

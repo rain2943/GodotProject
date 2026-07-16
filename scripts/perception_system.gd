@@ -15,6 +15,8 @@ var aim_world_direction := Vector3(1, 0, 1).normalized()
 var vision_world_range := VISION_WORLD_RANGE
 var sound_timers := {}
 var sound_waves: Array[Control] = []
+var last_player_combat_sound_msec := -10000
+var enemy_gunshot_timers := {}
 
 
 func setup(player_body: CharacterBody3D, active_camera: Camera3D) -> void:
@@ -53,6 +55,57 @@ func report_sound(world_position: Vector3, sound_kind: String, strength: float =
 	if _position_is_visible(world_position):
 		return
 	_spawn_sound_wave(world_position, sound_kind, strength)
+
+
+func emit_player_gunshot(world_position: Vector3, hearing_radius: float = 52.0) -> void:
+	var now := Time.get_ticks_msec()
+	if now - last_player_combat_sound_msec < 340:
+		return
+	last_player_combat_sound_msec = now
+	_spawn_sound_wave(world_position, "player_gunshot", 1.0)
+	_propagate_sound_to_enemies(world_position, hearing_radius)
+
+
+func emit_enemy_gunshot(enemy: Node3D) -> void:
+	if not is_instance_valid(enemy):
+		return
+	var enemy_id := enemy.get_instance_id()
+	var now := Time.get_ticks_msec()
+	var last_time := int(enemy_gunshot_timers.get(enemy_id, -10000))
+	if now - last_time < 360:
+		return
+	enemy_gunshot_timers[enemy_id] = now
+	if not _position_is_visible(enemy.global_position):
+		_spawn_sound_wave(enemy.global_position, "enemy_gunshot", 1.1)
+
+
+func _propagate_sound_to_enemies(world_position: Vector3, hearing_radius: float) -> void:
+	for node in get_tree().get_nodes_in_group("sound_source"):
+		if not (node is CharacterBody3D) or not node.has_method("hear_sound"):
+			continue
+		var enemy := node as CharacterBody3D
+		var distance := enemy.global_position.distance_to(world_position)
+		if distance > hearing_radius:
+			continue
+		var effective_radius := hearing_radius
+		var query := PhysicsRayQueryParameters3D.create(
+			world_position + Vector3(0, 0.35, 0),
+			enemy.global_position + Vector3(0, 0.35, 0),
+			1
+		)
+		if is_instance_valid(player):
+			query.exclude = [player.get_rid()]
+		if not player.get_world_3d().direct_space_state.intersect_ray(query).is_empty():
+			effective_radius *= 0.68
+		if distance > effective_radius:
+			continue
+		var loudness := clampf(1.0 - distance / maxf(effective_radius, 0.1), 0.25, 1.0)
+		var travel_delay := distance / 38.0
+		var hearing_enemy := enemy
+		get_tree().create_timer(travel_delay).timeout.connect(func() -> void:
+			if is_instance_valid(hearing_enemy):
+				hearing_enemy.call("hear_sound", world_position, loudness)
+		)
 
 
 func _build_fog() -> void:

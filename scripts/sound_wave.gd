@@ -1,21 +1,43 @@
 extends Control
 
 var age := 0.0
-var duration := 1.35
+var duration := 1.45
 var strength := 1.0
 var sound_kind := "footstep"
-var dot_color := Color(0.78, 0.82, 0.76, 0.9)
+var wave_color := Color(0.72, 0.82, 0.78, 0.34)
+var max_radius := 72.0
+var ring_count := 3
 
 
 func configure(kind: String, wave_strength: float) -> void:
 	sound_kind = kind
-	strength = clampf(wave_strength, 0.45, 1.5)
-	duration = 1.1 if kind == "light_step" else 1.45
-	dot_color = Color(0.72, 0.86, 0.8, 0.96) if kind == "light_step" else Color(0.98, 0.78, 0.42, 1.0)
+	strength = clampf(wave_strength, 0.4, 1.8)
+	match kind:
+		"player_gunshot":
+			duration = 1.85
+			max_radius = 520.0
+			ring_count = 4
+			wave_color = Color(1.0, 0.72, 0.38, 0.16)
+		"enemy_gunshot":
+			duration = 1.65
+			max_radius = 300.0
+			ring_count = 4
+			wave_color = Color(1.0, 0.48, 0.38, 0.17)
+		"heavy_step":
+			duration = 1.35
+			max_radius = 76.0
+			ring_count = 3
+			wave_color = Color(0.9, 0.72, 0.43, 0.24)
+		_:
+			duration = 1.2
+			max_radius = 62.0
+			ring_count = 3
+			wave_color = Color(0.58, 0.78, 0.72, 0.22)
 
 
 func _ready() -> void:
-	size = Vector2(220, 220)
+	var diameter := (max_radius * strength + 18.0) * 2.0
+	size = Vector2(diameter, diameter)
 	pivot_offset = size * 0.5
 	z_index = 100
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -32,22 +54,16 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var progress := clampf(age / duration, 0.0, 1.0)
 	var center := size * 0.5
-	var pulse := sin(progress * PI)
-	var base_alpha := pulse * (1.0 - progress * 0.35)
-	var ring_count := 4 if strength >= 0.9 else 3
-	var dot_count := 22 if strength >= 0.9 else 16
 	for ring_index in range(ring_count):
-		var ring_delay := float(ring_index) * 0.12
+		var ring_delay := float(ring_index) * 0.11
 		var ring_progress := clampf((progress - ring_delay) / maxf(0.01, 1.0 - ring_delay), 0.0, 1.0)
 		if ring_progress <= 0.0:
 			continue
-		var radius := lerpf(10.0, 78.0 * strength, ring_progress)
-		var alpha := base_alpha * (1.0 - float(ring_index) * 0.2)
-		for dot_index in range(dot_count):
-			if (dot_index + ring_index * 2) % 5 == 0:
-				continue
-			var angle := TAU * float(dot_index) / float(dot_count)
-			var roughness := sin(float(dot_index * 17 + ring_index * 31)) * 3.8
-			var point := center + Vector2(cos(angle), sin(angle)) * (radius + roughness)
-			var radius_dot := 1.5 + strength * 0.8 + sin(float(dot_index * 7)) * 0.3
-			draw_circle(point, radius_dot, Color(dot_color, alpha))
+		var eased_progress := 1.0 - pow(1.0 - ring_progress, 2.15)
+		var radius := lerpf(7.0, max_radius * strength, eased_progress)
+		var envelope := sin(ring_progress * PI)
+		var alpha := wave_color.a * envelope * (1.0 - float(ring_index) * 0.13)
+		var glow_color := Color(wave_color.r, wave_color.g, wave_color.b, alpha * 0.24)
+		var line_color := Color(wave_color.r, wave_color.g, wave_color.b, alpha)
+		draw_arc(center, radius, 0.0, TAU, 96, glow_color, 7.0, true)
+		draw_arc(center, radius, 0.0, TAU, 96, line_color, 1.6, true)

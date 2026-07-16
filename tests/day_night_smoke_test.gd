@@ -31,5 +31,43 @@ func _run() -> void:
 	enemy.set("last_known_position", (enemy as Node3D).global_position + Vector3(5.0, 0.0, 0.0))
 	enemy.call("_pursue_last_known_position")
 	assert((enemy as CharacterBody3D).velocity.length() > 0.1)
-	print("DAY_NIGHT_SMOKE_OK threat=%.2f enemies=%d" % [main_scene.get("night_intensity"), enemies.size()])
+	enemy.call("_clear_alert")
+	enemy.call("hear_sound", (enemy as Node3D).global_position + Vector3(3.0, 0.0, 0.0), 1.0)
+	assert(enemy.get("alerted"))
+	assert(enemy.get_node("ThreatMarker").text == "?")
+
+	var pistol_enemy: Node
+	for candidate in enemies:
+		if candidate.get("enemy_kind") == "pistol":
+			pistol_enemy = candidate
+			break
+	assert(pistol_enemy != null)
+	pistol_enemy.call("set_threat_level", 1.0)
+	pistol_enemy.set("attack_cooldown", 0.0)
+	pistol_enemy.call("_update_pistol", Vector3(1.0, 0.0, 0.0), 8.0, 0.1)
+	assert(pistol_enemy.get("combat_state") == "pistol_burst")
+	assert(int(pistol_enemy.get("burst_shots_remaining")) == 3)
+
+	var wave_script: Script = load("res://scripts/sound_wave.gd")
+	var gunshot_wave: Control = wave_script.new()
+	gunshot_wave.call("configure", "player_gunshot", 1.0)
+	root.add_child(gunshot_wave)
+	await process_frame
+	assert(float(gunshot_wave.get("max_radius")) >= 500.0)
+	var bat_sprite: Sprite3D = main_scene.get("melee_bat_sprite")
+	assert(bat_sprite != null and bat_sprite.texture != null)
+	main_scene.call("_play_bat_swing", Vector3(1.0, 0.0, 0.0))
+	assert(bat_sprite.visible)
+
+	enemy.set("facing_world_direction", Vector3(1.0, 0.0, 0.0))
+	var backstab_position := (enemy as Node3D).global_position - Vector3(1.0, 0.0, 0.0)
+	assert(bool(enemy.call("is_backstab_from", backstab_position)))
+	enemy.call("take_melee_hit", 38, Vector3(1.0, 0.0, 0.0), true)
+	assert(enemy.get("backstab_stunned"))
+	assert(int(enemy.get("health")) == 0)
+	print("COMBAT_SOUND_SMOKE_OK threat=%.2f enemies=%d burst=%d" % [
+		main_scene.get("night_intensity"),
+		enemies.size(),
+		pistol_enemy.get("burst_shots_remaining"),
+	])
 	quit(0)

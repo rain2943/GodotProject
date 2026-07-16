@@ -21,6 +21,7 @@ const WEAPON_FRAME_SIZE := Vector2(192, 192)
 const AK_DROP_TEXTURE := preload("res://assets/weapons/ak47_drop.png")
 const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
+const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/baseball_bat_temp.png")
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
@@ -51,6 +52,9 @@ const NIGHT_START_HOUR := 19.0
 const DEEP_NIGHT_HOUR := 22.0
 const BASE_ENEMY_COUNT := 6
 const MAX_NIGHT_ENEMY_COUNT := 16
+const MELEE_ATTACK_COOLDOWN := 0.72
+const MELEE_ATTACK_RANGE := 2.2
+const MELEE_ATTACK_DAMAGE := 38
 const AMMO_PICKUP_POSITIONS := [
 	Vector3(2, 0.3, 2),
 	Vector3(15, 0.3, -4),
@@ -134,6 +138,9 @@ var reinforcement_timer := 8.0
 var day_night_tint: ColorRect
 var current_day_phase := ""
 var spawn_random := RandomNumberGenerator.new()
+var melee_bat_sprite: Sprite3D
+var melee_attack_cooldown := 0.0
+var melee_arc_texture: ImageTexture
 
 
 func _ready() -> void:
@@ -158,6 +165,7 @@ func _ready() -> void:
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
 	_build_sprite_frames()
 	_setup_weapon_layer()
+	_setup_melee_weapon()
 	_spawn_ak_pickup()
 	_spawn_ammo_pickups()
 	_build_weapon_hud()
@@ -186,6 +194,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_update_day_night(delta)
 	_update_enemy_pressure(delta)
+	melee_attack_cooldown = maxf(0.0, melee_attack_cooldown - delta)
 	aim_hold_time = maxf(0.0, aim_hold_time - delta)
 	var aim_is_locked := has_ak and (fire_button_held or mouse_fire_held or aim_hold_time > 0.0)
 	if _is_inventory_open():
@@ -365,6 +374,130 @@ func _weapon_atlas_frame(direction_index: int, row: int) -> AtlasTexture:
 func _on_weapon_animation_finished() -> void:
 	if has_ak:
 		weapon_sprite.play("idle_%s" % facing)
+
+
+func _setup_melee_weapon() -> void:
+	melee_bat_sprite = Sprite3D.new()
+	melee_bat_sprite.name = "TemporaryBaseballBat"
+	melee_bat_sprite.texture = BASEBALL_BAT_TEXTURE
+	melee_bat_sprite.pixel_size = 0.00125
+	melee_bat_sprite.offset = Vector2(480, -480)
+	melee_bat_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	melee_bat_sprite.shaded = false
+	melee_bat_sprite.transparent = true
+	melee_bat_sprite.no_depth_test = true
+	melee_bat_sprite.render_priority = 126
+	melee_bat_sprite.visible = false
+	player.add_child(melee_bat_sprite)
+
+
+func _try_melee_attack() -> void:
+	if melee_attack_cooldown > 0.0 or player_health <= 0:
+		return
+	melee_attack_cooldown = MELEE_ATTACK_COOLDOWN
+	var attack_direction := _get_mouse_world_direction() if _uses_mouse_aim() else _get_current_facing_world_direction()
+	_lock_aim_direction(attack_direction)
+	_set_facing_from_world_direction(attack_direction)
+	_play_bat_swing(attack_direction)
+	_spawn_player_melee_arc(attack_direction)
+	get_tree().create_timer(0.09).timeout.connect(func() -> void:
+		if is_inside_tree():
+			_resolve_melee_hit(attack_direction)
+	)
+
+
+func _play_bat_swing(direction: Vector3) -> void:
+	var player_screen := camera.unproject_position(player.global_position)
+	var target_screen := camera.unproject_position(player.global_position + direction * 2.0)
+	var screen_direction := (target_screen - player_screen).normalized()
+	var screen_angle := atan2(screen_direction.y, screen_direction.x)
+	var aligned_angle := screen_angle + PI * 0.25
+	melee_bat_sprite.visible = true
+	melee_bat_sprite.modulate = Color.WHITE
+	melee_bat_sprite.position = direction * 0.2 + Vector3(0, 0.35, 0)
+	melee_bat_sprite.rotation.z = aligned_angle - deg_to_rad(105.0)
+	melee_bat_sprite.scale = Vector3.ONE * 0.78
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(melee_bat_sprite, "rotation:z", aligned_angle + deg_to_rad(48.0), 0.19).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	tween.tween_property(melee_bat_sprite, "position", direction * 0.42 + Vector3(0, 0.38, 0), 0.19)
+	tween.tween_property(melee_bat_sprite, "scale", Vector3.ONE * 0.9, 0.19)
+	tween.chain().tween_property(melee_bat_sprite, "modulate", Color(1, 1, 1, 0), 0.11)
+	tween.chain().tween_callback(func() -> void:
+		melee_bat_sprite.visible = false
+	)
+
+
+func _resolve_melee_hit(direction: Vector3) -> void:
+	var closest_enemy: CharacterBody3D
+	var closest_distance := INF
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
+			continue
+		var offset := enemy.global_position - player.global_position
+		offset.y = 0.0
+		var distance := offset.length()
+		if distance <= 0.05 or distance > MELEE_ATTACK_RANGE:
+			continue
+		if direction.dot(offset.normalized()) < cos(deg_to_rad(56.0)):
+			continue
+		var query := PhysicsRayQueryParameters3D.create(
+			player.global_position + Vector3(0, 0.35, 0),
+			enemy.global_position + Vector3(0, 0.35, 0),
+			3
+		)
+		query.exclude = [player.get_rid()]
+		var hit := player.get_world_3d().direct_space_state.intersect_ray(query)
+		if hit.is_empty() or hit.get("collider") != enemy:
+			continue
+		if distance < closest_distance:
+			closest_distance = distance
+			closest_enemy = enemy
+	if closest_enemy == null:
+		return
+	var backstab := bool(closest_enemy.call("is_backstab_from", player.global_position))
+	closest_enemy.call("take_melee_hit", MELEE_ATTACK_DAMAGE, direction, backstab)
+
+
+func _spawn_player_melee_arc(direction: Vector3) -> void:
+	if melee_arc_texture == null:
+		melee_arc_texture = _create_melee_arc_texture()
+	var arc := Sprite3D.new()
+	arc.name = "PlayerMeleeArc"
+	arc.texture = melee_arc_texture
+	arc.pixel_size = 0.012
+	arc.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	arc.shaded = false
+	arc.transparent = true
+	arc.no_depth_test = true
+	arc.render_priority = 125
+	arc.position = player.position + direction * 0.95 + Vector3(0, 0.3, 0)
+	add_child(arc)
+	var player_screen := camera.unproject_position(player.global_position)
+	var target_screen := camera.unproject_position(player.global_position + direction * 2.0)
+	var screen_direction := (target_screen - player_screen).normalized()
+	arc.rotation.z = atan2(screen_direction.y, screen_direction.x)
+	arc.scale = Vector3.ONE * 0.72
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(arc, "scale", Vector3.ONE * 1.28, 0.18)
+	tween.tween_property(arc, "modulate", Color(1.0, 0.52, 0.2, 0.0), 0.2)
+	get_tree().create_timer(0.22).timeout.connect(arc.queue_free)
+
+
+func _create_melee_arc_texture() -> ImageTexture:
+	var image := Image.create(128, 128, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	var center := Vector2(64, 64)
+	for y in 128:
+		for x in 128:
+			var offset := Vector2(x, y) - center
+			var radius := offset.length()
+			var angle := rad_to_deg(atan2(offset.y, offset.x))
+			if radius >= 40.0 and radius <= 57.0 and absf(angle) <= 68.0:
+				var edge_alpha := 1.0 - absf(radius - 48.5) / 8.5
+				image.set_pixel(x, y, Color(1.0, 0.7, 0.32, edge_alpha * 0.72))
+	return ImageTexture.create_from_image(image)
 
 
 func _spawn_ak_pickup() -> void:
@@ -746,6 +879,8 @@ func _fire_ak47() -> void:
 	projectile.position = _get_weapon_muzzle_position(world_direction)
 	add_child(projectile)
 	_play_gunshot()
+	if perception_system:
+		perception_system.call("emit_player_gunshot", player.global_position, 52.0)
 	_spawn_muzzle_light(world_direction)
 	_spawn_launch_fx(world_direction)
 	_update_equipment_ui()
@@ -1511,3 +1646,5 @@ func _unhandled_input(event: InputEvent) -> void:
 			mouse_fire_held = mouse_event.pressed
 			if mouse_event.pressed:
 				_try_fire_ak47()
+		elif mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed:
+			_try_melee_attack()
