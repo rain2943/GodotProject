@@ -1471,7 +1471,25 @@ func _update_building_overlays() -> void:
 		overlay.position = camera.unproject_position(source.global_position)
 		overlay.scale = Vector2.ONE * source.pixel_size * screen_scale
 		overlay.offset = source.offset
-		overlay.modulate = source.modulate
+		var overlay_color := source.modulate
+		if building.has_meta("overlay_focus_local"):
+			var focus_local: Vector3 = building.get_meta("overlay_focus_local")
+			var focus_screen := camera.unproject_position(building.to_global(focus_local))
+			var fade_pixels: Vector2 = building.get_meta(
+				"overlay_focus_fade_pixels",
+				Vector2(32.0, 150.0)
+			)
+			var focus_alpha := OVERLAY_DEPTH_SORT.focused_overlay_alpha(
+				focus_screen,
+				get_viewport().get_visible_rect().size,
+				fade_pixels.x,
+				fade_pixels.y
+			)
+			overlay_color.a *= focus_alpha
+			overlay.visible = focus_alpha > 0.005
+		else:
+			overlay.visible = true
+		overlay.modulate = overlay_color
 		overlay.z_index = OVERLAY_DEPTH_SORT.building_depth(
 			building.global_position,
 			player.global_position,

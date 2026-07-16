@@ -503,6 +503,12 @@ func _build_apartment_complex() -> void:
 	apartment.set_meta("off_map_extension", true)
 	apartment.set_meta("occlusion_lateral_limit", 46.0)
 	apartment.set_meta("occlusion_depth_limit", 92.0)
+	var gate_local_position := Vector3(0.0, 1.6, footprint_depth * 0.5 - 1.2)
+	# The estate texture is intentionally much larger than the viewport. Anchor
+	# its screen visibility to the entrance so a remote tower corner cannot stay
+	# on screen after the actual destination has moved well outside the camera.
+	apartment.set_meta("overlay_focus_local", gate_local_position)
+	apartment.set_meta("overlay_focus_fade_pixels", Vector2(32.0, 150.0))
 	var apartment_sprite := apartment.get_node_or_null("LandmarkSprite") as Sprite3D
 	if apartment_sprite:
 		apartment_sprite.name = "BuildingSprite"
@@ -510,7 +516,6 @@ func _build_apartment_complex() -> void:
 		# art from a cell origin. This landmark is supplied by its true centre.
 		apartment_sprite.position.x = 1.5
 		apartment_sprite.position.z = footprint_depth * 0.5
-	var gate_local_position := Vector3(0.0, 1.6, footprint_depth * 0.5 - 1.2)
 	_add_apartment_portal_site(apartment, gate_local_position, Vector3(12.0, 3.2, 2.4))
 	_add_plane(
 		"ApartmentEntranceApron",

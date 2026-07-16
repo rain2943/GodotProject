@@ -106,6 +106,11 @@ func _run() -> void:
 		assert(apartment.global_position.z < -float(city.call("get_map_limit")))
 		assert(apartment.get_meta("site_size_cells") == Vector2i(5, 1))
 		assert(bool(apartment.get_meta("map_edge_attached")))
+		assert(apartment.is_in_group("camera_occluder"))
+		var apartment_sprite := apartment.get_node("BuildingSprite") as Sprite3D
+		assert(apartment_sprite != null)
+		assert(apartment.get_meta("overlay_focus_local") == Vector3(0.0, 1.6, 30.8))
+		assert(apartment.get_meta("overlay_focus_fade_pixels") == Vector2(32.0, 150.0))
 		var blocker: StaticBody3D = get_nodes_in_group("apartment_portal_blocker")[0]
 		assert(blocker.collision_layer == 1)
 		var blocker_collision := blocker.get_child(0) as CollisionShape3D

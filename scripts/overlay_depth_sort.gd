@@ -21,3 +21,21 @@ static func building_depth(
 		return base_depth
 	var player_depth := world_depth(player_position)
 	return player_depth + PLAYER_SEPARATION if occludes_player else player_depth - PLAYER_SEPARATION
+
+
+static func focused_overlay_alpha(
+	focus_screen_position: Vector2,
+	viewport_size: Vector2,
+	fade_start_pixels: float,
+	fade_end_pixels: float
+) -> float:
+	var outside := Vector2(
+		maxf(0.0, maxf(-focus_screen_position.x, focus_screen_position.x - viewport_size.x)),
+		maxf(0.0, maxf(-focus_screen_position.y, focus_screen_position.y - viewport_size.y))
+	)
+	var outside_distance := outside.length()
+	if outside_distance <= fade_start_pixels:
+		return 1.0
+	if outside_distance >= fade_end_pixels:
+		return 0.0
+	return 1.0 - smoothstep(fade_start_pixels, fade_end_pixels, outside_distance)
