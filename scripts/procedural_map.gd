@@ -150,37 +150,23 @@ func _assign_zoning_districts(eligible_cells: Array[Vector2i]) -> void:
 
 
 func _select_apartment_complex_site() -> void:
-	# A 2x2 estate is placed immediately north-west of an intersection. This
-	# guarantees a full road on its south edge and another on its east edge.
-	var candidates: Array[Vector2i] = []
+	# The estate is deliberately outside the north map boundary. Its main gate
+	# continues one of the city's vertical roads, while five edge cells reserve
+	# a clear frontage for the walls and guardhouse.
+	var gate_road_candidates: Array[int] = []
 	for road_x in vertical_roads:
+		if road_x < 2 or road_x > GRID_SIZE - 3:
+			continue
 		if absi(road_x - river_center_x) <= 3:
 			continue
-		for road_z in horizontal_roads:
-			var origin := Vector2i(road_x - 2, road_z - 2)
-			var site_cells: Array[Vector2i] = [
-				origin,
-				origin + Vector2i.RIGHT,
-				origin + Vector2i.DOWN,
-				origin + Vector2i.ONE,
-			]
-			var valid := true
-			for cell in site_cells:
-				if not _cell_in_bounds(cell) or cell == SHELTER_CELL or _is_road_cell(cell) or _is_river_cell(cell) or _is_waterfront_cell(cell):
-					valid = false
-					break
-			if valid and _block_distance(origin, SHELTER_CELL) >= 4:
-				candidates.append(origin)
-	if candidates.is_empty():
+		gate_road_candidates.append(road_x)
+	if gate_road_candidates.is_empty():
 		return
-	candidates.shuffle()
-	apartment_origin = candidates[0]
-	apartment_cells = [
-		apartment_origin,
-		apartment_origin + Vector2i.RIGHT,
-		apartment_origin + Vector2i.DOWN,
-		apartment_origin + Vector2i.ONE,
-	]
+	gate_road_candidates.shuffle()
+	var gate_road_x := gate_road_candidates[0]
+	apartment_origin = Vector2i(gate_road_x - 2, 0)
+	for x_offset in range(5):
+		apartment_cells.append(apartment_origin + Vector2i(x_offset, 0))
 
 
 func _select_planned_landmarks(eligible_cells: Array[Vector2i]) -> void:
@@ -422,45 +408,83 @@ func _build_zoned_lots() -> void:
 
 
 func _build_apartment_complex() -> void:
-	if apartment_cells.size() != 4:
+	if apartment_cells.size() != 5:
 		return
-	var center := _cell_center(apartment_origin) + Vector3(CELL_SIZE * 0.5, 0, CELL_SIZE * 0.5)
+	var definition := LANDMARK_CATALOG.get_definition("apartment_complex")
+	var footprint_modules: Vector2i = definition.get("footprint_modules", Vector2i.ZERO)
+	var module_world_size := CELL_SIZE / float(LANDMARK_CATALOG.MODULES_PER_CELL)
+	var footprint_depth := footprint_modules.y * module_world_size
+	var gate_cell := apartment_origin + Vector2i(2, 0)
+	# The generated art's entrance is its low screen anchor. Placing the estate
+	# north-west of the camera-facing city makes that entrance point inward while
+	# the towers recede off map instead of covering the inner road network.
+	var center := Vector3(
+		_cell_center(gate_cell).x,
+		0.0,
+		-MAP_SIZE * 0.5 - footprint_depth * 0.5 + 10.0
+	)
 	var apartment := _spawn_landmark_at(center, "apartment_complex", "site_%d_%d" % [apartment_origin.x, apartment_origin.y])
 	if apartment == null:
 		return
 	apartment.add_to_group("urban_apartment_complex")
 	apartment.add_to_group("camera_occluder")
 	apartment.set_meta("site_origin", apartment_origin)
-	apartment.set_meta("site_size_cells", Vector2i(2, 2))
-	apartment.set_meta("resident_capacity", 120)
-	apartment.set_meta("occlusion_lateral_limit", 25.5)
-	apartment.set_meta("occlusion_depth_limit", 58.0)
+	apartment.set_meta("site_size_cells", Vector2i(5, 1))
+	apartment.set_meta("resident_capacity", 640)
+	apartment.set_meta("map_edge_attached", true)
+	apartment.set_meta("off_map_extension", true)
+	apartment.set_meta("occlusion_lateral_limit", 46.0)
+	apartment.set_meta("occlusion_depth_limit", 92.0)
 	var apartment_sprite := apartment.get_node_or_null("LandmarkSprite") as Sprite3D
 	if apartment_sprite:
 		apartment_sprite.name = "BuildingSprite"
-	var module_world_size := CELL_SIZE / float(LANDMARK_CATALOG.MODULES_PER_CELL)
-	_add_apartment_gate(apartment, "MainEntrance", "main_entrance", Vector3(-4.2, 0.7, 9.0) * module_world_size, Vector3(4.4, 1.4, 1.3) * module_world_size)
-	_add_apartment_gate(apartment, "ServiceExit", "service_exit", Vector3(9.0, 0.7, 4.5) * module_world_size, Vector3(1.3, 1.4, 4.0) * module_world_size)
-	# Short paved aprons make both openings visibly meet their adjoining roads.
-	_add_plane("ApartmentMainGateApron", center + Vector3(-4.2 * module_world_size, 0, 19.0), Vector2(8.8, 4.0), asphalt_material, 0.055)
-	_add_plane("ApartmentServiceGateApron", center + Vector3(19.0, 0, 4.5 * module_world_size), Vector2(4.0, 8.0), asphalt_material, 0.055)
+		# _spawn_landmark_at is also used by single-cell landmarks and offsets their
+		# art from a cell origin. This landmark is supplied by its true centre.
+		apartment_sprite.position.x = 1.5
+		apartment_sprite.position.z = footprint_depth * 0.5
+	var gate_local_position := Vector3(0.0, 1.6, footprint_depth * 0.5 - 1.2)
+	_add_apartment_portal_site(apartment, gate_local_position, Vector3(12.0, 3.2, 2.4))
+	_add_plane(
+		"ApartmentEntranceApron",
+		Vector3(center.x, 0.0, -MAP_SIZE * 0.5 + 18.0),
+		Vector2(12.0, 4.0),
+		asphalt_material,
+		0.055
+	)
 
 
-func _add_apartment_gate(parent: Node3D, node_name: String, gate_kind: String, local_position: Vector3, size: Vector3) -> void:
+func _add_apartment_portal_site(parent: Node3D, local_position: Vector3, size: Vector3) -> void:
 	var gate := Area3D.new()
-	gate.name = node_name
+	gate.name = "FutureApartmentPortal"
 	gate.position = local_position
 	gate.collision_layer = 0
 	gate.collision_mask = 0
 	gate.add_to_group("apartment_gate")
-	gate.set_meta("gate_kind", gate_kind)
+	gate.add_to_group("apartment_portal_site")
+	gate.set_meta("gate_kind", "main_entrance")
 	gate.set_meta("road_connected", true)
+	gate.set_meta("future_portal", true)
+	gate.set_meta("portal_ready", false)
 	parent.add_child(gate)
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = size
 	collision.shape = shape
 	gate.add_child(collision)
+
+	var blocker := StaticBody3D.new()
+	blocker.name = "ApartmentEntranceBlocker"
+	blocker.position = local_position
+	blocker.collision_layer = 1
+	blocker.add_to_group("apartment_portal_blocker")
+	blocker.set_meta("future_portal", true)
+	blocker.set_meta("portal_ready", false)
+	parent.add_child(blocker)
+	var blocker_collision := CollisionShape3D.new()
+	var blocker_shape := BoxShape3D.new()
+	blocker_shape.size = size
+	blocker_collision.shape = blocker_shape
+	blocker.add_child(blocker_collision)
 
 
 func _build_waterfront_lot(cell: Vector2i) -> void:

@@ -87,18 +87,40 @@ func _run() -> void:
 		assert(get_nodes_in_group("urban_subway_entrance").size() == 2)
 		_assert_sealed_landmark(city, parks[0], "PocketParkCollision")
 		_assert_sealed_landmark(city, playgrounds[0], "UrbanPlaygroundCollision")
-		assert(apartment_cells.size() == 4)
+		assert(apartment_cells.size() == 5)
 		assert(get_nodes_in_group("urban_apartment_complex").size() == 1)
-		assert(get_nodes_in_group("apartment_gate").size() == 2)
+		assert(get_nodes_in_group("apartment_gate").size() == 1)
+		assert(get_nodes_in_group("apartment_portal_site").size() == 1)
+		assert(get_nodes_in_group("apartment_portal_blocker").size() == 1)
+		assert(apartment_origin.y == 0)
 		assert(city.get("vertical_roads").has(apartment_origin.x + 2))
-		assert(city.get("horizontal_roads").has(apartment_origin.y + 2))
 		assert(float(city.call("get_map_limit")) > 210.0)
 		var gate_kinds := {}
 		for gate in get_nodes_in_group("apartment_gate"):
 			gate_kinds[str(gate.get_meta("gate_kind"))] = true
 			assert(bool(gate.get_meta("road_connected")))
+			assert(bool(gate.get_meta("future_portal")))
+			assert(not bool(gate.get_meta("portal_ready")))
 		assert(gate_kinds.has("main_entrance"))
-		assert(gate_kinds.has("service_exit"))
+		var apartment: Node3D = get_nodes_in_group("urban_apartment_complex")[0]
+		assert(apartment.global_position.z < -float(city.call("get_map_limit")))
+		assert(apartment.get_meta("site_size_cells") == Vector2i(5, 1))
+		assert(bool(apartment.get_meta("map_edge_attached")))
+		var blocker: StaticBody3D = get_nodes_in_group("apartment_portal_blocker")[0]
+		assert(blocker.collision_layer == 1)
+		var blocker_collision := blocker.get_child(0) as CollisionShape3D
+		var blocker_box := blocker_collision.shape as BoxShape3D
+		assert(blocker_box.size == Vector3(12.0, 3.2, 2.4))
+		var gate_cell: Vector2i = apartment_origin + Vector2i(2, 0)
+		var gate_x: float = (city.call("_cell_center", gate_cell) as Vector3).x
+		var query := PhysicsRayQueryParameters3D.create(
+			Vector3(gate_x, 1.0, -204.0),
+			Vector3(gate_x, 1.0, -216.0),
+			1
+		)
+		var gate_hit := city.get_world_3d().direct_space_state.intersect_ray(query)
+		assert(not gate_hit.is_empty())
+		assert((gate_hit["collider"] as Node).is_in_group("apartment_portal_blocker"))
 
 		var low_count := 0
 		var high_count := 0
