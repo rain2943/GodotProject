@@ -32,17 +32,23 @@ func _assert_vehicle(city: Node3D, vehicle_type: String, along_z: bool, index: i
 	assert(is_equal_approx(body.global_position.y + collision.position.y - shape.size.y * 0.5, 0.0))
 
 	var sprite := body.get_node("VehicleSprite") as Sprite3D
-	assert(sprite.flip_h == along_z)
+	assert(sprite.flip_h == not along_z)
 	var corners: Array = definition["footprint_corners_px"]
 	var projected_width := (measured.x + measured.z) / sqrt(2.0)
 	var base_pixel_width := absf((corners[2] as Vector2).x - (corners[0] as Vector2).x)
 	assert(is_equal_approx(sprite.pixel_size, projected_width / base_pixel_width))
 	var expected_offset := sprite.texture.get_width() * 0.5 - (corners[3] as Vector2).x
-	assert(is_equal_approx(sprite.offset.x, -expected_offset if along_z else expected_offset))
+	assert(is_equal_approx(sprite.offset.x, expected_offset if along_z else -expected_offset))
 
 	var debug_mesh := body.get_node("VehicleCollisionDebug") as MeshInstance3D
-	var debug_box := debug_mesh.mesh as BoxMesh
-	assert(debug_box.size == expected + Vector3(0.03, 0.03, 0.03))
+	var debug_footprint := debug_mesh.mesh as PlaneMesh
+	assert(debug_footprint != null)
+	assert(debug_footprint.size == Vector2(expected.x, expected.z))
+	assert(is_equal_approx(body.global_position.y + debug_mesh.position.y, 0.035))
+	assert(is_equal_approx(debug_mesh.position.x, collision.position.x))
+	assert(is_equal_approx(debug_mesh.position.z, collision.position.z))
+	assert(str(debug_mesh.get_meta("vehicle_type")) == vehicle_type)
+	assert(str(debug_mesh.get_meta("vehicle_axis")) == ("z" if along_z else "x"))
 
 
 func _run() -> void:

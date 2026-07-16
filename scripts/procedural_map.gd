@@ -826,8 +826,13 @@ func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3, 
 	sprite.pixel_size = projected_width / base_pixel_width
 	var bottom_corner: Vector2 = corners[3]
 	var horizontal_offset := texture.get_width() * 0.5 - bottom_corner.x
-	sprite.offset.x = -horizontal_offset if along_z else horizontal_offset
-	sprite.flip_h = along_z
+	# The source art's long axis projects along world Z. Mirroring it turns that
+	# axis onto world X, so only horizontal-road vehicles should be flipped.
+	# The old rule did the opposite: the picture pointed across its own physics
+	# box even though the box dimensions themselves were correct.
+	var flip_vehicle := not along_z
+	sprite.offset.x = -horizontal_offset if flip_vehicle else horizontal_offset
+	sprite.flip_h = flip_vehicle
 	sprite.position = Vector3(
 		collision_size.x * 0.5,
 		(bottom_corner.y - texture.get_height() * 0.5) * sprite.pixel_size / ISOMETRIC_VERTICAL_PROJECTION - position.y,
@@ -848,11 +853,21 @@ func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3, 
 	body.add_child(collision)
 	var debug_mesh := MeshInstance3D.new()
 	debug_mesh.name = "VehicleCollisionDebug"
-	debug_mesh.position = collision.position
-	var box := BoxMesh.new()
-	box.size = collision_size + Vector3(0.03, 0.03, 0.03)
-	box.material = vehicle_collision_material
-	debug_mesh.mesh = box
+	# Draw the collision footprint at road level.  A box mesh placed at the
+	# collision centre exposes its *roof* to the isometric camera, which makes
+	# the red area appear displaced behind the vehicle by the full body height.
+	# The physics shape remains a full-height box; this plane is only an exact
+	# ground projection of that box so its length, width and direction line up
+	# with the tyres and bumpers in the vehicle artwork.
+	debug_mesh.position = Vector3(0.0, 0.035 - position.y, 0.0)
+	var footprint_mesh := PlaneMesh.new()
+	footprint_mesh.size = Vector2(collision_size.x, collision_size.z)
+	footprint_mesh.material = vehicle_collision_material
+	debug_mesh.mesh = footprint_mesh
+	debug_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	debug_mesh.set_meta("vehicle_type", vehicle_type)
+	debug_mesh.set_meta("vehicle_axis", "z" if along_z else "x")
+	debug_mesh.set_meta("footprint_world_size", Vector2(collision_size.x, collision_size.z))
 	body.add_child(debug_mesh)
 
 
