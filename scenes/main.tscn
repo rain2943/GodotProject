@@ -1,8 +1,9 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/procedural_map.gd" id="2_map"]
 [ext_resource type="FontFile" path="res://assets/fonts/Pretendard-Regular.otf" id="4_font"]
+[ext_resource type="PackedScene" path="res://scenes/female_cat_companion.tscn" id="5_companion"]
 
 [sub_resource type="Environment" id="Environment_city"]
 background_mode = 1
@@ -169,6 +170,10 @@ pixel_size = 0.0098
 billboard = 1
 shaded = false
 alpha_cut = 1
+
+[node name="FemaleCatCompanion" parent="." instance=ExtResource("5_companion")]
+position = Vector3(-2.4, 0.78, 1.8)
+target_path = NodePath("../Player")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
