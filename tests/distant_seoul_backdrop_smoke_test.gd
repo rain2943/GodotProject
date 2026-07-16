@@ -26,17 +26,9 @@ func _run() -> void:
 	assert(ground_material.uv1_scale == Vector3(12.0, 12.0, 1.0))
 
 	var skylines := get_nodes_in_group("distant_city_backdrop")
-	assert(skylines.size() == 6)
-	for skyline_node in skylines:
-		var skyline := skyline_node as Sprite3D
-		assert(skyline != null)
-		assert(skyline.texture != null)
-		assert(skyline.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
-		assert(not skyline.no_depth_test)
-		assert(bool(skyline.get_meta("collision_free")))
-		assert(float(skyline.get_meta("world_width")) == 460.0)
-		assert(skyline.scale == Vector3.ONE)
-		assert(skyline.get_child_count() == 0)
+	assert(skylines.is_empty())
+	for child in city.get_children():
+		assert(not str(child.name).begins_with("ApocalypseSeoulSkyline"))
 
 	# The visual ground must never extend the playable collision floor.
 	var outside_query := PhysicsRayQueryParameters3D.create(
@@ -53,5 +45,5 @@ func _run() -> void:
 	assert(camera.far >= 1200.0)
 	main_instance.free()
 
-	print("DISTANT_SEOUL_BACKDROP_OK ground=1040 skylines=6 collision=none")
+	print("DISTANT_SEOUL_BACKDROP_OK ground=1040 skyline_afterimages=0 collision=none")
 	quit(0)

@@ -34,9 +34,7 @@ const OPEN_LOT_TEXTURE_PATHS := [
 	"res://assets/tiles/open_lot_courtyard_generated.png",
 ]
 const OUTER_GROUND_TEXTURE_PATH := "res://assets/backgrounds/apocalypse_seoul_outer_ground.png"
-const SEOUL_SKYLINE_TEXTURE_PATH := "res://assets/backgrounds/apocalypse_seoul_skyline.png"
 const OUTER_BACKDROP_SIZE := 1040.0
-const SKYLINE_WORLD_WIDTH := 460.0
 const SHELTER_CELL := Vector2i(1, 1)
 
 @export var map_seed: int = 0
@@ -318,45 +316,12 @@ func _build_outer_city_backdrop() -> void:
 		outer_ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(outer_ground)
 
-	if not ResourceLoader.exists(SEOUL_SKYLINE_TEXTURE_PATH):
-		return
-	var skyline_texture := load(SEOUL_SKYLINE_TEXTURE_PATH) as Texture2D
-	if skyline_texture == null:
-		return
-	# The fixed isometric camera sees north and west as the distant horizon. Three
-	# bands per edge keep every part of the 440 m boundary inside the fog range.
-	# Different texture focus points prevent N Seoul Tower from repeating.
-	var skyline_height := 76.0
-	var skyline_specs := [
-		{"name": "NorthWest", "position": Vector3(-180.0, skyline_height, -MAP_SIZE * 0.5 - 35.0), "focus_x": 1300.0},
-		{"name": "NorthCenter", "position": Vector3(0.0, skyline_height, -MAP_SIZE * 0.5 - 35.0), "focus_x": 580.0},
-		{"name": "NorthEast", "position": Vector3(180.0, skyline_height, -MAP_SIZE * 0.5 - 35.0), "focus_x": 1550.0},
-		{"name": "WestNorth", "position": Vector3(-MAP_SIZE * 0.5 - 35.0, skyline_height, -180.0), "focus_x": 1450.0},
-		{"name": "WestCenter", "position": Vector3(-MAP_SIZE * 0.5 - 35.0, skyline_height, 0.0), "focus_x": 1100.0},
-		{"name": "WestSouth", "position": Vector3(-MAP_SIZE * 0.5 - 35.0, skyline_height, 180.0), "focus_x": 1700.0},
-	]
-	for spec in skyline_specs:
-		var skyline := Sprite3D.new()
-		skyline.name = "ApocalypseSeoulSkyline%s" % str(spec["name"])
-		skyline.texture = skyline_texture
-		skyline.pixel_size = SKYLINE_WORLD_WIDTH / float(skyline_texture.get_width())
-		skyline.offset.x = skyline_texture.get_width() * 0.5 - float(spec["focus_x"])
-		skyline.position = spec["position"]
-		# The generated art is already a low horizon strip: normal scale preserves
-		# Seoul's mountain profile without turning distant blocks into a tall wall.
-		skyline.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		skyline.transparent = true
-		skyline.shaded = false
-		skyline.no_depth_test = false
-		skyline.modulate = Color(0.66, 0.72, 0.74, 0.62)
-		skyline.render_priority = -20
-		skyline.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		skyline.add_to_group("distant_city_backdrop")
-		skyline.set_meta("backdrop_kind", "apocalypse_seoul_skyline")
-		skyline.set_meta("collision_free", true)
-		skyline.set_meta("world_width", SKYLINE_WORLD_WIDTH)
-		skyline.set_meta("focus_x", float(spec["focus_x"]))
-		add_child(skyline)
+	# Do not add vertical transparent skyline sprites here. At the north/west map
+	# edges the mobile isometric camera can intersect their large transparent
+	# quads, making distant towers look like a full-screen afterimage over roads
+	# and characters. The collision-free ruined ground remains as the safe outer
+	# backdrop; future horizon art must be camera-composited instead of world
+	# billboards.
 
 
 func _build_floor_collision() -> void:
