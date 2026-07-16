@@ -33,6 +33,10 @@ const OPEN_LOT_TEXTURE_PATHS := [
 	"res://assets/tiles/open_lot_demolition_generated.png",
 	"res://assets/tiles/open_lot_courtyard_generated.png",
 ]
+const OUTER_GROUND_TEXTURE_PATH := "res://assets/backgrounds/apocalypse_seoul_outer_ground.png"
+const SEOUL_SKYLINE_TEXTURE_PATH := "res://assets/backgrounds/apocalypse_seoul_skyline.png"
+const OUTER_BACKDROP_SIZE := 1040.0
+const SKYLINE_WORLD_WIDTH := 460.0
 const SHELTER_CELL := Vector2i(1, 1)
 
 @export var map_seed: int = 0
@@ -69,6 +73,7 @@ var parking_material: StandardMaterial3D
 var bridge_deck_material: StandardMaterial3D
 var bridge_rail_material: StandardMaterial3D
 var open_lot_materials: Array[StandardMaterial3D] = []
+var outer_ground_material: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -77,6 +82,7 @@ func _ready() -> void:
 	rng.seed = map_seed
 	_generate_layout()
 	_build_materials()
+	_build_outer_city_backdrop()
 	_build_floor_collision()
 	_build_tiles()
 	_build_zoned_lots()
@@ -284,11 +290,73 @@ func _build_materials() -> void:
 			open_lot_materials.append(_texture_material(load(texture_path) as Texture2D))
 	if open_lot_materials.is_empty():
 		open_lot_materials.append(lot_material)
+	if ResourceLoader.exists(OUTER_GROUND_TEXTURE_PATH):
+		outer_ground_material = _texture_material(
+			load(OUTER_GROUND_TEXTURE_PATH) as Texture2D,
+			Color(0.62, 0.66, 0.66, 1.0)
+		)
+		outer_ground_material.texture_repeat = true
+		outer_ground_material.uv1_scale = Vector3(12.0, 12.0, 1.0)
 	vehicle_collision_material = _color_material(Color(1.0, 0.02, 0.02, 0.46))
 	vehicle_collision_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	vehicle_collision_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	vehicle_collision_material.no_depth_test = true
 	vehicle_collision_material.render_priority = 120
+
+
+func _build_outer_city_backdrop() -> void:
+	if outer_ground_material:
+		var outer_ground := MeshInstance3D.new()
+		outer_ground.name = "ApocalypseSeoulOuterGround"
+		outer_ground.position.y = -0.32
+		outer_ground.add_to_group("outer_city_ground")
+		outer_ground.set_meta("collision_free", true)
+		var ground_mesh := PlaneMesh.new()
+		ground_mesh.size = Vector2(OUTER_BACKDROP_SIZE, OUTER_BACKDROP_SIZE)
+		ground_mesh.material = outer_ground_material
+		outer_ground.mesh = ground_mesh
+		outer_ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(outer_ground)
+
+	if not ResourceLoader.exists(SEOUL_SKYLINE_TEXTURE_PATH):
+		return
+	var skyline_texture := load(SEOUL_SKYLINE_TEXTURE_PATH) as Texture2D
+	if skyline_texture == null:
+		return
+	# The fixed isometric camera sees north and west as the distant horizon. Three
+	# bands per edge keep every part of the 440 m boundary inside the fog range.
+	# Different texture focus points prevent N Seoul Tower from repeating.
+	var skyline_height := 76.0
+	var skyline_specs := [
+		{"name": "NorthWest", "position": Vector3(-180.0, skyline_height, -MAP_SIZE * 0.5 - 35.0), "focus_x": 1300.0},
+		{"name": "NorthCenter", "position": Vector3(0.0, skyline_height, -MAP_SIZE * 0.5 - 35.0), "focus_x": 580.0},
+		{"name": "NorthEast", "position": Vector3(180.0, skyline_height, -MAP_SIZE * 0.5 - 35.0), "focus_x": 1550.0},
+		{"name": "WestNorth", "position": Vector3(-MAP_SIZE * 0.5 - 35.0, skyline_height, -180.0), "focus_x": 1450.0},
+		{"name": "WestCenter", "position": Vector3(-MAP_SIZE * 0.5 - 35.0, skyline_height, 0.0), "focus_x": 1100.0},
+		{"name": "WestSouth", "position": Vector3(-MAP_SIZE * 0.5 - 35.0, skyline_height, 180.0), "focus_x": 1700.0},
+	]
+	for spec in skyline_specs:
+		var skyline := Sprite3D.new()
+		skyline.name = "ApocalypseSeoulSkyline%s" % str(spec["name"])
+		skyline.texture = skyline_texture
+		skyline.pixel_size = SKYLINE_WORLD_WIDTH / float(skyline_texture.get_width())
+		skyline.offset.x = skyline_texture.get_width() * 0.5 - float(spec["focus_x"])
+		skyline.position = spec["position"]
+		# The generated art is already a low horizon strip: normal scale preserves
+		# Seoul's mountain profile without turning distant blocks into a tall wall.
+		skyline.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		skyline.transparent = true
+		skyline.shaded = false
+		skyline.no_depth_test = false
+		skyline.modulate = Color(0.66, 0.72, 0.74, 0.62)
+		skyline.render_priority = -20
+		skyline.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		skyline.add_to_group("distant_city_backdrop")
+		skyline.set_meta("backdrop_kind", "apocalypse_seoul_skyline")
+		skyline.set_meta("collision_free", true)
+		skyline.set_meta("world_width", SKYLINE_WORLD_WIDTH)
+		skyline.set_meta("focus_x", float(spec["focus_x"]))
+		add_child(skyline)
 
 
 func _build_floor_collision() -> void:

@@ -126,7 +126,7 @@ directional_shadow_max_distance = 45.0
 projection = 1
 size = 17.5
 near = 0.1
-far = 100.0
+far = 1200.0
 current = true
 
 [node name="Rain" type="GPUParticles3D" parent="CameraRig"]
