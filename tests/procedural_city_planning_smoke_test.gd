@@ -57,6 +57,15 @@ func _run() -> void:
 		assert(definition["collision_boxes"].size() == 1)
 		assert(definition["collision_boxes"][0]["size"] == Vector2(8.0, 8.0))
 		assert(float(definition["collision_boxes"][0]["height"]) == 2.4)
+	for building_id in [
+		"gangnam_clinic_pharmacy_6x4_aligned",
+		"gangnam_food_alley_4x6_aligned",
+		"gangnam_damaged_officetel_6x6_aligned",
+	]:
+		var definition: Dictionary = building_catalog.get_definition(building_id)
+		assert(building_catalog.is_valid_definition(definition))
+		assert(ResourceLoader.exists(str(definition["texture_path"])))
+		_assert_isometric_footprint(definition)
 	var generated_lowrise_ids := {}
 	for seed in [1, 7, 42, 1337, 24681357]:
 		var city: Node3D = map_script.new()

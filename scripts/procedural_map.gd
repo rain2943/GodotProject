@@ -12,6 +12,7 @@ const SIDEWALK_WIDTH := 2.0 * WORLD_SCALE
 const ISOMETRIC_VERTICAL_PROJECTION := 0.816496580927726
 const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
 const LANDMARK_CATALOG := preload("res://scripts/urban_landmark_catalog.gd")
+const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
 const PARK_HIGH_RISE_BUFFER_CELLS := 2
 const PARK_MID_RISE_BUFFER_CELLS := 1
 const TARGET_PARK_COUNT := 2
@@ -20,6 +21,7 @@ const APARTMENT_HIGH_RISE_BUFFER_CELLS := 2
 const FAR_DEPTH_OPEN_CELL := Vector2i(GRID_SIZE - 1, GRID_SIZE - 1)
 const ROAD_SETBACK_MODULES := 2
 const INTERIOR_SETBACK_MODULES := 1
+const ROAD_VEHICLE_CHANCE := 0.34
 const ASPHALT_TEXTURE := preload("res://assets/tiles/asphalt.png")
 const CONCRETE_TEXTURE := preload("res://assets/tiles/concrete.png")
 const RIVER_TEXTURE_PATH := "res://assets/tiles/river_water_generated.png"
@@ -31,11 +33,6 @@ const OPEN_LOT_TEXTURE_PATHS := [
 	"res://assets/tiles/open_lot_demolition_generated.png",
 	"res://assets/tiles/open_lot_courtyard_generated.png",
 ]
-const VEHICLE_TEXTURES := {
-	"sedan": preload("res://assets/vehicles/wrecked_sedan.png"),
-	"truck": preload("res://assets/vehicles/wrecked_truck.png"),
-	"bus": preload("res://assets/vehicles/wrecked_bus.png"),
-}
 const SHELTER_CELL := Vector2i(1, 1)
 
 @export var map_seed: int = 0
@@ -355,7 +352,7 @@ func _build_road_cell(center: Vector3, vertical: bool, horizontal: bool) -> void
 		_add_lane_dash(center, true)
 	else:
 		_add_lane_dash(center, false)
-	if vertical != horizontal and rng.randf() < 0.2:
+	if vertical != horizontal and rng.randf() < ROAD_VEHICLE_CHANCE:
 		_spawn_road_cover_vehicle(center, vertical)
 
 
@@ -485,7 +482,7 @@ func _spawn_road_cover_vehicle(center: Vector3, vertical: bool) -> void:
 	var lane_offset := (3.0 if rng.randf() < 0.5 else -3.0) * WORLD_SCALE
 	var travel_offset := rng.randf_range(-2.2, 2.2) * WORLD_SCALE
 	var position := center + (Vector3(lane_offset, 0.1, travel_offset) if vertical else Vector3(travel_offset, 0.1, lane_offset))
-	_spawn_vehicle("RoadCover_%d_%d" % [roundi(center.x), roundi(center.z)], vehicle_type, position)
+	_spawn_vehicle("RoadCover_%d_%d" % [roundi(center.x), roundi(center.z)], vehicle_type, position, vertical)
 
 
 func _build_parking_lot(cell: Vector2i) -> void:
@@ -498,8 +495,16 @@ func _build_parking_lot(cell: Vector2i) -> void:
 		Vector3(2.45 * WORLD_SCALE, 0.1, -2.15 * WORLD_SCALE),
 		Vector3(2.45 * WORLD_SCALE, 0.1, 2.15 * WORLD_SCALE),
 	]
-	var slot: Vector3 = slots[rng.randi_range(0, slots.size() - 1)]
-	_spawn_vehicle("Parked_%d_%d" % [cell.x, cell.y], "sedan", center + slot)
+	slots.shuffle()
+	var vehicle_count := rng.randi_range(2, slots.size())
+	for slot_index in range(vehicle_count):
+		var vehicle_type := "truck" if rng.randf() < 0.16 else "sedan"
+		_spawn_vehicle(
+			"Parked_%d_%d_%d" % [cell.x, cell.y, slot_index],
+			vehicle_type,
+			center + slots[slot_index],
+			true
+		)
 
 
 func _build_open_lot(cell: Vector2i) -> void:
@@ -702,47 +707,58 @@ func _get_road_frontage(cell: Vector2i) -> PackedStringArray:
 	return frontage
 
 
-func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3) -> void:
-	var texture := VEHICLE_TEXTURES.get(vehicle_type) as Texture2D
+func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3, along_z: bool = false) -> void:
+	var definition := VEHICLE_CATALOG.get_definition(vehicle_type)
+	if definition.is_empty():
+		return
+	var texture := load(str(definition["texture_path"])) as Texture2D
 	if texture == null:
 		return
+	var footprint: Vector3 = definition["collision_size"]
+	var collision_size := Vector3(footprint.z, footprint.y, footprint.x) if along_z else footprint
 	var body := StaticBody3D.new()
 	body.name = node_name
 	body.position = position
 	body.collision_layer = 1
 	body.add_to_group("vehicle_obstacle")
+	body.set_meta("vehicle_type", vehicle_type)
+	body.set_meta("vehicle_axis", "z" if along_z else "x")
+	body.set_meta("collision_world_size", collision_size)
 	add_child(body)
 	var sprite := Sprite3D.new()
 	sprite.name = "VehicleSprite"
 	sprite.texture = texture
-	var width := 4.6 if vehicle_type == "sedan" else (6.2 if vehicle_type == "truck" else 7.8)
-	sprite.pixel_size = width / float(texture.get_width())
-	sprite.position.y = texture.get_height() * sprite.pixel_size * 0.5 / ISOMETRIC_VERTICAL_PROJECTION
+	var corners: Array = definition["footprint_corners_px"]
+	var base_pixel_width := absf((corners[2] as Vector2).x - (corners[0] as Vector2).x)
+	var projected_width := (footprint.x + footprint.z) / sqrt(2.0)
+	sprite.pixel_size = projected_width / base_pixel_width
+	var bottom_corner: Vector2 = corners[3]
+	var horizontal_offset := texture.get_width() * 0.5 - bottom_corner.x
+	sprite.offset.x = -horizontal_offset if along_z else horizontal_offset
+	sprite.flip_h = along_z
+	sprite.position = Vector3(
+		collision_size.x * 0.5,
+		(bottom_corner.y - texture.get_height() * 0.5) * sprite.pixel_size / ISOMETRIC_VERTICAL_PROJECTION - position.y,
+		collision_size.z * 0.5
+	)
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.transparent = true
 	sprite.shaded = false
 	sprite.no_depth_test = true
 	sprite.render_priority = 5
 	body.add_child(sprite)
-	var footprint := Vector3(3.9, 1.25, 1.8)
-	if vehicle_type == "truck":
-		footprint = Vector3(5.4, 1.8, 2.2)
-	elif vehicle_type == "bus":
-		footprint = Vector3(7.1, 2.2, 2.35)
 	var collision := CollisionShape3D.new()
 	collision.name = "VehicleCollision"
 	var shape := BoxShape3D.new()
-	shape.size = footprint
-	collision.position.y = footprint.y * 0.5 - position.y
-	collision.rotation.y = deg_to_rad(45.0)
+	shape.size = collision_size
+	collision.position.y = collision_size.y * 0.5 - position.y
 	collision.shape = shape
 	body.add_child(collision)
 	var debug_mesh := MeshInstance3D.new()
 	debug_mesh.name = "VehicleCollisionDebug"
 	debug_mesh.position = collision.position
-	debug_mesh.rotation = collision.rotation
 	var box := BoxMesh.new()
-	box.size = footprint + Vector3(0.03, 0.03, 0.03)
+	box.size = collision_size + Vector3(0.03, 0.03, 0.03)
 	box.material = vehicle_collision_material
 	debug_mesh.mesh = box
 	body.add_child(debug_mesh)

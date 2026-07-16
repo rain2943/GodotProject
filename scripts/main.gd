@@ -1488,6 +1488,7 @@ func _update_building_overlays() -> void:
 		overlay.position = camera.unproject_position(source.global_position)
 		overlay.scale = Vector2.ONE * source.pixel_size * screen_scale
 		overlay.offset = source.offset
+		overlay.flip_h = source.flip_h
 		overlay.modulate = source.modulate
 		overlay.z_index = OVERLAY_DEPTH_SORT.world_depth(vehicle.global_position)
 	var survivor_texture := survivor.sprite_frames.get_frame_texture(survivor.animation, survivor.frame)

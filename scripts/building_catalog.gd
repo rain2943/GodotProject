@@ -111,6 +111,51 @@ const DEFINITIONS := {
 		"occlusion_depth": 5.0,
 		"height_class": "low",
 		"density_weight": 3.5,
+	},
+	"gangnam_clinic_pharmacy_6x4_aligned": {
+		"node_name": "GangnamClinicPharmacy",
+		"texture_path": "res://assets/buildings/gangnam_clinic_pharmacy_6x4_aligned.png",
+		"footprint_modules": Vector2i(6, 4),
+		"height_world": 8.0,
+		"footprint_corners_px": [
+			Vector2(466, 795),
+			Vector2(829, 613),
+			Vector2(1065, 731),
+			Vector2(702, 913),
+		],
+		"occlusion_depth": 9.2,
+		"height_class": "mid",
+		"density_weight": 1.35,
+	},
+	"gangnam_food_alley_4x6_aligned": {
+		"node_name": "GangnamFoodAlley",
+		"texture_path": "res://assets/buildings/gangnam_food_alley_4x6_aligned.png",
+		"footprint_modules": Vector2i(4, 6),
+		"height_world": 5.4,
+		"footprint_corners_px": [
+			Vector2(122, 1093),
+			Vector2(620, 844),
+			Vector2(907, 988),
+			Vector2(409, 1237),
+		],
+		"occlusion_depth": 6.6,
+		"height_class": "low",
+		"density_weight": 2.8,
+	},
+	"gangnam_damaged_officetel_6x6_aligned": {
+		"node_name": "GangnamDamagedOfficetel",
+		"texture_path": "res://assets/buildings/gangnam_damaged_officetel_6x6_aligned.png",
+		"footprint_modules": Vector2i(6, 6),
+		"height_world": 13.0,
+		"footprint_corners_px": [
+			Vector2(279, 942),
+			Vector2(629, 767),
+			Vector2(975, 940),
+			Vector2(625, 1115),
+		],
+		"occlusion_depth": 13.8,
+		"height_class": "mid",
+		"density_weight": 0.65,
 	}
 }
 
