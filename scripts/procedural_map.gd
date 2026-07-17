@@ -43,8 +43,13 @@ const OPEN_LOT_TEXTURE_PATHS := [
 	"res://assets/tiles/open_lot_demolition_generated.png",
 	"res://assets/tiles/open_lot_courtyard_generated.png",
 ]
-const OUTER_GROUND_TEXTURE_PATH := "res://assets/backgrounds/apocalypse_seoul_outer_ground.png"
+const OUTER_GROUND_TEXTURE_PATH := "res://assets/backgrounds/apocalypse_seoul_outer_ground_v2.png"
+const PERIMETER_FENCE_STRIP_A_PATH := "res://assets/props/perimeter_fence_strip_v1.png"
+const PERIMETER_FENCE_STRIP_B_PATH := "res://assets/props/perimeter_fence_strip_b_v1.png"
+const PERIMETER_FENCE_CORNER_PATH := "res://assets/props/perimeter_fence_corner_v1.png"
 const OUTER_BACKDROP_SIZE := 1040.0
+const PERIMETER_FENCE_SEGMENTS_PER_EDGE := 4
+const PERIMETER_FENCE_WORLD_LENGTH := 132.0
 const SHELTER_CELL := Vector2i(1, 1)
 
 @export var map_seed: int = 0
@@ -93,6 +98,7 @@ func _ready() -> void:
 	_generate_layout()
 	_build_materials()
 	_build_outer_city_backdrop()
+	_build_perimeter_fences()
 	_build_floor_collision()
 	_build_tiles()
 	_build_zoned_lots()
@@ -148,6 +154,8 @@ func _generate_layout() -> void:
 		if building_cells.has(cell):
 			continue
 		if _has_building_within(cell, 1):
+			open_cells[cell] = true
+		elif _distance_to_cells(cell, subway_cells) <= 1:
 			open_cells[cell] = true
 		elif _touches_road(cell) and rng.randf() < 0.58:
 			parking_cells[cell] = true
@@ -211,6 +219,8 @@ func _pick_district_anchor(
 		if _distance_to_cells(cell, playground_cells) <= 3:
 			continue
 		if _distance_to_cells(cell, subway_cells) <= 1:
+			continue
+		if _distance_to_cells(cell, apartment_cells) <= APARTMENT_HIGH_RISE_BUFFER_CELLS:
 			continue
 		if not occupied.is_empty() and _distance_to_cells(cell, occupied) < DISTRICT_MIN_SEPARATION_CELLS:
 			continue
@@ -300,6 +310,10 @@ func _is_landmark_cell(cell: Vector2i) -> bool:
 
 func _is_apartment_cell(cell: Vector2i) -> bool:
 	return apartment_cells.has(cell)
+
+
+func _is_subway_vehicle_clearance_cell(cell: Vector2i) -> bool:
+	return _distance_to_cells(cell, subway_cells) <= 1
 
 
 func _block_distance(a: Vector2i, b: Vector2i) -> int:
@@ -408,6 +422,65 @@ func _build_outer_city_backdrop() -> void:
 	# billboards.
 
 
+func _build_perimeter_fences() -> void:
+	if not ResourceLoader.exists(PERIMETER_FENCE_STRIP_A_PATH) or not ResourceLoader.exists(PERIMETER_FENCE_STRIP_B_PATH):
+		return
+	var strip_a := load(PERIMETER_FENCE_STRIP_A_PATH) as Texture2D
+	var strip_b := load(PERIMETER_FENCE_STRIP_B_PATH) as Texture2D
+	var corner := load(PERIMETER_FENCE_CORNER_PATH) as Texture2D if ResourceLoader.exists(PERIMETER_FENCE_CORNER_PATH) else null
+	if strip_a == null or strip_b == null:
+		return
+	var edge := MAP_SIZE * 0.5 + 2.8
+	var step := MAP_SIZE / float(PERIMETER_FENCE_SEGMENTS_PER_EDGE)
+	var first := -MAP_SIZE * 0.5 + step * 0.5
+	for index in range(PERIMETER_FENCE_SEGMENTS_PER_EDGE):
+		var offset := first + step * index
+		_spawn_perimeter_fence_sprite("FenceNorth_%d" % index, strip_a, Vector3(offset, 4.8, -edge), false, false)
+		_spawn_perimeter_fence_sprite("FenceSouth_%d" % index, strip_a, Vector3(offset, 4.8, edge), true, false)
+		_spawn_perimeter_fence_sprite("FenceWest_%d" % index, strip_b, Vector3(-edge, 4.8, offset), false, false)
+		_spawn_perimeter_fence_sprite("FenceEast_%d" % index, strip_b, Vector3(edge, 4.8, offset), true, false)
+	if corner:
+		_spawn_perimeter_fence_sprite("FenceCornerNW", corner, Vector3(-edge, 4.8, -edge), false, false, 0.78)
+		_spawn_perimeter_fence_sprite("FenceCornerNE", corner, Vector3(edge, 4.8, -edge), true, false, 0.78)
+		_spawn_perimeter_fence_sprite("FenceCornerSW", corner, Vector3(-edge, 4.8, edge), false, true, 0.78)
+		_spawn_perimeter_fence_sprite("FenceCornerSE", corner, Vector3(edge, 4.8, edge), true, true, 0.78)
+	_add_perimeter_collision()
+
+
+func _spawn_perimeter_fence_sprite(
+	node_name: String,
+	texture: Texture2D,
+	position: Vector3,
+	flip_h: bool,
+	flip_v: bool,
+	scale_factor: float = 1.0
+) -> void:
+	var sprite := Sprite3D.new()
+	sprite.name = node_name
+	sprite.texture = texture
+	sprite.position = position
+	sprite.pixel_size = (PERIMETER_FENCE_WORLD_LENGTH * scale_factor) / float(texture.get_width())
+	sprite.offset.y = texture.get_height() * 0.22
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.transparent = true
+	sprite.shaded = false
+	sprite.no_depth_test = true
+	sprite.render_priority = 2
+	sprite.flip_h = flip_h
+	sprite.flip_v = flip_v
+	sprite.add_to_group("outer_perimeter_fence")
+	add_child(sprite)
+
+
+func _add_perimeter_collision() -> void:
+	var edge := MAP_SIZE * 0.5 + 1.4
+	var length := MAP_SIZE + 8.0
+	_add_static_collision_box("PerimeterNorthCollision", Vector3(0.0, 1.2, -edge), Vector3(length, 2.4, 2.8))
+	_add_static_collision_box("PerimeterSouthCollision", Vector3(0.0, 1.2, edge), Vector3(length, 2.4, 2.8))
+	_add_static_collision_box("PerimeterWestCollision", Vector3(-edge, 1.2, 0.0), Vector3(2.8, 2.4, length))
+	_add_static_collision_box("PerimeterEastCollision", Vector3(edge, 1.2, 0.0), Vector3(2.8, 2.4, length))
+
+
 func _build_floor_collision() -> void:
 	var body := StaticBody3D.new()
 	body.name = "MapFloor"
@@ -455,7 +528,7 @@ func _build_road_cell(cell: Vector2i, center: Vector3, vertical: bool, horizonta
 		_add_lane_dash(center, true)
 	else:
 		_add_lane_dash(center, false)
-	if vertical != horizontal:
+	if vertical != horizontal and not _is_subway_vehicle_clearance_cell(cell):
 		if district_signature_road_cells.get("luxury_core", Vector2i(-1, -1)) == cell:
 			_spawn_road_cover_vehicle(center, vertical, "luxury_core", true)
 		elif rng.randf() < ROAD_VEHICLE_CHANCE:
@@ -548,7 +621,7 @@ func _build_apartment_complex() -> void:
 	var center := Vector3(
 		_cell_center(gate_cell).x,
 		0.0,
-		-MAP_SIZE * 0.5 - footprint_depth * 0.5 + 10.0
+		-MAP_SIZE * 0.5 - footprint_depth * 0.5 + 22.0
 	)
 	var apartment := _spawn_landmark_at(center, "apartment_complex", "site_%d_%d" % [apartment_origin.x, apartment_origin.y])
 	if apartment == null:
@@ -563,7 +636,7 @@ func _build_apartment_complex() -> void:
 	apartment.set_meta("collision_world_size", Vector3(5.0 * CELL_SIZE, 8.0, footprint_depth))
 	apartment.set_meta("occlusion_lateral_limit", 46.0)
 	apartment.set_meta("occlusion_depth_limit", 92.0)
-	var gate_local_position := Vector3(0.0, 1.6, footprint_depth * 0.5 - 1.2)
+	var gate_local_position := Vector3(0.0, 1.6, footprint_depth * 0.5 - 0.8)
 	# The estate texture is intentionally much larger than the viewport. Anchor
 	# its screen visibility to the entrance so a remote tower corner cannot stay
 	# on screen after the actual destination has moved well outside the camera.
@@ -579,7 +652,7 @@ func _build_apartment_complex() -> void:
 	_add_apartment_portal_site(apartment, gate_local_position, Vector3(12.0, 3.2, 2.4))
 	_add_plane(
 		"ApartmentEntranceApron",
-		Vector3(center.x, 0.0, -MAP_SIZE * 0.5 + 18.0),
+		Vector3(center.x, 0.0, -MAP_SIZE * 0.5 + 28.0),
 		Vector2(12.0, 4.0),
 		asphalt_material,
 		0.055
@@ -605,19 +678,6 @@ func _add_apartment_portal_site(parent: Node3D, local_position: Vector3, size: V
 	collision.shape = shape
 	gate.add_child(collision)
 
-	var blocker := StaticBody3D.new()
-	blocker.name = "ApartmentEntranceBlocker"
-	blocker.position = local_position
-	blocker.collision_layer = 1
-	blocker.add_to_group("apartment_portal_blocker")
-	blocker.set_meta("future_portal", true)
-	blocker.set_meta("portal_ready", false)
-	parent.add_child(blocker)
-	var blocker_collision := CollisionShape3D.new()
-	var blocker_shape := BoxShape3D.new()
-	blocker_shape.size = size
-	blocker_collision.shape = blocker_shape
-	blocker.add_child(blocker_collision)
 
 
 func _build_waterfront_lot(cell: Vector2i) -> void:
@@ -645,6 +705,9 @@ func _spawn_road_cover_vehicle(center: Vector3, vertical: bool, district: String
 
 
 func _build_parking_lot(cell: Vector2i) -> void:
+	if _is_subway_vehicle_clearance_cell(cell):
+		_build_open_lot(cell)
+		return
 	var center := _cell_center(cell)
 	var lot_art_size := CELL_SIZE - 0.6 * WORLD_SCALE
 	_add_plane("ParkingLotArt", center, Vector2(lot_art_size, lot_art_size), parking_material, 0.045)

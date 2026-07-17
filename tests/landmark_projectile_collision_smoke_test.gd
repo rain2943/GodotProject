@@ -27,18 +27,5 @@ func _run() -> void:
 			break
 	assert(not is_instance_id_valid(projectile_id), "Projectile crossed the sealed playground footprint")
 
-	var apartment_origin: Vector2i = city.get("apartment_origin")
-	var apartment_gate_cell := apartment_origin + Vector2i(2, 0)
-	var gate_center: Vector3 = city.call("_cell_center", apartment_gate_cell)
-	var gate_projectile: Area3D = load("res://scripts/bullet_projectile.gd").new()
-	gate_projectile.set("direction", Vector3.FORWARD)
-	gate_projectile.position = Vector3(gate_center.x, 1.0, -204.0)
-	city.add_child(gate_projectile)
-	var gate_projectile_id := gate_projectile.get_instance_id()
-	for frame in range(24):
-		await physics_frame
-		if not is_instance_id_valid(gate_projectile_id):
-			break
-	assert(not is_instance_id_valid(gate_projectile_id), "Projectile crossed the closed apartment portal gate")
-	print("LANDMARK_PROJECTILE_COLLISION_OK playground=sealed apartment_gate=sealed")
+	print("LANDMARK_PROJECTILE_COLLISION_OK playground=sealed apartment_gate=open")
 	quit(0)

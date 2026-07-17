@@ -34,13 +34,13 @@ const DEFINITIONS := {
 	},
 	"apartment_complex": {
 		"node_name": "KoreanApartmentGateway",
-		"texture_path": "res://assets/landmarks/korean_apartment_gateway_36x32_aligned.png",
+		"texture_path": "res://assets/landmarks/korean_apartment_gateway_36x32_v2.png",
 		"footprint_modules": Vector2i(36, 32),
 		"footprint_corners_px": [
-			Vector2(60, 466),
-			Vector2(866, 63),
-			Vector2(1670, 631),
-			Vector2(390, 932),
+			Vector2(20, 566),
+			Vector2(768, 192),
+			Vector2(1516, 566),
+			Vector2(768, 940),
 		],
 		# A large estate continues beyond the north map edge. Only its closed
 		# frontage is reachable; the central gap is filled by a modular portal

@@ -96,7 +96,7 @@ func _run() -> void:
 		assert(get_nodes_in_group("urban_apartment_complex").size() == 1)
 		assert(get_nodes_in_group("apartment_gate").size() == 1)
 		assert(get_nodes_in_group("apartment_portal_site").size() == 1)
-		assert(get_nodes_in_group("apartment_portal_blocker").size() == 1)
+		assert(get_nodes_in_group("apartment_portal_blocker").is_empty())
 		assert(apartment_origin.y == 0)
 		assert(city.get("vertical_roads").has(apartment_origin.x + 2))
 		assert(float(city.call("get_map_limit")) > 210.0)
@@ -114,13 +114,8 @@ func _run() -> void:
 		assert(apartment.is_in_group("camera_occluder"))
 		var apartment_sprite := apartment.get_node("BuildingSprite") as Sprite3D
 		assert(apartment_sprite != null)
-		assert(apartment.get_meta("overlay_focus_local") == Vector3(0.0, 1.6, 30.8))
+		assert(apartment.get_meta("overlay_focus_local") == Vector3(0.0, 1.6, 31.2))
 		assert(apartment.get_meta("overlay_focus_fade_pixels") == Vector2(32.0, 150.0))
-		var blocker: StaticBody3D = get_nodes_in_group("apartment_portal_blocker")[0]
-		assert(blocker.collision_layer == 1)
-		var blocker_collision := blocker.get_child(0) as CollisionShape3D
-		var blocker_box := blocker_collision.shape as BoxShape3D
-		assert(blocker_box.size == Vector3(12.0, 3.2, 2.4))
 		var gate_cell: Vector2i = apartment_origin + Vector2i(2, 0)
 		var gate_x: float = (city.call("_cell_center", gate_cell) as Vector3).x
 		var query := PhysicsRayQueryParameters3D.create(
@@ -129,8 +124,7 @@ func _run() -> void:
 			1
 		)
 		var gate_hit := city.get_world_3d().direct_space_state.intersect_ray(query)
-		assert(not gate_hit.is_empty())
-		assert((gate_hit["collider"] as Node).is_in_group("apartment_portal_blocker"))
+		assert(gate_hit.is_empty())
 
 		var anchors: Dictionary = city.get("district_anchors")
 		var zones: Dictionary = city.get("cell_zones")
@@ -158,9 +152,11 @@ func _run() -> void:
 			assert((handcart as Node).get_node_or_null("HandcartCollision") != null)
 		var has_luxury_sedan := false
 		for vehicle in get_nodes_in_group("vehicle_obstacle"):
+			var vehicle_cell: Vector2i = city.call("world_to_map_cell", (vehicle as Node3D).global_position)
+			for subway_cell in subways:
+				assert(_block_distance(vehicle_cell, subway_cell) > 1)
 			if str((vehicle as Node).get_meta("vehicle_type")) == "luxury_sedan":
 				has_luxury_sedan = true
-				break
 		assert(has_luxury_sedan)
 
 		var low_count := 0

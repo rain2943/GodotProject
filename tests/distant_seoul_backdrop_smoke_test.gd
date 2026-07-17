@@ -27,6 +27,7 @@ func _run() -> void:
 
 	var skylines := get_nodes_in_group("distant_city_backdrop")
 	assert(skylines.is_empty())
+	assert(get_nodes_in_group("outer_perimeter_fence").size() == 20)
 	for child in city.get_children():
 		assert(not str(child.name).begins_with("ApocalypseSeoulSkyline"))
 
@@ -39,11 +40,19 @@ func _run() -> void:
 	var outside_hit := city.get_world_3d().direct_space_state.intersect_ray(outside_query)
 	assert(outside_hit.is_empty())
 
+	var perimeter_query := PhysicsRayQueryParameters3D.create(
+		Vector3(0.0, 4.0, -222.0),
+		Vector3(0.0, -1.0, -222.0),
+		1
+	)
+	var perimeter_hit := city.get_world_3d().direct_space_state.intersect_ray(perimeter_query)
+	assert(not perimeter_hit.is_empty())
+
 	var main_scene := load("res://scenes/main.tscn") as PackedScene
 	var main_instance := main_scene.instantiate()
 	var camera := main_instance.get_node("CameraRig/Camera3D") as Camera3D
 	assert(camera.far >= 1200.0)
 	main_instance.free()
 
-	print("DISTANT_SEOUL_BACKDROP_OK ground=1040 skyline_afterimages=0 collision=none")
+	print("DISTANT_SEOUL_BACKDROP_OK ground=1040 skyline_afterimages=0 fences=20")
 	quit(0)
