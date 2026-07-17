@@ -2265,6 +2265,13 @@ func _toggle_inventory() -> void:
 		inventory_ui.call("toggle")
 
 
+func _is_inventory_button_at(screen_position: Vector2) -> bool:
+	if inventory_ui == null or _is_inventory_open():
+		return false
+	var button := inventory_ui.get_node_or_null("InventoryButton") as Button
+	return button != null and button.visible and button.get_global_rect().has_point(screen_position)
+
+
 func _on_inventory_open_state_changed(is_open: bool) -> void:
 	if not DisplayServer.is_touchscreen_available():
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if is_open else Input.MOUSE_MODE_HIDDEN)
@@ -3987,10 +3994,15 @@ func _input(event: InputEvent) -> void:
 				tactical_map.call("toggle")
 			get_viewport().set_input_as_handled()
 			return
-		if key == KEY_I and key_event.pressed:
+		if key in [KEY_I, KEY_B] and key_event.pressed:
 			if _is_tactical_map_open():
 				tactical_map.call("close")
 			_toggle_inventory()
+			get_viewport().set_input_as_handled()
+			return
+		if key == KEY_ESCAPE and key_event.pressed and _is_inventory_open():
+			_toggle_inventory()
+			get_viewport().set_input_as_handled()
 			return
 		if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
 			return
@@ -4021,6 +4033,8 @@ func _input(event: InputEvent) -> void:
 		if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
 			return
 		var mouse_event := event as InputEventMouseButton
+		if _is_inventory_button_at(mouse_event.position):
+			return
 		if fire_button and fire_button.visible and fire_button.get_global_rect().has_point(mouse_event.position):
 			return
 		_handle_combat_mouse_button(mouse_event)
@@ -4029,6 +4043,8 @@ func _input(event: InputEvent) -> void:
 		if _is_inventory_open():
 			return
 		var touch := event as InputEventScreenTouch
+		if _is_inventory_button_at(touch.position):
+			return
 		if touch.pressed:
 			if has_ak and fire_button.visible and fire_button.get_global_rect().has_point(touch.position):
 				fire_touch_id = touch.index

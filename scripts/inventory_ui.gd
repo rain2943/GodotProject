@@ -25,9 +25,10 @@ var weapon_detail_open := false
 
 var modal: Control
 var open_button: Button
+var inventory_panel: Control
+var weapon_panel: Control
 var equipped_grid: GridContainer
 var bag_grid: GridContainer
-var loot_grid: GridContainer
 var quickbar: HBoxContainer
 var weapon_title: Label
 var weapon_stats: Label
@@ -102,6 +103,8 @@ func toggle() -> void:
 
 func set_open(value: bool) -> void:
 	opened = value
+	if opened:
+		weapon_detail_open = false
 	if modal:
 		modal.visible = opened
 	if open_button:
@@ -119,7 +122,10 @@ func _build_open_button() -> void:
 	open_button = Button.new()
 	open_button.name = "InventoryButton"
 	open_button.text = "가방"
+	open_button.tooltip_text = "가방 열기  [I / B]"
 	open_button.focus_mode = Control.FOCUS_NONE
+	open_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	open_button.z_index = 50
 	open_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	open_button.offset_left = -94
 	open_button.offset_top = 112
@@ -137,6 +143,7 @@ func _build_modal() -> void:
 	modal.name = "InventoryModal"
 	modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	modal.mouse_filter = Control.MOUSE_FILTER_STOP
+	modal.z_index = 60
 	add_child(modal)
 
 	var dim := ColorRect.new()
@@ -148,21 +155,42 @@ func _build_modal() -> void:
 	var root := HBoxContainer.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.offset_left = 38
-	root.offset_top = 30
+	root.offset_top = 58
 	root.offset_right = -38
-	root.offset_bottom = -36
-	root.add_theme_constant_override("separation", 22)
+	root.offset_bottom = -106
+	root.add_theme_constant_override("separation", 18)
 	modal.add_child(root)
 
-	root.add_child(_build_inventory_panel())
-	root.add_child(_build_weapon_panel())
-	root.add_child(_build_loot_panel())
+	inventory_panel = _build_inventory_panel()
+	weapon_panel = _build_weapon_panel()
+	root.add_child(inventory_panel)
+	root.add_child(weapon_panel)
+	weapon_panel.visible = false
+
+	var close_button := Button.new()
+	close_button.name = "CloseButton"
+	close_button.text = "닫기"
+	close_button.tooltip_text = "가방 닫기  [Esc]"
+	close_button.focus_mode = Control.FOCUS_NONE
+	close_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	close_button.offset_left = -112
+	close_button.offset_top = 10
+	close_button.offset_right = -50
+	close_button.offset_bottom = 48
+	close_button.z_index = 100
+	_apply_button_font(close_button, 14)
+	close_button.add_theme_stylebox_override("normal", _panel_style(Color(0.08, 0.09, 0.095, 0.96), Color("#9ca9a4"), 6))
+	close_button.add_theme_stylebox_override("hover", _panel_style(Color(0.14, 0.075, 0.06, 0.98), Color("#e4b876"), 6))
+	close_button.pressed.connect(func() -> void: set_open(false))
+	modal.add_child(close_button)
 	_build_quickbar()
 
 
 func _build_inventory_panel() -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(430, 620)
+	panel.custom_minimum_size = Vector2(470, 620)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.size_flags_stretch_ratio = 0.82
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.085, 0.096, 0.105, 0.82), Color(0.78, 0.82, 0.82, 0.42), 10))
 	var margin := _margin(14, 14, 14, 16)
@@ -173,11 +201,18 @@ func _build_inventory_panel() -> Control:
 
 	var top := HBoxContainer.new()
 	box.add_child(top)
-	top.add_child(_label("인벤토리", 22, Color("#f0e8d0")))
+	var inventory_title := _label("인벤토리", 22, Color("#f0e8d0"))
+	inventory_title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	inventory_title.custom_minimum_size.x = 150
+	top.add_child(inventory_title)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(spacer)
-	top.add_child(_label("고철 %d" % GameState.scrap, 18, Color("#f0d889")))
+	var scrap_label := _label("고철 %d" % GameState.scrap, 18, Color("#f0d889"))
+	scrap_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	scrap_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	scrap_label.custom_minimum_size.x = 130
+	top.add_child(scrap_label)
 
 	box.add_child(_section("장비"))
 	equipped_grid = GridContainer.new()
@@ -213,8 +248,9 @@ func _build_inventory_panel() -> Control:
 
 func _build_weapon_panel() -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(520, 620)
+	panel.custom_minimum_size = Vector2(600, 620)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.size_flags_stretch_ratio = 1.18
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.036, 0.044, 0.05, 0.74), Color(0.86, 0.92, 0.86, 0.32), 10))
 	var margin := _margin(20, 18, 20, 18)
@@ -223,8 +259,22 @@ func _build_weapon_panel() -> Control:
 	box.add_theme_constant_override("separation", 12)
 	margin.add_child(box)
 
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 12)
+	box.add_child(title_row)
 	weapon_title = _label("무기 상세", 26, Color("#f0e8cf"))
-	box.add_child(weapon_title)
+	weapon_title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	weapon_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(weapon_title)
+	var detail_close := Button.new()
+	detail_close.text = "상세 닫기"
+	detail_close.focus_mode = Control.FOCUS_NONE
+	detail_close.custom_minimum_size = Vector2(86, 38)
+	_apply_button_font(detail_close, 13)
+	detail_close.add_theme_stylebox_override("normal", _panel_style(Color(0.07, 0.08, 0.085, 0.92), Color("#8fa69d"), 6))
+	detail_close.add_theme_stylebox_override("hover", _panel_style(Color(0.12, 0.095, 0.055, 0.96), Color("#d9c579"), 6))
+	detail_close.pressed.connect(_hide_weapon_detail)
+	title_row.add_child(detail_close)
 
 	var preview := HBoxContainer.new()
 	preview.add_theme_constant_override("separation", 18)
@@ -256,24 +306,6 @@ func _build_weapon_panel() -> Control:
 	return panel
 
 
-func _build_loot_panel() -> Control:
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(360, 260)
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.085, 0.096, 0.105, 0.78), Color(0.78, 0.82, 0.82, 0.36), 10))
-	var margin := _margin(14, 14, 14, 14)
-	panel.add_child(margin)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 10)
-	margin.add_child(box)
-	box.add_child(_label("전리품", 28, Color("#f0e8cf")))
-	loot_grid = GridContainer.new()
-	loot_grid.columns = 5
-	loot_grid.add_theme_constant_override("h_separation", 8)
-	loot_grid.add_theme_constant_override("v_separation", 8)
-	box.add_child(loot_grid)
-	return panel
-
-
 func _build_quickbar() -> void:
 	quickbar = HBoxContainer.new()
 	quickbar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -290,7 +322,6 @@ func _refresh_contents() -> void:
 		return
 	_clear(equipped_grid)
 	_clear(bag_grid)
-	_clear(loot_grid)
 	_clear(quickbar)
 	_clear(mod_slot_grid)
 	_clear(mod_inventory_list)
@@ -318,12 +349,6 @@ func _refresh_contents() -> void:
 	for index in range(18):
 		bag_grid.add_child(_empty_slot())
 
-	loot_grid.add_child(_item_button("고철", "%d" % GameState.scrap, "재화", null, true))
-	loot_grid.add_child(_item_button("피로", "%d%%" % roundi(fatigue_state), "상태", null, fatigue_state > 0.0))
-	loot_grid.add_child(_item_button("구출 주민", "%d" % rescued_workers_state, "쉘터", null, rescued_workers_state > 0))
-	for index in range(7):
-		loot_grid.add_child(_empty_slot())
-
 	for index in range(6):
 		var text := ""
 		match index:
@@ -341,12 +366,25 @@ func _refresh_contents() -> void:
 
 	var load := 6.3 + float(reserve_state) * 0.015 + float(canned_food_state) * 0.35 + float(stored_weapons_state) * 3.2
 	weight_label.text = "%.1f / 49kg" % load
-	_refresh_weapon_detail()
+	if weapon_panel:
+		weapon_panel.visible = weapon_detail_open and has_weapon_state
+	if weapon_detail_open and has_weapon_state:
+		_refresh_weapon_detail()
 
 
 func _show_weapon_detail() -> void:
+	if not has_weapon_state:
+		return
 	weapon_detail_open = true
+	if weapon_panel:
+		weapon_panel.visible = true
 	_refresh_weapon_detail()
+
+
+func _hide_weapon_detail() -> void:
+	weapon_detail_open = false
+	if weapon_panel:
+		weapon_panel.visible = false
 
 
 func _refresh_weapon_detail() -> void:
@@ -390,9 +428,7 @@ func _build_mod_slot_button(slot: String) -> Button:
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	if not installed.is_empty():
 		button.pressed.connect(func() -> void:
-			GameState.equipped_weapon_mods.erase(installed)
-			weapon_mods_changed.emit()
-			_refresh_contents()
+			_unequip_mod(installed)
 		)
 	return button
 
@@ -400,26 +436,32 @@ func _build_mod_slot_button(slot: String) -> Button:
 func _build_mod_install_button(mod_id: String) -> Button:
 	var definition := WEAPON_SYSTEM.get_mod(mod_id)
 	var slot := str(definition.get("slot", ""))
+	var installed := _get_mod_in_slot(slot)
 	var cost: Dictionary = MOD_COMPONENTS[mod_id]
 	var component_id := str(cost["component"])
 	var available := GameState.get_mod_component_count(component_id)
-	var can_install := _can_install_mod(mod_id)
-	var text := "%s\n%s 슬롯  |  %s %d/%d  |  고철 %d" % [
+	var is_installed := installed == mod_id
+	var can_install := is_installed or _can_install_mod(mod_id)
+	var action_text := "장착 중 · 클릭: 해제" if is_installed else ("클릭: 교체" if not installed.is_empty() else "클릭: 제작 및 장착")
+	var text := "%s\n%s 슬롯  |  %s 보유 %d / 필요 %d\n%s" % [
 		_mod_name(mod_id),
 		_slot_name(slot),
 		_component_name(component_id),
 		available,
 		int(cost["amount"]),
-		int(cost["scrap"]),
+		action_text,
 	]
-	var button := _tile_button(text, can_install)
-	button.custom_minimum_size = Vector2(430, 66)
+	var button := _tile_button(text, is_installed or can_install)
+	button.custom_minimum_size = Vector2(500, 82)
 	button.icon = component_textures.get(component_id) as Texture2D
 	button.expand_icon = true
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.disabled = not can_install
 	button.pressed.connect(func() -> void:
-		_install_mod(mod_id)
+		if is_installed:
+			_unequip_mod(mod_id)
+		else:
+			_install_mod(mod_id)
 	)
 	return button
 
@@ -435,26 +477,47 @@ func _can_install_mod(mod_id: String) -> bool:
 	var component_id := str(cost["component"])
 	var next_mods: Array[String] = []
 	next_mods.assign(GameState.equipped_weapon_mods)
+	var currently_installed := _get_mod_in_slot(slot)
+	if not currently_installed.is_empty():
+		next_mods.erase(currently_installed)
 	next_mods.append(mod_id)
 	return (
-		_get_mod_in_slot(slot).is_empty()
-		and WEAPON_SYSTEM.validate_mod_loadout(next_mods, GameState.equipped_weapon_id)
+		WEAPON_SYSTEM.validate_mod_loadout(next_mods, GameState.equipped_weapon_id)
 		and not (slot == "special" and GameState.shelter_workbench_level < 5)
 		and GameState.get_mod_component_count(component_id) >= int(cost["amount"])
-		and GameState.scrap >= int(cost["scrap"])
 	)
 
 
 func _install_mod(mod_id: String) -> void:
 	if not _can_install_mod(mod_id):
 		return
+	var definition := WEAPON_SYSTEM.get_mod(mod_id)
+	var slot := str(definition.get("slot", ""))
+	var currently_installed := _get_mod_in_slot(slot)
 	var cost: Dictionary = MOD_COMPONENTS[mod_id]
 	var component_id := str(cost["component"])
 	GameState.mod_component_inventory[component_id] = GameState.get_mod_component_count(component_id) - int(cost["amount"])
-	GameState.scrap -= int(cost["scrap"])
+	if not currently_installed.is_empty():
+		_return_mod_component(currently_installed)
+		GameState.equipped_weapon_mods.erase(currently_installed)
 	GameState.equipped_weapon_mods.append(mod_id)
 	weapon_mods_changed.emit()
 	_refresh_contents()
+
+
+func _unequip_mod(mod_id: String) -> void:
+	_return_mod_component(mod_id)
+	GameState.equipped_weapon_mods.erase(mod_id)
+	weapon_mods_changed.emit()
+	_refresh_contents()
+
+
+func _return_mod_component(mod_id: String) -> void:
+	if not MOD_COMPONENTS.has(mod_id):
+		return
+	var cost: Dictionary = MOD_COMPONENTS[mod_id]
+	var component_id := str(cost["component"])
+	GameState.add_mod_component(component_id, int(cost["amount"]))
 
 
 func _get_mod_in_slot(slot: String) -> String:

@@ -40,6 +40,8 @@ const RANGED_VISION_RANGE := 13.0
 const VISION_RANGE_THREAT_BONUS := 5.5
 const VISION_HALF_ANGLE_DEGREES := 55.0
 const VISION_FAN_SEGMENTS := 28
+const COMBAT_MEMORY_BASE := 16.0
+const COMBAT_MEMORY_THREAT_BONUS := 14.0
 
 var enemy_kind := "melee"
 var target: CharacterBody3D
@@ -268,10 +270,16 @@ func _physics_process(delta: float) -> void:
 	var distance := offset.length()
 	var vision_range := _get_vision_range()
 	_update_vision_fan(vision_range)
-	var can_see_target := _is_position_inside_vision_fan(target.global_position, vision_range) and _has_line_of_sight()
-	if can_see_target:
+	var has_line_of_sight := _has_line_of_sight()
+	var detected_in_fan := _is_position_inside_vision_fan(target.global_position, vision_range) and has_line_of_sight
+	var has_combat_contact := (
+		visual_contact_confirmed
+		and has_line_of_sight
+		and distance <= _get_weapon_engagement_range()
+	)
+	if detected_in_fan or has_combat_contact:
 		last_known_position = target.global_position
-		pursuit_time = lerpf(4.5, 12.0, threat_level)
+		pursuit_time = COMBAT_MEMORY_BASE + COMBAT_MEMORY_THREAT_BONUS * threat_level
 		if not visual_contact_confirmed:
 			_become_alerted()
 	elif alerted and pursuit_time > 0.0:
@@ -374,7 +382,7 @@ func _update_vision_fan(radius: float, force_rebuild: bool = false) -> void:
 func _update_vision_fan_visual() -> void:
 	if vision_fan == null or vision_fan_material == null:
 		return
-	vision_fan.visible = not dying and player_visibility_factor > 0.01
+	vision_fan.visible = not dying and not visual_contact_confirmed and player_visibility_factor > 0.01
 	var alpha := (0.24 if alerted else 0.13) * player_visibility_factor
 	vision_fan_material.albedo_color = Color(1.0, 0.055, 0.035, alpha)
 
@@ -968,22 +976,19 @@ func _update_pistol(direction: Vector3, distance: float, delta: float) -> void:
 		_start_reload()
 		return
 	var movement_speed := PISTOL_SPEED * lerpf(1.12, 1.48, threat_level)
-	var preferred_min := 5.2
-	var preferred_max := 10.5
-	var attack_range := 14.5
+	var preferred_min := 8.0
+	var preferred_max := 17.0
+	var attack_range := _get_weapon_engagement_range()
 	match weapon_id:
 		"mp5":
-			preferred_min = 5.5
-			preferred_max = 11.5
-			attack_range = 15.5
+			preferred_min = 10.0
+			preferred_max = 22.0
 		"ak47":
-			preferred_min = 7.0
-			preferred_max = 13.5
-			attack_range = 18.0
+			preferred_min = 15.0
+			preferred_max = 30.0
 		"double_barrel":
-			preferred_min = 2.8
-			preferred_max = 6.8
-			attack_range = 8.5
+			preferred_min = 4.0
+			preferred_max = 9.0
 	strafe_switch_time = maxf(0.0, strafe_switch_time - delta)
 	if distance > preferred_max:
 		velocity = _steer_around_obstacles(direction) * movement_speed
@@ -1004,6 +1009,18 @@ func _update_pistol(direction: Vector3, distance: float, delta: float) -> void:
 		_set_motion_state("attack")
 		_fire_weapon(direction)
 		_start_recoil_pose()
+
+
+func _get_weapon_engagement_range() -> float:
+	match weapon_id:
+		"mp5":
+			return 30.0
+		"ak47":
+			return 38.0
+		"double_barrel":
+			return 12.0
+		_:
+			return 24.0
 
 
 func _update_combat_state(delta: float) -> void:
