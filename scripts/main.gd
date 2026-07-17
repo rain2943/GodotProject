@@ -316,7 +316,6 @@ func _ready() -> void:
 	_update_enemy_visibility()
 	_set_facing("s")
 	var world := $World as ProceduralCityMap
-	world.shelter_portal_entered.connect(_on_shelter_portal_entered)
 	if GameState.returning_from_shelter:
 		player.position = world.get_shelter_exit_position()
 		GameState.returning_from_shelter = false
@@ -3769,12 +3768,6 @@ func _save_run_state() -> void:
 	GameState.weapon_durability = weapon_durability
 	GameState.equipped_weapon_mods.assign(equipped_weapon_mods)
 	GameState.fatigue = fatigue
-
-
-func _on_shelter_portal_entered() -> void:
-	_commit_rescued_followers()
-	_save_run_state()
-	get_tree().call_deferred("change_scene_to_file", "res://scenes/shelter_interior.tscn")
 
 
 func _input(event: InputEvent) -> void:

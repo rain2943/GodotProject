@@ -1,8 +1,6 @@
 class_name ProceduralCityMap
 extends Node3D
 
-signal shelter_portal_entered
-
 const GRID_SIZE := 22
 const WORLD_SCALE := 2.0
 const BASE_CELL_SIZE := 10.0
@@ -36,7 +34,6 @@ const ASPHALT_TEXTURE := preload("res://assets/tiles/asphalt.png")
 const CONCRETE_TEXTURE := preload("res://assets/tiles/concrete.png")
 const RIVER_TEXTURE_PATH := "res://assets/tiles/river_water_generated.png"
 const PARKING_TEXTURE_PATH := "res://assets/tiles/parking_lot_generated.png"
-const SHELTER_TEXTURE_PATH := "res://assets/buildings/shelter_exterior_generated.png"
 const BRIDGE_DECK_TEXTURE_PATH := "res://assets/tiles/bridge_deck_generated.png"
 const GUARDRAIL_TEXTURE_PATH := "res://assets/tiles/guardrail_metal_generated.png"
 const OPEN_LOT_TEXTURE_PATHS := [
@@ -51,7 +48,7 @@ const OUTER_BACKDROP_SIZE := 1040.0
 const PERIMETER_FENCE_SEGMENTS_PER_EDGE := 4
 const PERIMETER_FENCE_WORLD_LENGTH := 132.0
 const PERIMETER_FENCE_VISUAL_OUTSET := 8.0
-const SHELTER_CELL := Vector2i(1, 1)
+const FIELD_RETURN_CELL := Vector2i(2, 2)
 
 @export var map_seed: int = 0
 
@@ -73,7 +70,6 @@ var cell_zones := {}
 var building_type_by_cell := {}
 var district_anchors := {}
 var district_signature_road_cells := {}
-var portal_locked := false
 
 var asphalt_material: StandardMaterial3D
 var lot_material: StandardMaterial3D
@@ -103,7 +99,6 @@ func _ready() -> void:
 	_build_floor_collision()
 	_build_tiles()
 	_build_zoned_lots()
-	_build_shelter()
 
 
 func _generate_layout() -> void:
@@ -121,7 +116,7 @@ func _generate_layout() -> void:
 	for x in range(GRID_SIZE):
 		for z in range(GRID_SIZE):
 			var cell := Vector2i(x, z)
-			if cell == SHELTER_CELL or _is_apartment_cell(cell) or _is_road_cell(cell) or _is_river_cell(cell):
+			if _is_apartment_cell(cell) or _is_road_cell(cell) or _is_river_cell(cell):
 				continue
 			if _is_waterfront_cell(cell):
 				waterfront_cells[cell] = true
@@ -215,8 +210,6 @@ func _pick_district_anchor(
 	for cell in eligible_cells:
 		if _is_landmark_cell(cell) or not _touches_road(cell):
 			continue
-		if _block_distance(cell, SHELTER_CELL) < 4:
-			continue
 		if _distance_to_cells(cell, playground_cells) <= 3:
 			continue
 		if _distance_to_cells(cell, subway_cells) <= 1:
@@ -285,7 +278,7 @@ func _select_planned_landmarks(eligible_cells: Array[Vector2i]) -> void:
 	for cell in shuffled:
 		if playground_cells.size() >= TARGET_PLAYGROUND_COUNT:
 			break
-		if not _touches_road(cell) or _block_distance(cell, SHELTER_CELL) < 3:
+		if not _touches_road(cell):
 			continue
 		if _distance_to_cells(cell, playground_cells) < 5:
 			continue
@@ -1095,66 +1088,10 @@ func _spawn_vehicle(node_name: String, vehicle_type: String, position: Vector3, 
 	body.add_child(debug_mesh)
 
 
-func _build_shelter() -> void:
-	var center := _cell_center(SHELTER_CELL)
-	var shelter := StaticBody3D.new()
-	shelter.name = "ShelterSafehouse"
-	shelter.position = center
-	shelter.collision_layer = 1
-	shelter.add_to_group("safe_zone")
-	shelter.add_to_group("camera_occluder")
-	add_child(shelter)
-	if ResourceLoader.exists(SHELTER_TEXTURE_PATH):
-		var sprite := Sprite3D.new()
-		sprite.name = "BuildingSprite"
-		sprite.texture = load(SHELTER_TEXTURE_PATH) as Texture2D
-		sprite.pixel_size = 0.0088 * WORLD_SCALE
-		sprite.position.y = 4.3 * WORLD_SCALE
-		sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		sprite.transparent = true
-		sprite.shaded = false
-		sprite.no_depth_test = true
-		sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		shelter.add_child(sprite)
-	var shelter_collision := CollisionShape3D.new()
-	shelter_collision.name = "ShelterCollision"
-	var shelter_shape := BoxShape3D.new()
-	shelter_shape.size = Vector3(6.0, 4.2, 6.0) * WORLD_SCALE
-	shelter_collision.position.y = 2.1 * WORLD_SCALE
-	shelter_collision.shape = shelter_shape
-	shelter.add_child(shelter_collision)
-	shelter.set_meta("collision_world_size", shelter_shape.size)
-	shelter.set_meta("occlusion_lateral_limit", 5.0 * WORLD_SCALE)
-	shelter.set_meta("occlusion_depth_limit", 9.0 * WORLD_SCALE)
-	var light := OmniLight3D.new()
-	light.position = Vector3(3.4, 1.2, 0) * WORLD_SCALE
-	light.light_color = Color("#5dffb2")
-	light.light_energy = 2.0
-	light.omni_range = 6.0 * WORLD_SCALE
-	shelter.add_child(light)
-	var portal := Area3D.new()
-	portal.name = "ShelterPortal"
-	portal.position = Vector3(3.6, 0.9, 0) * WORLD_SCALE
-	portal.collision_layer = 0
-	portal.collision_mask = 1
-	shelter.add_child(portal)
-	var collision := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(1.8, 1.8, 2.2) * WORLD_SCALE
-	collision.shape = shape
-	portal.add_child(collision)
-	portal.body_entered.connect(_on_shelter_portal_body_entered)
-
-
-func _on_shelter_portal_body_entered(body: Node3D) -> void:
-	if portal_locked or body.name != "Player":
-		return
-	portal_locked = true
-	shelter_portal_entered.emit()
-
-
 func get_shelter_exit_position() -> Vector3:
-	return _cell_center(SHELTER_CELL) + Vector3(6.2 * WORLD_SCALE, 0.78, 0)
+	var result := _cell_center(FIELD_RETURN_CELL)
+	result.y = 0.78
+	return find_nearest_open_position(result)
 
 
 func get_map_limit() -> float:
@@ -1173,7 +1110,7 @@ func get_extraction_position() -> Vector3:
 				mini(candidate.x, GRID_SIZE - 1 - candidate.x),
 				mini(candidate.y, GRID_SIZE - 1 - candidate.y)
 			)
-			var score := float(_block_distance(candidate, SHELTER_CELL)) + float(edge_margin) * 0.12
+			var score := float(_block_distance(candidate, FIELD_RETURN_CELL)) + float(edge_margin) * 0.12
 			if score > best_score:
 				best_score = score
 				best_cell = candidate
@@ -1189,7 +1126,7 @@ func get_map_snapshot_data() -> Dictionary:
 		"horizontal_roads": horizontal_roads.duplicate(),
 		"river_columns": river_columns.duplicate(),
 		"building_cells": building_cells.keys(),
-		"shelter_cell": SHELTER_CELL,
+		"field_return_cell": FIELD_RETURN_CELL,
 	}
 
 
@@ -1198,8 +1135,7 @@ func world_to_map_cell(world_position: Vector3) -> Vector2i:
 
 
 func is_position_in_safe_zone(world_position: Vector3) -> bool:
-	var shelter_center := _cell_center(SHELTER_CELL)
-	return Vector2(world_position.x, world_position.z).distance_to(Vector2(shelter_center.x, shelter_center.z)) <= 6.0 * WORLD_SCALE
+	return false
 
 
 func find_nearest_open_position(world_position: Vector3) -> Vector3:
