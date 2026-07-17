@@ -5,8 +5,8 @@ const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png
 const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
 const BED_TEXTURE_PATH := "res://assets/interiors/shelter_bed_module_v2.png"
 const PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
-const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_wall_v2.png"
-const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_wall_v2.png"
+const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_wall_aligned_v1.png"
+const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_wall_aligned_v1.png"
 
 
 func _initialize() -> void:
@@ -68,10 +68,16 @@ func _run() -> void:
 		assert(shape.size == Vector3(2.35, 0.9, 2.95))
 		assert((bed as Node).get_node("GroundShadow") is MeshInstance3D)
 	var workbench := get_nodes_in_group("shelter_workbench")[0] as Node
-	assert((workbench.get_node("WorkbenchSprite") as Sprite3D).texture.resource_path == WORKBENCH_TEXTURE_PATH)
+	var workbench_sprite := workbench.get_node("WorkbenchSprite") as Sprite3D
+	assert(workbench_sprite.texture.resource_path == WORKBENCH_TEXTURE_PATH)
+	assert(workbench_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
+	assert(not workbench_sprite.no_depth_test)
 	assert(workbench.has_method("interact"))
 	var bank := get_nodes_in_group("scratcher_bank")[0] as Node
-	assert((bank.get_node("BankSprite") as Sprite3D).texture.resource_path == SCRATCHER_BANK_TEXTURE_PATH)
+	var bank_sprite := bank.get_node("BankSprite") as Sprite3D
+	assert(bank_sprite.texture.resource_path == SCRATCHER_BANK_TEXTURE_PATH)
+	assert(bank_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
+	assert(not bank_sprite.no_depth_test)
 	assert(bank.has_method("interact"))
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)
