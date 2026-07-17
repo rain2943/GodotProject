@@ -13,9 +13,9 @@ const ISOMETRIC_VERTICAL_PROJECTION := 0.816496580927726
 const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
 const LANDMARK_CATALOG := preload("res://scripts/urban_landmark_catalog.gd")
 const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
-const PARK_HIGH_RISE_BUFFER_CELLS := 2
-const PARK_MID_RISE_BUFFER_CELLS := 1
-const TARGET_PARK_COUNT := 2
+const OPEN_SPACE_HIGH_RISE_BUFFER_CELLS := 2
+const OPEN_SPACE_MID_RISE_BUFFER_CELLS := 1
+const TARGET_PLAYGROUND_COUNT := 2
 const TARGET_SUBWAY_COUNT := 2
 const APARTMENT_HIGH_RISE_BUFFER_CELLS := 2
 const FAR_DEPTH_OPEN_CELL := Vector2i(GRID_SIZE - 1, GRID_SIZE - 1)
@@ -122,7 +122,7 @@ func _generate_layout() -> void:
 			"business_corner": 0.58,
 			"street_mixed": 0.48,
 			"residential_buffer": 0.32,
-			"park_edge": 0.24,
+			"open_space_edge": 0.24,
 			"service_interior": 0.34,
 		}.get(zone, 0.42))
 		if rng.randf() < building_chance:
@@ -142,8 +142,8 @@ func _generate_layout() -> void:
 func _assign_zoning_districts(eligible_cells: Array[Vector2i]) -> void:
 	for cell in eligible_cells:
 		var zone := "service_interior"
-		if _distance_to_cells(cell, park_cells) <= 1:
-			zone = "park_edge"
+		if _distance_to_cells(cell, playground_cells) <= 1:
+			zone = "open_space_edge"
 		elif _distance_to_cells(cell, apartment_cells) <= 2:
 			zone = "residential_buffer"
 		elif _is_near_road_intersection(cell, 1):
@@ -176,27 +176,16 @@ func _select_apartment_complex_site() -> void:
 func _select_planned_landmarks(eligible_cells: Array[Vector2i]) -> void:
 	var shuffled := eligible_cells.duplicate()
 	shuffled.shuffle()
-	for require_intersection_access in [true, false]:
-		for cell in shuffled:
-			if park_cells.size() >= TARGET_PARK_COUNT:
-				break
-			if not _touches_road(cell) or _block_distance(cell, SHELTER_CELL) < 3:
-				continue
-			if _distance_to_cells(cell, park_cells) < 5:
-				continue
-			if require_intersection_access and not _is_near_road_intersection(cell, 2):
-				continue
-			park_cells.append(cell)
-		if park_cells.size() >= TARGET_PARK_COUNT:
+	for cell in shuffled:
+		if playground_cells.size() >= TARGET_PLAYGROUND_COUNT:
 			break
-
-	for park_cell in park_cells:
-		var playground_candidates := shuffled.filter(func(candidate: Vector2i) -> bool:
-			var distance := _block_distance(candidate, park_cell)
-			return distance >= 1 and distance <= 2 and _touches_road(candidate) and not _is_landmark_cell(candidate)
-		)
-		if not playground_candidates.is_empty():
-			playground_cells.append(playground_candidates[0])
+		if not _touches_road(cell) or _block_distance(cell, SHELTER_CELL) < 3:
+			continue
+		if _distance_to_cells(cell, playground_cells) < 5:
+			continue
+		if not _is_near_road_intersection(cell, 2):
+			continue
+		playground_cells.append(cell)
 
 	for cell in shuffled:
 		if subway_cells.size() >= TARGET_SUBWAY_COUNT:
@@ -205,13 +194,13 @@ func _select_planned_landmarks(eligible_cells: Array[Vector2i]) -> void:
 			continue
 		if not _is_near_road_intersection(cell, 1):
 			continue
-		if _distance_to_cells(cell, park_cells) <= 1 or _distance_to_cells(cell, subway_cells) < 4:
+		if _distance_to_cells(cell, playground_cells) <= 1 or _distance_to_cells(cell, subway_cells) < 4:
 			continue
 		subway_cells.append(cell)
 
 
 func _is_landmark_cell(cell: Vector2i) -> bool:
-	return park_cells.has(cell) or playground_cells.has(cell) or subway_cells.has(cell) or _is_apartment_cell(cell)
+	return playground_cells.has(cell) or subway_cells.has(cell) or _is_apartment_cell(cell)
 
 
 func _is_apartment_cell(cell: Vector2i) -> bool:
@@ -424,8 +413,6 @@ func _build_guardrails(
 			_add_static_collision_box("BridgeGuardCollision", center + side_offset + Vector3(0, deck_height + 0.48, 0), collision_size)
 func _build_zoned_lots() -> void:
 	_build_apartment_complex()
-	for cell in park_cells:
-		_spawn_landmark(cell, "pocket_park")
 	for cell in playground_cells:
 		_spawn_landmark(cell, "playground")
 	for cell in subway_cells:
@@ -586,11 +573,11 @@ func _try_build_building(cell: Vector2i) -> void:
 		if footprint.x > modules_per_cell - 2 or footprint.y > modules_per_cell - 2:
 			continue
 		var height_class := str(definition.get("height_class", "mid"))
-		var park_distance := _distance_to_cells(cell, park_cells)
+		var open_space_distance := _distance_to_cells(cell, playground_cells)
 		if height_class == "high":
-			if zone != "business_corner" or park_distance <= PARK_HIGH_RISE_BUFFER_CELLS or _distance_to_cells(cell, apartment_cells) <= APARTMENT_HIGH_RISE_BUFFER_CELLS:
+			if zone != "business_corner" or open_space_distance <= OPEN_SPACE_HIGH_RISE_BUFFER_CELLS or _distance_to_cells(cell, apartment_cells) <= APARTMENT_HIGH_RISE_BUFFER_CELLS:
 				continue
-		elif height_class == "mid" and (park_distance <= PARK_MID_RISE_BUFFER_CELLS or zone == "residential_buffer"):
+		elif height_class == "mid" and (open_space_distance <= OPEN_SPACE_MID_RISE_BUFFER_CELLS or zone == "residential_buffer"):
 			continue
 		definitions.append({
 			"id": building_id,

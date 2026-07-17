@@ -4,20 +4,6 @@ extends RefCounted
 const MODULES_PER_CELL := 10
 
 const DEFINITIONS := {
-	"pocket_park": {
-		"node_name": "PocketPark",
-		"texture_path": "res://assets/landmarks/urban_pocket_park_8x8_sealed_aligned.png",
-		"footprint_modules": Vector2i(8, 8),
-		"footprint_corners_px": [
-			Vector2(55, 657),
-			Vector2(628, 371),
-			Vector2(1200, 657),
-			Vector2(627, 943),
-		],
-		"collision_boxes": [
-			{"offset": Vector2.ZERO, "size": Vector2(8.0, 8.0), "height": 2.4},
-		],
-	},
 	"playground": {
 		"node_name": "UrbanPlayground",
 		"texture_path": "res://assets/landmarks/urban_playground_8x8_sealed_aligned.png",

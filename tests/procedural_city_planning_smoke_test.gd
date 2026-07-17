@@ -51,7 +51,7 @@ func _run() -> void:
 	var map_script: Script = load("res://scripts/procedural_map.gd")
 	var building_catalog = load("res://scripts/building_catalog.gd")
 	var landmark_catalog = load("res://scripts/urban_landmark_catalog.gd")
-	for landmark_id in ["pocket_park", "playground"]:
+	for landmark_id in ["playground"]:
 		var definition: Dictionary = landmark_catalog.get_definition(landmark_id)
 		_assert_isometric_footprint(definition)
 		assert(definition["collision_boxes"].size() == 1)
@@ -79,13 +79,12 @@ func _run() -> void:
 		var subways: Array = city.get("subway_cells")
 		var apartment_cells: Array = city.get("apartment_cells")
 		var apartment_origin: Vector2i = city.get("apartment_origin")
-		assert(parks.size() == 2)
+		assert(parks.is_empty())
 		assert(playgrounds.size() == 2)
 		assert(subways.size() == 2)
-		assert(get_nodes_in_group("urban_pocket_park").size() == 2)
+		assert(get_nodes_in_group("urban_pocket_park").is_empty())
 		assert(get_nodes_in_group("urban_playground").size() == 2)
 		assert(get_nodes_in_group("urban_subway_entrance").size() == 2)
-		_assert_sealed_landmark(city, parks[0], "PocketParkCollision")
 		_assert_sealed_landmark(city, playgrounds[0], "UrbanPlaygroundCollision")
 		assert(apartment_cells.size() == 5)
 		assert(get_nodes_in_group("urban_apartment_complex").size() == 1)
@@ -161,8 +160,8 @@ func _run() -> void:
 				continue
 			high_count += 1
 			var building_cell: Vector2i = building.get_meta("planning_cell")
-			for park_cell in parks:
-				assert(_block_distance(building_cell, park_cell) > 2)
+			for playground_cell in playgrounds:
+				assert(_block_distance(building_cell, playground_cell) > 2)
 			for apartment_cell in apartment_cells:
 				assert(_block_distance(building_cell, apartment_cell) > 2)
 		assert(low_count > high_count)
@@ -173,5 +172,5 @@ func _run() -> void:
 	assert(generated_lowrise_ids.has("gangnam_lowrise_commercial_8x4_aligned"))
 	assert(generated_lowrise_ids.has("gangnam_lowrise_garage_8x4_aligned"))
 	assert(building_catalog.get_definition("gangnam_lowrise_commercial_8x4_aligned")["footprint_modules"] == Vector2i(4, 8))
-	print("CITY_PLANNING_OK seeds=5 parks=2 playgrounds=2 subways=2 apartments=1 lowrise_types=%d" % generated_lowrise_ids.size())
+	print("CITY_PLANNING_OK seeds=5 parks=0 playgrounds=2 subways=2 apartments=1 lowrise_types=%d" % generated_lowrise_ids.size())
 	quit(0)
