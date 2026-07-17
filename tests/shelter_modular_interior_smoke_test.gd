@@ -4,6 +4,7 @@ const SHELTER_SCENE_PATH := "res://scenes/shelter_interior.tscn"
 const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png"
 const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
 const BED_TEXTURE_PATH := "res://assets/interiors/shelter_bed_module_v2.png"
+const PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
 
 
 func _initialize() -> void:
@@ -14,6 +15,7 @@ func _run() -> void:
 	assert(ResourceLoader.exists(FLOOR_TEXTURE_PATH))
 	assert(ResourceLoader.exists(WALL_TEXTURE_PATH))
 	assert(ResourceLoader.exists(BED_TEXTURE_PATH))
+	assert(ResourceLoader.exists(PIPE_TEXTURE_PATH))
 	var shelter := load(SHELTER_SCENE_PATH).instantiate() as Node3D
 	root.add_child(shelter)
 	await process_frame
@@ -22,19 +24,29 @@ func _run() -> void:
 	var room_art := shelter.get_node("ShelterInteriorArt") as MeshInstance3D
 	assert(room_art != null)
 	var room_mesh := room_art.mesh as PlaneMesh
-	assert(room_mesh.size == Vector2(32.7, 17.5))
+	assert(room_mesh.size == Vector2(44.0, 25.0))
 	var room_material := room_mesh.material as StandardMaterial3D
 	assert(room_material.albedo_texture.resource_path == FLOOR_TEXTURE_PATH)
 	assert(room_material.texture_repeat)
 	assert(shelter.get_node("NorthWall01") is MeshInstance3D)
 	assert(shelter.get_node("WestWall01") is MeshInstance3D)
-	assert(shelter.get_node("SouthLowWallLeft") is MeshInstance3D)
-	assert(shelter.get_node("ExitPad") is MeshInstance3D)
+	assert(not shelter.has_node("SouthLowWallLeft"))
+	assert(not shelter.has_node("EastLowWall"))
+	var outside_mesh := (shelter.get_node("BlackOutside") as MeshInstance3D).mesh as PlaneMesh
+	assert(outside_mesh.size == Vector2(240.0, 240.0))
+	var pipe := shelter.get_node("EscapePipe") as Sprite3D
+	assert(pipe.texture.resource_path == PIPE_TEXTURE_PATH)
+	assert(is_equal_approx(pipe.pixel_size, 0.0043))
+	assert(pipe.is_in_group("shelter_exit_pipe"))
+	assert(shelter.get_node("EscapePipeCollision") is StaticBody3D)
+	var camera := shelter.get_node("ShelterCamera") as Camera3D
+	assert(camera.projection == Camera3D.PROJECTION_ORTHOGONAL)
+	assert(is_equal_approx(camera.size, 27.0))
 
 	var module_root := shelter.get_node("StageOneModules") as Node3D
 	assert(int(module_root.get_meta("stage")) == 1)
 	assert(int(module_root.get_meta("cat_capacity")) == 5)
-	assert(module_root.get_meta("module_grid_size") == Vector2(3.45, 2.65))
+	assert(module_root.get_meta("module_grid_size") == Vector2(2.65, 3.45))
 	assert(get_nodes_in_group("shelter_module_slot").size() == 5)
 	assert(get_nodes_in_group("shelter_bed").size() == 5)
 	for slot in get_nodes_in_group("shelter_module_slot"):
@@ -44,14 +56,15 @@ func _run() -> void:
 	for bed in get_nodes_in_group("shelter_bed"):
 		var sprite := (bed as Node).get_node("BedSprite") as Sprite3D
 		assert(sprite.texture.resource_path == BED_TEXTURE_PATH)
+		assert(sprite.flip_h)
 		var collision := (bed as Node).get_node("BedBody/CollisionShape3D") as CollisionShape3D
 		var shape := collision.shape as BoxShape3D
-		assert(shape.size == Vector3(2.9, 0.9, 2.2))
+		assert(shape.size == Vector3(2.2, 0.9, 2.9))
 		assert((bed as Node).get_node("GroundShadow") is MeshInstance3D)
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)
 	for wall_name in [
-		"NorthWallCollision", "SouthWallLeftCollision", "SouthWallRightCollision",
+		"NorthWallCollision", "SouthWallCollision",
 		"WestWallCollision", "EastWallCollision",
 	]:
 		assert(shelter.get_node(wall_name) is StaticBody3D)
@@ -64,5 +77,5 @@ func _run() -> void:
 	key_event.pressed = true
 	assert(bool(shortcut.call("is_shelter_shortcut", key_event)))
 
-	print("SHELTER_MODULAR_OK beds=5 slots=5 shortcut=KEY_1 walls=5")
+	print("SHELTER_MODULAR_OK beds=5 rotated=true pipe_exit=true black_outside=true room=44x25")
 	quit(0)

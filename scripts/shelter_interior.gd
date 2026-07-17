@@ -3,6 +3,7 @@ extends Node3D
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png"
 const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
+const ESCAPE_PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
 const BED_MODULE_SCENE := preload("res://scenes/modules/shelter_bed_module.tscn")
 const MOVE_SPEED := 4.6
 const CAT_ANIMATION_ROOT := "res://assets/characters/cat_8way"
@@ -17,23 +18,25 @@ const CAT_DIRECTION_STATES := {
 	"nw": "up_left",
 }
 const CAT_FRAME_COUNT := 4
-const ROOM_ART_SIZE := Vector2(32.7, 17.5)
-const PLAYER_BOUNDS := Vector2(15.65, 8.1)
-const BED_MODULE_PLATE_SIZE := Vector2(3.45, 2.65)
+const ROOM_ART_SIZE := Vector2(44.0, 25.0)
+const PLAYER_BOUNDS := Vector2(21.2, 11.7)
+const BED_MODULE_PLATE_SIZE := Vector2(2.65, 3.45)
 const STAGE_ONE_BED_POSITIONS := [
-	Vector3(-12.45, 0, -5.6),
-	Vector3(-12.45, 0, -2.8),
-	Vector3(-12.45, 0, 0.0),
-	Vector3(-12.45, 0, 2.8),
-	Vector3(-12.45, 0, 5.6),
+	Vector3(-15.0, 0, -10.35),
+	Vector3(-11.5, 0, -10.35),
+	Vector3(-8.0, 0, -10.35),
+	Vector3(-4.5, 0, -10.35),
+	Vector3(-1.0, 0, -10.35),
 ]
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const STATIONS := {
-	"exit": {"position": Vector2(7.7, 8.0), "label": "탐색 출발", "radius": 1.9},
+	"pipe_exit": {"position": Vector2(16.0, -10.55), "label": "파이프를 타고 도시로 올라가기", "radius": 2.2},
 }
 
 var player: CharacterBody3D
 var survivor: AnimatedSprite3D
+var shelter_camera: Camera3D
+var camera_focus := Vector3.ZERO
 var facing := "s"
 var motion_state := "idle"
 var current_station := ""
@@ -79,11 +82,13 @@ func _physics_process(delta: float) -> void:
 	player.move_and_slide()
 	player.position.x = clampf(player.position.x, -PLAYER_BOUNDS.x, PLAYER_BOUNDS.x)
 	player.position.z = clampf(player.position.z, -PLAYER_BOUNDS.y, PLAYER_BOUNDS.y)
+	_update_camera(delta)
 	_update_nearby_station()
 	status_label.modulate.a = move_toward(status_label.modulate.a, 0.0, delta * 0.08)
 
 
 func _build_room() -> void:
+	RenderingServer.set_default_clear_color(Color.BLACK)
 	var environment := WorldEnvironment.new()
 	var environment_resource := Environment.new()
 	environment_resource.background_mode = Environment.BG_COLOR
@@ -93,7 +98,9 @@ func _build_room() -> void:
 	environment_resource.ambient_light_energy = 0.72
 	environment.environment = environment_resource
 	add_child(environment)
-	_add_plane("BlackOutside", Vector3(0, -0.12, 0), Vector2(72, 72), _material(Color.BLACK), self)
+	var outside_material := _material(Color.BLACK)
+	outside_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_add_plane("BlackOutside", Vector3(0, -0.12, 0), Vector2(240, 240), outside_material, self)
 	var floor_material: StandardMaterial3D
 	if ResourceLoader.exists(FLOOR_TEXTURE_PATH):
 		floor_material = _texture_material(load(FLOOR_TEXTURE_PATH) as Texture2D)
@@ -106,19 +113,19 @@ func _build_room() -> void:
 	if ResourceLoader.exists(WALL_TEXTURE_PATH):
 		wall_material = _texture_material(load(WALL_TEXTURE_PATH) as Texture2D)
 	_build_visible_walls(wall_material)
-	_build_exit_pad()
-	_add_obstacle("NorthWallCollision", Vector3(0, 1.5, -8.75), Vector3(32.7, 3.0, 0.55))
-	_add_obstacle("SouthWallLeftCollision", Vector3(-5.15, 1.5, 8.75), Vector3(22.4, 3.0, 0.55))
-	_add_obstacle("SouthWallRightCollision", Vector3(13.05, 1.5, 8.75), Vector3(6.5, 3.0, 0.55))
-	_add_obstacle("WestWallCollision", Vector3(-16.35, 1.5, 0), Vector3(0.55, 3.0, 18.05))
-	_add_obstacle("EastWallCollision", Vector3(16.35, 1.5, 0), Vector3(0.55, 3.0, 18.05))
-	var camera := Camera3D.new()
-	add_child(camera)
-	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 28.0
-	camera.position = Vector3(18.0, 18.0, 18.0)
-	camera.look_at(Vector3(0, 0, 0))
-	camera.current = true
+	_build_escape_pipe()
+	_add_obstacle("NorthWallCollision", Vector3(0, 1.5, -12.5), Vector3(44.0, 3.0, 0.55))
+	_add_obstacle("SouthWallCollision", Vector3(0, 1.5, 12.5), Vector3(44.0, 3.0, 0.55))
+	_add_obstacle("WestWallCollision", Vector3(-22.0, 1.5, 0), Vector3(0.55, 3.0, 25.0))
+	_add_obstacle("EastWallCollision", Vector3(22.0, 1.5, 0), Vector3(0.55, 3.0, 25.0))
+	shelter_camera = Camera3D.new()
+	shelter_camera.name = "ShelterCamera"
+	add_child(shelter_camera)
+	shelter_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	shelter_camera.size = 27.0
+	shelter_camera.position = Vector3(18.0, 18.0, 18.0)
+	shelter_camera.look_at(Vector3.ZERO)
+	shelter_camera.current = true
 	var light := DirectionalLight3D.new()
 	light.rotation_degrees = Vector3(-55, -38, 0)
 	light.light_energy = 0.95
@@ -126,17 +133,13 @@ func _build_room() -> void:
 
 
 func _build_visible_walls(wall_material: Material) -> void:
-	_add_segmented_wall("NorthWall", Vector3(0, 1.5, -8.75), Vector3(32.7, 3.0, 0.55), true, wall_material)
-	_add_segmented_wall("WestWall", Vector3(-16.35, 1.5, 0), Vector3(0.55, 3.0, 18.05), false, wall_material)
-	var low_wall_material := _material(Color("#25323a"))
-	_add_visual_box("SouthLowWallLeft", Vector3(-5.15, 0.34, 8.75), Vector3(22.4, 0.68, 0.55), low_wall_material, self)
-	_add_visual_box("SouthLowWallRight", Vector3(13.05, 0.34, 8.75), Vector3(6.5, 0.68, 0.55), low_wall_material, self)
-	_add_visual_box("EastLowWall", Vector3(16.35, 0.34, 0), Vector3(0.55, 0.68, 18.05), low_wall_material, self)
+	_add_segmented_wall("NorthWall", Vector3(0, 1.5, -12.5), Vector3(44.0, 3.0, 0.55), true, wall_material)
+	_add_segmented_wall("WestWall", Vector3(-22.0, 1.5, 0), Vector3(0.55, 3.0, 25.0), false, wall_material)
 	var light_material := _emissive_material(Color("#55dce9"), 2.5)
-	for x in [-12.0, -6.0, 0.0, 6.0, 12.0]:
-		_add_visual_box("NorthLight", Vector3(x, 1.35, -8.43), Vector3(1.45, 0.12, 0.08), light_material, self)
-	for z in [-5.4, 0.0, 5.4]:
-		_add_visual_box("WestLight", Vector3(-16.03, 1.35, z), Vector3(0.08, 0.12, 1.45), light_material, self)
+	for x in [-18.0, -12.0, -6.0, 0.0, 6.0, 12.0, 18.0]:
+		_add_visual_box("NorthLight", Vector3(x, 1.35, -12.18), Vector3(1.45, 0.12, 0.08), light_material, self)
+	for z in [-9.0, -3.0, 3.0, 9.0]:
+		_add_visual_box("WestLight", Vector3(-21.68, 1.35, z), Vector3(0.08, 0.12, 1.45), light_material, self)
 
 
 func _add_segmented_wall(prefix: String, position: Vector3, size: Vector3, along_x: bool, material: Material) -> void:
@@ -156,11 +159,22 @@ func _add_segmented_wall(prefix: String, position: Vector3, size: Vector3, along
 		_add_visual_box("%s%02d" % [prefix, index + 1], segment_position, segment_size, material, self)
 
 
-func _build_exit_pad() -> void:
-	var pad_material := _material(Color("#26333b"))
-	_add_plane("ExitPad", Vector3(7.7, 0.025, 7.55), Vector2(3.5, 2.35), pad_material, self)
-	var warning_material := _emissive_material(Color("#d79b43"), 1.6)
-	_add_visual_box("ExitPadLine", Vector3(7.7, 0.055, 6.45), Vector3(3.15, 0.035, 0.09), warning_material, self)
+func _build_escape_pipe() -> void:
+	if not ResourceLoader.exists(ESCAPE_PIPE_TEXTURE_PATH):
+		return
+	var pipe := Sprite3D.new()
+	pipe.name = "EscapePipe"
+	pipe.position = Vector3(16.0, 2.15, -12.12)
+	pipe.texture = load(ESCAPE_PIPE_TEXTURE_PATH) as Texture2D
+	pipe.pixel_size = 0.0043
+	pipe.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	pipe.shaded = false
+	pipe.transparent = true
+	pipe.no_depth_test = true
+	pipe.render_priority = 30
+	pipe.add_to_group("shelter_exit_pipe")
+	add_child(pipe)
+	_add_obstacle("EscapePipeCollision", Vector3(16.0, 1.0, -11.75), Vector3(1.65, 2.0, 1.05))
 
 
 func _build_stage_one_modules() -> void:
@@ -182,7 +196,11 @@ func _build_stage_one_modules() -> void:
 func _build_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "ShelterPlayer"
-	player.position = Vector3(7.7, 0.78, 6.35)
+	player.position = Vector3(0.0, 0.78, 1.5)
+	camera_focus = Vector3(player.position.x, 0.0, player.position.z)
+	if is_instance_valid(shelter_camera):
+		shelter_camera.position = camera_focus + Vector3(18.0, 18.0, 18.0)
+		shelter_camera.look_at(camera_focus)
 	player.collision_layer = 1
 	player.collision_mask = 1
 	add_child(player)
@@ -205,6 +223,16 @@ func _build_player() -> void:
 	survivor.sprite_frames = _create_cat_frames()
 	player.add_child(survivor)
 	_play_directional_animation()
+
+
+func _update_camera(delta: float) -> void:
+	if not is_instance_valid(shelter_camera) or not is_instance_valid(player):
+		return
+	var desired_focus := Vector3(player.position.x, 0.0, player.position.z)
+	var follow_weight := 1.0 - exp(-delta * 5.5)
+	camera_focus = camera_focus.lerp(desired_focus, follow_weight)
+	shelter_camera.position = camera_focus + Vector3(18.0, 18.0, 18.0)
+	shelter_camera.look_at(camera_focus)
 
 
 func _build_interface() -> void:
@@ -326,7 +354,7 @@ func _interact() -> void:
 		"module":
 			if is_instance_valid(current_module) and current_module.has_method("interact"):
 				_show_status(str(current_module.call("interact")))
-		"exit":
+		"pipe_exit":
 			GameState.start_new_raid()
 			GameState.returning_from_shelter = true
 			get_tree().change_scene_to_file("res://scenes/main.tscn")
@@ -412,9 +440,6 @@ func _create_cat_frames() -> SpriteFrames:
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_E:
-			_interact()
-		elif event.keycode == KEY_ESCAPE:
-			current_station = "exit"
 			_interact()
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
