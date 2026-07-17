@@ -906,6 +906,42 @@ func get_map_limit() -> float:
 	return MAP_SIZE * 0.5 - 1.5
 
 
+func get_extraction_position() -> Vector3:
+	var best_cell := Vector2i(GRID_SIZE - 2, GRID_SIZE - 2)
+	var best_score := -INF
+	for road_x in vertical_roads:
+		for road_z in horizontal_roads:
+			var candidate := Vector2i(road_x, road_z)
+			if not _cell_in_bounds(candidate) or _is_river_cell(candidate):
+				continue
+			var edge_margin := mini(
+				mini(candidate.x, GRID_SIZE - 1 - candidate.x),
+				mini(candidate.y, GRID_SIZE - 1 - candidate.y)
+			)
+			var score := float(_block_distance(candidate, SHELTER_CELL)) + float(edge_margin) * 0.12
+			if score > best_score:
+				best_score = score
+				best_cell = candidate
+	var result := _cell_center(best_cell)
+	result.y = 0.18
+	return result
+
+
+func get_map_snapshot_data() -> Dictionary:
+	return {
+		"grid_size": GRID_SIZE,
+		"vertical_roads": vertical_roads.duplicate(),
+		"horizontal_roads": horizontal_roads.duplicate(),
+		"river_columns": river_columns.duplicate(),
+		"building_cells": building_cells.keys(),
+		"shelter_cell": SHELTER_CELL,
+	}
+
+
+func world_to_map_cell(world_position: Vector3) -> Vector2i:
+	return _world_to_cell(world_position)
+
+
 func is_position_in_safe_zone(world_position: Vector3) -> bool:
 	var shelter_center := _cell_center(SHELTER_CELL)
 	return Vector2(world_position.x, world_position.z).distance_to(Vector2(shelter_center.x, shelter_center.z)) <= 6.0 * WORLD_SCALE

@@ -14,14 +14,14 @@ func configure(kind: String, wave_strength: float) -> void:
 	strength = clampf(wave_strength, 0.4, 1.8)
 	match kind:
 		"player_gunshot":
-			duration = 1.85
-			max_radius = 520.0
-			ring_count = 4
-			wave_color = Color(1.0, 0.72, 0.38, 0.16)
+			duration = 2.05
+			max_radius = 680.0
+			ring_count = 1
+			wave_color = Color(1.0, 0.72, 0.38, 0.19)
 		"enemy_gunshot":
 			duration = 1.65
 			max_radius = 300.0
-			ring_count = 4
+			ring_count = 1
 			wave_color = Color(1.0, 0.48, 0.38, 0.17)
 		"heavy_step":
 			duration = 1.35
@@ -54,15 +54,16 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var progress := clampf(age / duration, 0.0, 1.0)
 	var center := size * 0.5
+	var ring_duration := 1.0 / float(maxi(1, ring_count))
 	for ring_index in range(ring_count):
-		var ring_delay := float(ring_index) * 0.11
-		var ring_progress := clampf((progress - ring_delay) / maxf(0.01, 1.0 - ring_delay), 0.0, 1.0)
-		if ring_progress <= 0.0:
+		var ring_start := float(ring_index) * ring_duration
+		if progress < ring_start or progress >= ring_start + ring_duration:
 			continue
+		var ring_progress := clampf((progress - ring_start) / ring_duration, 0.0, 1.0)
 		var eased_progress := 1.0 - pow(1.0 - ring_progress, 2.15)
 		var radius := lerpf(7.0, max_radius * strength, eased_progress)
 		var envelope := sin(ring_progress * PI)
-		var alpha := wave_color.a * envelope * (1.0 - float(ring_index) * 0.13)
+		var alpha := wave_color.a * envelope
 		var glow_color := Color(wave_color.r, wave_color.g, wave_color.b, alpha * 0.24)
 		var line_color := Color(wave_color.r, wave_color.g, wave_color.b, alpha)
 		draw_arc(center, radius, 0.0, TAU, 96, glow_color, 7.0, true)

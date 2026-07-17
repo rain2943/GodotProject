@@ -18,6 +18,9 @@ func _run() -> void:
 	assert(companion != null)
 	assert(companion.get("target") == main_scene.get_node("Player"))
 	assert(sprite != null)
+	assert(not sprite.visible)
+	var companion_overlay := main_scene.get("companion_overlay") as Sprite2D
+	assert(companion_overlay != null)
 	assert(is_equal_approx(sprite.pixel_size, 0.0098))
 	for direction in DIRECTIONS:
 		for state in ["idle", "walk"]:
@@ -50,6 +53,20 @@ func _run() -> void:
 	await physics_frame
 	assert(companion.get("motion_state") == "idle")
 	assert(sprite.animation.begins_with("idle_"))
+	companion.position = player.position + Vector3(2.0, 0, 2.0)
+	main_scene.call("_update_building_overlays")
+	var survivor_overlay := main_scene.get("survivor_overlay") as Sprite2D
+	assert(companion_overlay.z_index > survivor_overlay.z_index)
 
-	print("FEMALE_CAT_COMPANION_OK animations=16 frames=64 follow=walk_stop")
+	var enemies := main_scene.get("enemies") as Array
+	assert(not enemies.is_empty())
+	var enemy := enemies[0] as CharacterBody3D
+	enemy.global_position = player.global_position + Vector3(100, 0, 100)
+	main_scene.call("_update_enemy_visibility")
+	assert(not enemy.visible)
+	enemy.global_position = player.global_position + Vector3(0.75, 0, 0.75)
+	main_scene.call("_update_enemy_visibility")
+	assert(enemy.visible)
+
+	print("FEMALE_CAT_COMPANION_OK animations=16 frames=64 follow=walk_stop overlay_depth=sorted enemy_fog=hidden_visible")
 	quit(0)

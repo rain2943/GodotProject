@@ -30,6 +30,27 @@ func _run() -> void:
 		main_scene.call("_set_facing", direction)
 		assert(field_sprite.animation == "idle_%s" % direction)
 		assert(not field_sprite.flip_h)
+		var roll_animation := "roll_%s" % direction
+		assert(field_sprite.sprite_frames.has_animation(roll_animation))
+		assert(field_sprite.sprite_frames.get_frame_count(roll_animation) == 4)
+		assert(not field_sprite.sprite_frames.get_animation_loop(roll_animation))
+		assert(is_equal_approx(field_sprite.sprite_frames.get_animation_speed(roll_animation), 10.0))
+	assert(main_scene.get("roll_cooldown_indicator") is Control)
+	main_scene.call("_set_facing", "s")
+	main_scene.call("_try_start_roll")
+	assert(main_scene.get("roll_active"))
+	assert(field_sprite.animation == "roll_s")
+	main_scene.call("_update_roll", 0.06)
+	assert(not (main_scene.get("roll_afterimages") as Array).is_empty())
+	main_scene.call("_update_roll", 0.5)
+	assert(not main_scene.get("roll_active"))
+	assert(is_equal_approx(float(main_scene.get("roll_cooldown_remaining")), 1.5))
+	main_scene.set("roll_cooldown_remaining", 0.0)
+	main_scene.call("_try_start_roll")
+	assert(main_scene.get("roll_active"))
+	main_scene.call("_update_roll", 0.01)
+	var roll_velocity := (main_scene.get_node("Player") as CharacterBody3D).velocity.length()
+	assert(roll_velocity > 34.0)
 	main_scene.queue_free()
 	await process_frame
 
@@ -39,5 +60,5 @@ func _run() -> void:
 	var shelter_sprite := shelter_scene.get_node("ShelterPlayer/Survivor") as AnimatedSprite3D
 	_assert_cat_frames(shelter_sprite)
 
-	print("PLAYER_CAT_ANIMATION_OK animations=16 frames=64 scenes=2")
+	print("PLAYER_CAT_ANIMATION_OK base_animations=16 roll_animations=8 roll_frames=32 scenes=2")
 	quit(0)

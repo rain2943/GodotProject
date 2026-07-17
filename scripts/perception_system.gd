@@ -33,7 +33,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not is_instance_valid(player) or not is_instance_valid(camera):
 		return
-	_update_sound_sources(delta)
+	# Enemy sounds remain simulation-only. Only player gunfire gets a visible wave.
 	_update_sound_waves()
 
 
@@ -59,7 +59,8 @@ func report_sound(world_position: Vector3, sound_kind: String, strength: float =
 
 func emit_player_gunshot(world_position: Vector3, hearing_radius: float = 52.0) -> void:
 	var now := Time.get_ticks_msec()
-	if now - last_player_combat_sound_msec < 340:
+	# Keep one readable pulse on screen at a time while automatic fire continues.
+	if now - last_player_combat_sound_msec < 1850:
 		return
 	last_player_combat_sound_msec = now
 	_spawn_sound_wave(world_position, "player_gunshot", 1.0)
@@ -67,16 +68,7 @@ func emit_player_gunshot(world_position: Vector3, hearing_radius: float = 52.0) 
 
 
 func emit_enemy_gunshot(enemy: Node3D) -> void:
-	if not is_instance_valid(enemy):
-		return
-	var enemy_id := enemy.get_instance_id()
-	var now := Time.get_ticks_msec()
-	var last_time := int(enemy_gunshot_timers.get(enemy_id, -10000))
-	if now - last_time < 360:
-		return
-	enemy_gunshot_timers[enemy_id] = now
-	if not _position_is_visible(enemy.global_position):
-		_spawn_sound_wave(enemy.global_position, "enemy_gunshot", 1.1)
+	pass
 
 
 func _propagate_sound_to_enemies(world_position: Vector3, hearing_radius: float) -> void:
@@ -285,21 +277,37 @@ func _position_is_visible(world_position: Vector3) -> bool:
 
 
 func _spawn_sound_wave(world_position: Vector3, sound_kind: String, strength: float) -> void:
+	if sound_kind != "player_gunshot":
+		return
+	_prune_sound_waves()
+	if not sound_waves.is_empty():
+		var active_wave := sound_waves[0]
+		if sound_kind != "player_gunshot" or active_wave.get_meta("sound_kind", "") == "player_gunshot":
+			return
+		for existing_wave in sound_waves:
+			if is_instance_valid(existing_wave):
+				existing_wave.queue_free()
+		sound_waves.clear()
 	var wave := SOUND_WAVE_SCRIPT.new() as Control
 	wave.call("configure", sound_kind, strength)
 	wave.set_meta("sound_world_position", world_position)
+	wave.set_meta("sound_kind", sound_kind)
 	add_child(wave)
 	sound_waves.append(wave)
 	_position_wave(wave)
 
 
 func _update_sound_waves() -> void:
+	_prune_sound_waves()
+	for wave in sound_waves:
+		_position_wave(wave)
+
+
+func _prune_sound_waves() -> void:
 	for index in range(sound_waves.size() - 1, -1, -1):
 		var wave := sound_waves[index]
 		if not is_instance_valid(wave):
 			sound_waves.remove_at(index)
-			continue
-		_position_wave(wave)
 
 
 func _position_wave(wave: Control) -> void:

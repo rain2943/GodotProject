@@ -7,6 +7,8 @@ var open_button: Button
 var weapon_name_label: Label
 var weapon_ammo_label: Label
 var ammo_slot_label: Label
+var food_slot_label: Label
+var weapon_slot_label: Label
 var capacity_label: Label
 var opened := false
 
@@ -149,8 +151,9 @@ func setup(font: Font, weapon_texture: Texture2D, ammo_texture: Texture2D) -> vo
 	ammo_slot_label = _add_item_slot(grid, font, ammo_texture, "7.62mm 탄약", "x0", Color("#bca96c"))
 	_add_item_slot(grid, font, null, "생수", "x2", Color("#668f9b"), "물")
 	_add_item_slot(grid, font, null, "붕대", "x3", Color("#a8aaa0"), "+")
-	_add_item_slot(grid, font, null, "통조림", "x1", Color("#8b7657"), "캔")
-	for index in 4:
+	food_slot_label = _add_item_slot(grid, font, null, "통조림", "x0", Color("#8b7657"), "캔")
+	weapon_slot_label = _add_item_slot(grid, font, null, "보관 무기", "x0", Color("#9b7657"), "총")
+	for index in 3:
 		_add_item_slot(grid, font, null, "빈 슬롯", "", Color("#39423d"), "")
 	set_open(false)
 
@@ -205,12 +208,33 @@ func _add_item_slot(
 	return count_label
 
 
-func update_state(has_weapon: bool, magazine: int, reserve: int) -> void:
+func update_state(
+	has_weapon: bool,
+	magazine: int,
+	reserve: int,
+	weapon_name: String = "AK-47",
+	magazine_size: int = 30,
+	durability: float = 100.0,
+	mod_names: Array[String] = [],
+	canned_food: int = 0,
+	stored_weapons: int = 0
+) -> void:
 	var total := magazine + reserve
-	weapon_name_label.text = "AK-47" if has_weapon else "미장착"
-	weapon_ammo_label.text = "탄창  %02d / 30\n예비  %03d\n총 탄약  %03d" % [magazine, reserve, total]
+	weapon_name_label.text = weapon_name if has_weapon else "미장착"
+	var mod_text := ", ".join(mod_names) if not mod_names.is_empty() else "개조 없음"
+	weapon_ammo_label.text = "탄창  %02d / %02d\n예비  %03d · 총 %03d\n내구도  %05.1f%%\n%s" % [
+		magazine,
+		magazine_size,
+		reserve,
+		total,
+		durability,
+		mod_text,
+	]
 	ammo_slot_label.text = "x%d" % reserve
-	capacity_label.text = "사용  %d / 16" % (4 if has_weapon else 3)
+	food_slot_label.text = "x%d" % canned_food
+	weapon_slot_label.text = "x%d" % stored_weapons
+	var occupied_slots := 3 + (1 if has_weapon else 0) + (1 if canned_food > 0 else 0) + (1 if stored_weapons > 0 else 0)
+	capacity_label.text = "사용  %d / 16" % occupied_slots
 
 
 func toggle() -> void:
