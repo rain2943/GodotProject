@@ -22,6 +22,16 @@ const FAR_DEPTH_OPEN_CELL := Vector2i(GRID_SIZE - 1, GRID_SIZE - 1)
 const ROAD_SETBACK_MODULES := 2
 const INTERIOR_SETBACK_MODULES := 1
 const ROAD_VEHICLE_CHANCE := 0.34
+const DISTRICT_RADIUS_CELLS := 2
+const DISTRICT_MIN_SEPARATION_CELLS := 6
+const MARKET_HANDCART_TEXTURE_PATH := "res://assets/props/market_handcart_v1.png"
+const MARKET_HANDCART_COLLISION_SIZE := Vector3(4.2, 1.55, 2.15)
+const MARKET_HANDCART_FOOTPRINT_CORNERS := [
+	Vector2(67, 870),
+	Vector2(785, 510),
+	Vector2(1180, 705),
+	Vector2(307, 1047),
+]
 const ASPHALT_TEXTURE := preload("res://assets/tiles/asphalt.png")
 const CONCRETE_TEXTURE := preload("res://assets/tiles/concrete.png")
 const RIVER_TEXTURE_PATH := "res://assets/tiles/river_water_generated.png"
@@ -55,6 +65,8 @@ var apartment_origin := Vector2i(-1, -1)
 var apartment_cells: Array[Vector2i] = []
 var cell_zones := {}
 var building_type_by_cell := {}
+var district_anchors := {}
+var district_signature_road_cells := {}
 var portal_locked := false
 
 var asphalt_material: StandardMaterial3D
@@ -113,19 +125,23 @@ func _generate_layout() -> void:
 			eligible_cells.append(cell)
 
 	_select_planned_landmarks(eligible_cells)
+	_select_district_anchors(eligible_cells)
 	_assign_zoning_districts(eligible_cells)
 	for cell in eligible_cells:
 		if _is_landmark_cell(cell):
 			continue
 		var zone := str(cell_zones.get(cell, "street_mixed"))
 		var building_chance := float({
+			"market_lane": 0.72,
+			"luxury_core": 0.68,
+			"multi_family": 0.66,
 			"business_corner": 0.58,
 			"street_mixed": 0.48,
 			"residential_buffer": 0.32,
 			"open_space_edge": 0.24,
 			"service_interior": 0.34,
 		}.get(zone, 0.42))
-		if rng.randf() < building_chance:
+		if district_anchors.values().has(cell) or rng.randf() < building_chance:
 			building_cells[cell] = true
 
 	for cell in eligible_cells:
@@ -142,7 +158,10 @@ func _generate_layout() -> void:
 func _assign_zoning_districts(eligible_cells: Array[Vector2i]) -> void:
 	for cell in eligible_cells:
 		var zone := "service_interior"
-		if _distance_to_cells(cell, playground_cells) <= 1:
+		var planned_district := _planned_district_for_cell(cell)
+		if not planned_district.is_empty():
+			zone = planned_district
+		elif _distance_to_cells(cell, playground_cells) <= 1:
 			zone = "open_space_edge"
 		elif _distance_to_cells(cell, apartment_cells) <= 2:
 			zone = "residential_buffer"
@@ -151,6 +170,82 @@ func _assign_zoning_districts(eligible_cells: Array[Vector2i]) -> void:
 		elif _touches_road(cell):
 			zone = "street_mixed"
 		cell_zones[cell] = zone
+
+
+func _select_district_anchors(eligible_cells: Array[Vector2i]) -> void:
+	district_anchors.clear()
+	district_signature_road_cells.clear()
+	var luxury_anchor := _pick_district_anchor(eligible_cells, [], true, false)
+	if luxury_anchor.x >= 0:
+		district_anchors["luxury_core"] = luxury_anchor
+	var occupied: Array[Vector2i] = []
+	if luxury_anchor.x >= 0:
+		occupied.append(luxury_anchor)
+	var market_anchor := _pick_district_anchor(eligible_cells, occupied, false, true)
+	if market_anchor.x >= 0:
+		district_anchors["market_lane"] = market_anchor
+		occupied.append(market_anchor)
+	var residential_anchor := _pick_district_anchor(eligible_cells, occupied, false, false)
+	if residential_anchor.x >= 0:
+		district_anchors["multi_family"] = residential_anchor
+
+	for district_name in district_anchors:
+		var anchor: Vector2i = district_anchors[district_name]
+		var road_cell := _first_adjacent_road(anchor)
+		if road_cell.x >= 0:
+			district_signature_road_cells[district_name] = road_cell
+
+
+func _pick_district_anchor(
+	eligible_cells: Array[Vector2i],
+	occupied: Array[Vector2i],
+	require_intersection: bool,
+	avoid_intersection: bool
+) -> Vector2i:
+	var candidates: Array[Vector2i] = []
+	for cell in eligible_cells:
+		if _is_landmark_cell(cell) or not _touches_road(cell):
+			continue
+		if _block_distance(cell, SHELTER_CELL) < 4:
+			continue
+		if _distance_to_cells(cell, playground_cells) <= 3:
+			continue
+		if _distance_to_cells(cell, subway_cells) <= 1:
+			continue
+		if not occupied.is_empty() and _distance_to_cells(cell, occupied) < DISTRICT_MIN_SEPARATION_CELLS:
+			continue
+		var near_intersection := _is_near_road_intersection(cell, 1)
+		if require_intersection and not near_intersection:
+			continue
+		if avoid_intersection and near_intersection:
+			continue
+		candidates.append(cell)
+	if candidates.is_empty() and (require_intersection or avoid_intersection):
+		return _pick_district_anchor(eligible_cells, occupied, false, false)
+	if candidates.is_empty():
+		return Vector2i(-1, -1)
+	return candidates[rng.randi_range(0, candidates.size() - 1)]
+
+
+func _planned_district_for_cell(cell: Vector2i) -> String:
+	var closest_district := ""
+	var closest_distance := DISTRICT_RADIUS_CELLS + 1
+	for district_name in ["market_lane", "luxury_core", "multi_family"]:
+		if not district_anchors.has(district_name):
+			continue
+		var distance := _block_distance(cell, district_anchors[district_name])
+		if distance <= DISTRICT_RADIUS_CELLS and distance < closest_distance:
+			closest_distance = distance
+			closest_district = district_name
+	return closest_district
+
+
+func _first_adjacent_road(cell: Vector2i) -> Vector2i:
+	for direction in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+		var candidate: Vector2i = cell + Vector2i(direction)
+		if _is_road_cell(candidate):
+			return candidate
+	return Vector2i(-1, -1)
 
 
 func _select_apartment_complex_site() -> void:
@@ -339,7 +434,7 @@ func _build_tiles() -> void:
 			elif is_river:
 				_build_river_cell(center, true)
 			elif is_road:
-				_build_road_cell(center, vertical_roads.has(x), horizontal_roads.has(z))
+				_build_road_cell(cell, center, vertical_roads.has(x), horizontal_roads.has(z))
 			else:
 				_build_lot_cell(center, cell)
 
@@ -352,7 +447,7 @@ func _build_lot_cell(center: Vector3, cell: Vector2i) -> void:
 			_add_lot_sidewalk(center, Vector3(direction.x, 0, direction.y))
 
 
-func _build_road_cell(center: Vector3, vertical: bool, horizontal: bool) -> void:
+func _build_road_cell(cell: Vector2i, center: Vector3, vertical: bool, horizontal: bool) -> void:
 	_add_plane("AsphaltRoad", center, Vector2(CELL_SIZE, CELL_SIZE), asphalt_material, 0.01)
 	if vertical and horizontal:
 		_add_crosswalks(center)
@@ -360,8 +455,19 @@ func _build_road_cell(center: Vector3, vertical: bool, horizontal: bool) -> void
 		_add_lane_dash(center, true)
 	else:
 		_add_lane_dash(center, false)
-	if vertical != horizontal and rng.randf() < ROAD_VEHICLE_CHANCE:
-		_spawn_road_cover_vehicle(center, vertical)
+	if vertical != horizontal:
+		if district_signature_road_cells.get("luxury_core", Vector2i(-1, -1)) == cell:
+			_spawn_road_cover_vehicle(center, vertical, "luxury_core", true)
+		elif rng.randf() < ROAD_VEHICLE_CHANCE:
+			_spawn_road_cover_vehicle(center, vertical, _road_district(cell))
+
+
+func _road_district(cell: Vector2i) -> String:
+	for direction in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+		var zone := str(cell_zones.get(cell + direction, ""))
+		if zone in ["market_lane", "luxury_core", "multi_family"]:
+			return zone
+	return ""
 
 
 func _build_river_cell(center: Vector3, block_movement: bool) -> void:
@@ -425,6 +531,7 @@ func _build_zoned_lots() -> void:
 		_try_build_building(cell)
 	for cell in open_cells:
 		_build_open_lot(cell)
+	_build_market_district_props()
 
 
 func _build_apartment_complex() -> void:
@@ -453,6 +560,7 @@ func _build_apartment_complex() -> void:
 	apartment.set_meta("resident_capacity", 640)
 	apartment.set_meta("map_edge_attached", true)
 	apartment.set_meta("off_map_extension", true)
+	apartment.set_meta("collision_world_size", Vector3(5.0 * CELL_SIZE, 8.0, footprint_depth))
 	apartment.set_meta("occlusion_lateral_limit", 46.0)
 	apartment.set_meta("occlusion_depth_limit", 92.0)
 	var gate_local_position := Vector3(0.0, 1.6, footprint_depth * 0.5 - 1.2)
@@ -521,10 +629,12 @@ func _build_waterfront_lot(cell: Vector2i) -> void:
 	_add_plane("RiverfrontEdge", edge_position, Vector2(0.65, promenade_size), riverbank_material, 0.055)
 
 
-func _spawn_road_cover_vehicle(center: Vector3, vertical: bool) -> void:
+func _spawn_road_cover_vehicle(center: Vector3, vertical: bool, district: String = "", force_signature: bool = false) -> void:
 	var vehicle_roll := rng.randf()
 	var vehicle_type := "sedan"
-	if vehicle_roll > 0.9:
+	if district == "luxury_core" and (force_signature or vehicle_roll < 0.76):
+		vehicle_type = "luxury_sedan"
+	elif vehicle_roll > 0.9:
 		vehicle_type = "bus"
 	elif vehicle_roll > 0.66:
 		vehicle_type = "truck"
@@ -546,14 +656,95 @@ func _build_parking_lot(cell: Vector2i) -> void:
 	]
 	slots.shuffle()
 	var vehicle_count := rng.randi_range(2, slots.size())
+	var zone := str(cell_zones.get(cell, "street_mixed"))
 	for slot_index in range(vehicle_count):
 		var vehicle_type := "truck" if rng.randf() < 0.16 else "sedan"
+		if zone == "luxury_core" and rng.randf() < 0.72:
+			vehicle_type = "luxury_sedan"
 		_spawn_vehicle(
 			"Parked_%d_%d_%d" % [cell.x, cell.y, slot_index],
 			vehicle_type,
 			center + slots[slot_index],
 			true
 		)
+
+
+func _build_market_district_props() -> void:
+	if not district_anchors.has("market_lane"):
+		return
+	var market_anchor: Vector2i = district_anchors["market_lane"]
+	var spawned_count := 0
+	for cell in cell_zones:
+		if str(cell_zones[cell]) != "market_lane" or not _touches_road(cell):
+			continue
+		if cell != market_anchor and rng.randf() >= 0.42:
+			continue
+		var frontage := _get_road_frontage(cell)
+		if frontage.is_empty():
+			continue
+		var side := frontage[rng.randi_range(0, frontage.size() - 1)]
+		_spawn_market_handcart(cell, side, spawned_count)
+		spawned_count += 1
+
+
+func _spawn_market_handcart(cell: Vector2i, frontage: String, instance_index: int) -> void:
+	if not ResourceLoader.exists(MARKET_HANDCART_TEXTURE_PATH):
+		return
+	var along_z := frontage in ["west", "east"]
+	var inward_offset := CELL_SIZE * 0.5 - 1.7
+	var offset := Vector3.ZERO
+	match frontage:
+		"west":
+			offset.x = -inward_offset
+		"east":
+			offset.x = inward_offset
+		"north":
+			offset.z = -inward_offset
+		"south":
+			offset.z = inward_offset
+	var base_size := MARKET_HANDCART_COLLISION_SIZE
+	var collision_size := Vector3(base_size.z, base_size.y, base_size.x) if along_z else base_size
+	var body := StaticBody3D.new()
+	body.name = "MarketHandcart_%d_%d_%d" % [cell.x, cell.y, instance_index]
+	body.position = _cell_center(cell) + offset + Vector3(0, 0.08, 0)
+	body.collision_layer = 1
+	body.add_to_group("district_prop")
+	body.add_to_group("market_handcart")
+	body.set_meta("zoning_district", "market_lane")
+	body.set_meta("collision_world_size", collision_size)
+	add_child(body)
+
+	var texture := load(MARKET_HANDCART_TEXTURE_PATH) as Texture2D
+	var sprite := Sprite3D.new()
+	sprite.name = "HandcartSprite"
+	sprite.texture = texture
+	var base_pixel_width := absf(MARKET_HANDCART_FOOTPRINT_CORNERS[2].x - MARKET_HANDCART_FOOTPRINT_CORNERS[0].x)
+	var projected_width := (base_size.x + base_size.z) / sqrt(2.0)
+	sprite.pixel_size = projected_width / base_pixel_width
+	var bottom_corner: Vector2 = MARKET_HANDCART_FOOTPRINT_CORNERS[3]
+	var horizontal_offset := texture.get_width() * 0.5 - bottom_corner.x
+	var flip_prop := not along_z
+	sprite.offset.x = -horizontal_offset if flip_prop else horizontal_offset
+	sprite.flip_h = flip_prop
+	sprite.position = Vector3(
+		collision_size.x * 0.5,
+		(bottom_corner.y - texture.get_height() * 0.5) * sprite.pixel_size / ISOMETRIC_VERTICAL_PROJECTION - body.position.y,
+		collision_size.z * 0.5
+	)
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.transparent = true
+	sprite.shaded = false
+	sprite.no_depth_test = true
+	sprite.render_priority = 5
+	body.add_child(sprite)
+
+	var collision := CollisionShape3D.new()
+	collision.name = "HandcartCollision"
+	var shape := BoxShape3D.new()
+	shape.size = collision_size
+	collision.position.y = collision_size.y * 0.5 - body.position.y
+	collision.shape = shape
+	body.add_child(collision)
 
 
 func _build_open_lot(cell: Vector2i) -> void:
@@ -569,20 +760,29 @@ func _try_build_building(cell: Vector2i) -> void:
 	var definitions: Array[Dictionary] = []
 	for building_id in BUILDING_CATALOG.DEFINITIONS:
 		var definition: Dictionary = BUILDING_CATALOG.get_definition(building_id)
+		var district_tags: Array = definition.get("districts", [])
+		if not district_tags.is_empty() and not district_tags.has(zone):
+			continue
+		var is_district_anchor: bool = district_anchors.get(zone, Vector2i(-1, -1)) == cell
+		if is_district_anchor and not district_tags.has(zone):
+			continue
 		var footprint: Vector2i = definition.get("footprint_modules", Vector2i.ZERO)
 		if footprint.x > modules_per_cell - 2 or footprint.y > modules_per_cell - 2:
 			continue
 		var height_class := str(definition.get("height_class", "mid"))
 		var open_space_distance := _distance_to_cells(cell, playground_cells)
 		if height_class == "high":
-			if zone != "business_corner" or open_space_distance <= OPEN_SPACE_HIGH_RISE_BUFFER_CELLS or _distance_to_cells(cell, apartment_cells) <= APARTMENT_HIGH_RISE_BUFFER_CELLS:
+			if zone not in ["business_corner", "luxury_core"] or open_space_distance <= OPEN_SPACE_HIGH_RISE_BUFFER_CELLS or _distance_to_cells(cell, apartment_cells) <= APARTMENT_HIGH_RISE_BUFFER_CELLS:
 				continue
-		elif height_class == "mid" and (open_space_distance <= OPEN_SPACE_MID_RISE_BUFFER_CELLS or zone == "residential_buffer"):
+		elif height_class == "mid" and (open_space_distance <= OPEN_SPACE_MID_RISE_BUFFER_CELLS or (zone == "residential_buffer" and zone != "multi_family")):
 			continue
+		var selection_weight := float(definition.get("density_weight", 1.0))
+		if zone in ["market_lane", "luxury_core", "multi_family"]:
+			selection_weight *= 5.0 if district_tags.has(zone) else 0.18
 		definitions.append({
 			"id": building_id,
 			"definition": definition,
-			"weight": float(definition.get("density_weight", 1.0)),
+			"weight": selection_weight,
 		})
 	if definitions.is_empty():
 		return
@@ -739,6 +939,7 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	collision.position.y = height * 0.5
 	collision.shape = shape
 	body.add_child(collision)
+	body.set_meta("collision_world_size", shape.size)
 	body.set_meta("occlusion_lateral_limit", (footprint_world.x + footprint_world.y) / (2.0 * sqrt(2.0)))
 	body.set_meta("occlusion_depth_limit", float(definition["occlusion_depth"]) * WORLD_SCALE)
 
@@ -856,6 +1057,7 @@ func _build_shelter() -> void:
 	shelter_collision.position.y = 2.1 * WORLD_SCALE
 	shelter_collision.shape = shelter_shape
 	shelter.add_child(shelter_collision)
+	shelter.set_meta("collision_world_size", shelter_shape.size)
 	shelter.set_meta("occlusion_lateral_limit", 5.0 * WORLD_SCALE)
 	shelter.set_meta("occlusion_depth_limit", 9.0 * WORLD_SCALE)
 	var light := OmniLight3D.new()

@@ -61,11 +61,17 @@ func _run() -> void:
 		"gangnam_clinic_pharmacy_6x4_aligned",
 		"gangnam_food_alley_4x6_aligned",
 		"gangnam_damaged_officetel_6x6_aligned",
+		"seoul_market_row_8x4_v1",
+		"seoul_multifamily_villa_6x6_v1",
+		"gangnam_luxury_showroom_6x6_v1",
 	]:
 		var definition: Dictionary = building_catalog.get_definition(building_id)
 		assert(building_catalog.is_valid_definition(definition))
 		assert(ResourceLoader.exists(str(definition["texture_path"])))
 		_assert_isometric_footprint(definition)
+	assert(building_catalog.get_definition("seoul_market_row_8x4_v1")["districts"].has("market_lane"))
+	assert(building_catalog.get_definition("seoul_multifamily_villa_6x6_v1")["districts"].has("multi_family"))
+	assert(building_catalog.get_definition("gangnam_luxury_showroom_6x6_v1")["districts"].has("luxury_core"))
 	var generated_lowrise_ids := {}
 	for seed in [1, 7, 42, 1337, 24681357]:
 		var city: Node3D = map_script.new()
@@ -126,6 +132,37 @@ func _run() -> void:
 		assert(not gate_hit.is_empty())
 		assert((gate_hit["collider"] as Node).is_in_group("apartment_portal_blocker"))
 
+		var anchors: Dictionary = city.get("district_anchors")
+		var zones: Dictionary = city.get("cell_zones")
+		var signature_roads: Dictionary = city.get("district_signature_road_cells")
+		var building_by_cell: Dictionary = city.get("building_type_by_cell")
+		var expected_anchor_buildings := {
+			"market_lane": "seoul_market_row_8x4_v1",
+			"multi_family": "seoul_multifamily_villa_6x6_v1",
+			"luxury_core": "gangnam_luxury_showroom_6x6_v1",
+		}
+		for district_name in expected_anchor_buildings:
+			assert(anchors.has(district_name))
+			assert(signature_roads.has(district_name))
+			var anchor_cell: Vector2i = anchors[district_name]
+			assert(str(zones[anchor_cell]) == district_name)
+			assert(str(building_by_cell[anchor_cell]) == str(expected_anchor_buildings[district_name]))
+			for other_name in expected_anchor_buildings:
+				if other_name == district_name:
+					continue
+				assert(_block_distance(anchor_cell, anchors[other_name]) >= 6)
+		assert(get_nodes_in_group("market_handcart").size() >= 1)
+		for handcart in get_nodes_in_group("market_handcart"):
+			assert(handcart is StaticBody3D)
+			assert((handcart as StaticBody3D).collision_layer == 1)
+			assert((handcart as Node).get_node_or_null("HandcartCollision") != null)
+		var has_luxury_sedan := false
+		for vehicle in get_nodes_in_group("vehicle_obstacle"):
+			if str((vehicle as Node).get_meta("vehicle_type")) == "luxury_sedan":
+				has_luxury_sedan = true
+				break
+		assert(has_luxury_sedan)
+
 		var low_count := 0
 		var high_count := 0
 		for building in get_nodes_in_group("camera_occluder"):
@@ -171,6 +208,7 @@ func _run() -> void:
 
 	assert(generated_lowrise_ids.has("gangnam_lowrise_commercial_8x4_aligned"))
 	assert(generated_lowrise_ids.has("gangnam_lowrise_garage_8x4_aligned"))
+	assert(generated_lowrise_ids.has("seoul_market_row_8x4_v1"))
 	assert(building_catalog.get_definition("gangnam_lowrise_commercial_8x4_aligned")["footprint_modules"] == Vector2i(4, 8))
-	print("CITY_PLANNING_OK seeds=5 parks=0 playgrounds=2 subways=2 apartments=1 lowrise_types=%d" % generated_lowrise_ids.size())
+	print("CITY_PLANNING_OK seeds=5 parks=0 playgrounds=2 subways=2 apartments=1 districts=3 lowrise_types=%d" % generated_lowrise_ids.size())
 	quit(0)
