@@ -50,6 +50,7 @@ const PERIMETER_FENCE_CORNER_PATH := "res://assets/props/perimeter_fence_corner_
 const OUTER_BACKDROP_SIZE := 1040.0
 const PERIMETER_FENCE_SEGMENTS_PER_EDGE := 4
 const PERIMETER_FENCE_WORLD_LENGTH := 132.0
+const PERIMETER_FENCE_VISUAL_OUTSET := 72.0
 const SHELTER_CELL := Vector2i(1, 1)
 
 @export var map_seed: int = 0
@@ -430,7 +431,7 @@ func _build_perimeter_fences() -> void:
 	var corner := load(PERIMETER_FENCE_CORNER_PATH) as Texture2D if ResourceLoader.exists(PERIMETER_FENCE_CORNER_PATH) else null
 	if strip_a == null or strip_b == null:
 		return
-	var edge := MAP_SIZE * 0.5 + 2.8
+	var edge := MAP_SIZE * 0.5 + PERIMETER_FENCE_VISUAL_OUTSET
 	var step := MAP_SIZE / float(PERIMETER_FENCE_SEGMENTS_PER_EDGE)
 	var first := -MAP_SIZE * 0.5 + step * 0.5
 	for index in range(PERIMETER_FENCE_SEGMENTS_PER_EDGE):
@@ -461,11 +462,11 @@ func _spawn_perimeter_fence_sprite(
 	sprite.position = position
 	sprite.pixel_size = (PERIMETER_FENCE_WORLD_LENGTH * scale_factor) / float(texture.get_width())
 	sprite.offset.y = texture.get_height() * 0.22
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	sprite.transparent = true
 	sprite.shaded = false
-	sprite.no_depth_test = true
-	sprite.render_priority = 2
+	sprite.no_depth_test = false
+	sprite.render_priority = -10
 	sprite.flip_h = flip_h
 	sprite.flip_v = flip_v
 	sprite.add_to_group("outer_perimeter_fence")

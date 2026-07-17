@@ -27,7 +27,17 @@ func _run() -> void:
 
 	var skylines := get_nodes_in_group("distant_city_backdrop")
 	assert(skylines.is_empty())
-	assert(get_nodes_in_group("outer_perimeter_fence").size() == 20)
+	var fences := get_nodes_in_group("outer_perimeter_fence")
+	assert(fences.size() == 20)
+	for fence in fences:
+		var fence_sprite := fence as Sprite3D
+		assert(fence_sprite != null)
+		assert(not fence_sprite.no_depth_test)
+		assert(fence_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
+		assert(
+			absf(fence_sprite.global_position.x) >= 292.0
+			or absf(fence_sprite.global_position.z) >= 292.0
+		)
 	for child in city.get_children():
 		assert(not str(child.name).begins_with("ApocalypseSeoulSkyline"))
 
