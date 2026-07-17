@@ -50,7 +50,7 @@ const PERIMETER_FENCE_CORNER_PATH := "res://assets/props/perimeter_fence_corner_
 const OUTER_BACKDROP_SIZE := 1040.0
 const PERIMETER_FENCE_SEGMENTS_PER_EDGE := 4
 const PERIMETER_FENCE_WORLD_LENGTH := 132.0
-const PERIMETER_FENCE_VISUAL_OUTSET := 72.0
+const PERIMETER_FENCE_VISUAL_OUTSET := 8.0
 const SHELTER_CELL := Vector2i(1, 1)
 
 @export var map_seed: int = 0
@@ -436,15 +436,15 @@ func _build_perimeter_fences() -> void:
 	var first := -MAP_SIZE * 0.5 + step * 0.5
 	for index in range(PERIMETER_FENCE_SEGMENTS_PER_EDGE):
 		var offset := first + step * index
-		_spawn_perimeter_fence_sprite("FenceNorth_%d" % index, strip_a, Vector3(offset, 4.8, -edge), false, false)
-		_spawn_perimeter_fence_sprite("FenceSouth_%d" % index, strip_a, Vector3(offset, 4.8, edge), true, false)
-		_spawn_perimeter_fence_sprite("FenceWest_%d" % index, strip_b, Vector3(-edge, 4.8, offset), false, false)
-		_spawn_perimeter_fence_sprite("FenceEast_%d" % index, strip_b, Vector3(edge, 4.8, offset), true, false)
+		_spawn_perimeter_fence_sprite("FenceNorth_%d" % index, strip_a, Vector3(offset, 4.8, -edge), 0.0, false, false)
+		_spawn_perimeter_fence_sprite("FenceSouth_%d" % index, strip_a, Vector3(offset, 4.8, edge), PI, true, false)
+		_spawn_perimeter_fence_sprite("FenceWest_%d" % index, strip_b, Vector3(-edge, 4.8, offset), -PI * 0.5, false, false)
+		_spawn_perimeter_fence_sprite("FenceEast_%d" % index, strip_b, Vector3(edge, 4.8, offset), PI * 0.5, true, false)
 	if corner:
-		_spawn_perimeter_fence_sprite("FenceCornerNW", corner, Vector3(-edge, 4.8, -edge), false, false, 0.78)
-		_spawn_perimeter_fence_sprite("FenceCornerNE", corner, Vector3(edge, 4.8, -edge), true, false, 0.78)
-		_spawn_perimeter_fence_sprite("FenceCornerSW", corner, Vector3(-edge, 4.8, edge), false, true, 0.78)
-		_spawn_perimeter_fence_sprite("FenceCornerSE", corner, Vector3(edge, 4.8, edge), true, true, 0.78)
+		_spawn_perimeter_fence_sprite("FenceCornerNW", corner, Vector3(-edge, 4.8, -edge), -PI * 0.25, false, false, 0.78)
+		_spawn_perimeter_fence_sprite("FenceCornerNE", corner, Vector3(edge, 4.8, -edge), PI * 0.25, true, false, 0.78)
+		_spawn_perimeter_fence_sprite("FenceCornerSW", corner, Vector3(-edge, 4.8, edge), -PI * 0.75, false, true, 0.78)
+		_spawn_perimeter_fence_sprite("FenceCornerSE", corner, Vector3(edge, 4.8, edge), PI * 0.75, true, true, 0.78)
 	_add_perimeter_collision()
 
 
@@ -452,6 +452,7 @@ func _spawn_perimeter_fence_sprite(
 	node_name: String,
 	texture: Texture2D,
 	position: Vector3,
+	yaw: float,
 	flip_h: bool,
 	flip_v: bool,
 	scale_factor: float = 1.0
@@ -460,6 +461,7 @@ func _spawn_perimeter_fence_sprite(
 	sprite.name = node_name
 	sprite.texture = texture
 	sprite.position = position
+	sprite.rotation.y = yaw
 	sprite.pixel_size = (PERIMETER_FENCE_WORLD_LENGTH * scale_factor) / float(texture.get_width())
 	sprite.offset.y = texture.get_height() * 0.22
 	sprite.billboard = BaseMaterial3D.BILLBOARD_DISABLED

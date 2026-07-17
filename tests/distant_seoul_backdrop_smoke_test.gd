@@ -35,8 +35,8 @@ func _run() -> void:
 		assert(not fence_sprite.no_depth_test)
 		assert(fence_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
 		assert(
-			absf(fence_sprite.global_position.x) >= 292.0
-			or absf(fence_sprite.global_position.z) >= 292.0
+			absf(fence_sprite.global_position.x) >= 228.0
+			or absf(fence_sprite.global_position.z) >= 228.0
 		)
 	for child in city.get_children():
 		assert(not str(child.name).begins_with("ApocalypseSeoulSkyline"))
