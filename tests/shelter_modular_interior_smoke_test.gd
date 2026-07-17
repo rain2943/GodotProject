@@ -1,7 +1,8 @@
 extends SceneTree
 
 const SHELTER_SCENE_PATH := "res://scenes/shelter_interior.tscn"
-const SHELL_TEXTURE_PATH := "res://assets/interiors/shelter_stage1_modular_shell_v2.png"
+const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png"
+const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
 const BED_TEXTURE_PATH := "res://assets/interiors/shelter_bed_module_v2.png"
 
 
@@ -10,7 +11,8 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	assert(ResourceLoader.exists(SHELL_TEXTURE_PATH))
+	assert(ResourceLoader.exists(FLOOR_TEXTURE_PATH))
+	assert(ResourceLoader.exists(WALL_TEXTURE_PATH))
 	assert(ResourceLoader.exists(BED_TEXTURE_PATH))
 	var shelter := load(SHELTER_SCENE_PATH).instantiate() as Node3D
 	root.add_child(shelter)
@@ -20,9 +22,14 @@ func _run() -> void:
 	var room_art := shelter.get_node("ShelterInteriorArt") as MeshInstance3D
 	assert(room_art != null)
 	var room_mesh := room_art.mesh as PlaneMesh
-	assert(room_mesh.size == Vector2(36.0, 20.25))
+	assert(room_mesh.size == Vector2(32.7, 17.5))
 	var room_material := room_mesh.material as StandardMaterial3D
-	assert(room_material.albedo_texture.resource_path == SHELL_TEXTURE_PATH)
+	assert(room_material.albedo_texture.resource_path == FLOOR_TEXTURE_PATH)
+	assert(room_material.texture_repeat)
+	assert(shelter.get_node("NorthWall01") is MeshInstance3D)
+	assert(shelter.get_node("WestWall01") is MeshInstance3D)
+	assert(shelter.get_node("SouthLowWallLeft") is MeshInstance3D)
+	assert(shelter.get_node("ExitPad") is MeshInstance3D)
 
 	var module_root := shelter.get_node("StageOneModules") as Node3D
 	assert(int(module_root.get_meta("stage")) == 1)
@@ -39,7 +46,8 @@ func _run() -> void:
 		assert(sprite.texture.resource_path == BED_TEXTURE_PATH)
 		var collision := (bed as Node).get_node("BedBody/CollisionShape3D") as CollisionShape3D
 		var shape := collision.shape as BoxShape3D
-		assert(shape.size == Vector3(2.55, 0.9, 2.05))
+		assert(shape.size == Vector3(2.9, 0.9, 2.2))
+		assert((bed as Node).get_node("GroundShadow") is MeshInstance3D)
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)
 	for wall_name in [

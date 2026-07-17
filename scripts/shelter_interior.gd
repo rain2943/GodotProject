@@ -1,7 +1,8 @@
 extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
-const INTERIOR_TEXTURE_PATH := "res://assets/interiors/shelter_stage1_modular_shell_v2.png"
+const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png"
+const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
 const BED_MODULE_SCENE := preload("res://scenes/modules/shelter_bed_module.tscn")
 const MOVE_SPEED := 4.6
 const CAT_ANIMATION_ROOT := "res://assets/characters/cat_8way"
@@ -16,7 +17,7 @@ const CAT_DIRECTION_STATES := {
 	"nw": "up_left",
 }
 const CAT_FRAME_COUNT := 4
-const ROOM_ART_SIZE := Vector2(36.0, 20.25)
+const ROOM_ART_SIZE := Vector2(32.7, 17.5)
 const PLAYER_BOUNDS := Vector2(15.65, 8.1)
 const BED_MODULE_PLATE_SIZE := Vector2(3.45, 2.65)
 const STAGE_ONE_BED_POSITIONS := [
@@ -94,11 +95,18 @@ func _build_room() -> void:
 	add_child(environment)
 	_add_plane("BlackOutside", Vector3(0, -0.12, 0), Vector2(72, 72), _material(Color.BLACK), self)
 	var floor_material: StandardMaterial3D
-	if ResourceLoader.exists(INTERIOR_TEXTURE_PATH):
-		floor_material = _texture_material(load(INTERIOR_TEXTURE_PATH) as Texture2D)
+	if ResourceLoader.exists(FLOOR_TEXTURE_PATH):
+		floor_material = _texture_material(load(FLOOR_TEXTURE_PATH) as Texture2D)
+		floor_material.texture_repeat = true
+		floor_material.uv1_scale = Vector3(ROOM_ART_SIZE.x / 8.0, ROOM_ART_SIZE.y / 8.0, 1.0)
 	else:
 		floor_material = _material(Color("#242c2a"))
 	_add_plane("ShelterInteriorArt", Vector3(0, 0, 0), ROOM_ART_SIZE, floor_material, self)
+	var wall_material := _material(Color("#202a31"))
+	if ResourceLoader.exists(WALL_TEXTURE_PATH):
+		wall_material = _texture_material(load(WALL_TEXTURE_PATH) as Texture2D)
+	_build_visible_walls(wall_material)
+	_build_exit_pad()
 	_add_obstacle("NorthWallCollision", Vector3(0, 1.5, -8.75), Vector3(32.7, 3.0, 0.55))
 	_add_obstacle("SouthWallLeftCollision", Vector3(-5.15, 1.5, 8.75), Vector3(22.4, 3.0, 0.55))
 	_add_obstacle("SouthWallRightCollision", Vector3(13.05, 1.5, 8.75), Vector3(6.5, 3.0, 0.55))
@@ -107,14 +115,52 @@ func _build_room() -> void:
 	var camera := Camera3D.new()
 	add_child(camera)
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 29.0
-	camera.position = Vector3(15.5, 18.0, 15.5)
+	camera.size = 28.0
+	camera.position = Vector3(18.0, 18.0, 18.0)
 	camera.look_at(Vector3(0, 0, 0))
 	camera.current = true
 	var light := DirectionalLight3D.new()
 	light.rotation_degrees = Vector3(-55, -38, 0)
 	light.light_energy = 0.95
 	add_child(light)
+
+
+func _build_visible_walls(wall_material: Material) -> void:
+	_add_segmented_wall("NorthWall", Vector3(0, 1.5, -8.75), Vector3(32.7, 3.0, 0.55), true, wall_material)
+	_add_segmented_wall("WestWall", Vector3(-16.35, 1.5, 0), Vector3(0.55, 3.0, 18.05), false, wall_material)
+	var low_wall_material := _material(Color("#25323a"))
+	_add_visual_box("SouthLowWallLeft", Vector3(-5.15, 0.34, 8.75), Vector3(22.4, 0.68, 0.55), low_wall_material, self)
+	_add_visual_box("SouthLowWallRight", Vector3(13.05, 0.34, 8.75), Vector3(6.5, 0.68, 0.55), low_wall_material, self)
+	_add_visual_box("EastLowWall", Vector3(16.35, 0.34, 0), Vector3(0.55, 0.68, 18.05), low_wall_material, self)
+	var light_material := _emissive_material(Color("#55dce9"), 2.5)
+	for x in [-12.0, -6.0, 0.0, 6.0, 12.0]:
+		_add_visual_box("NorthLight", Vector3(x, 1.35, -8.43), Vector3(1.45, 0.12, 0.08), light_material, self)
+	for z in [-5.4, 0.0, 5.4]:
+		_add_visual_box("WestLight", Vector3(-16.03, 1.35, z), Vector3(0.08, 0.12, 1.45), light_material, self)
+
+
+func _add_segmented_wall(prefix: String, position: Vector3, size: Vector3, along_x: bool, material: Material) -> void:
+	var total := size.x if along_x else size.z
+	var segment_count := ceili(total / 3.3)
+	var segment_length := total / float(segment_count)
+	for index in segment_count:
+		var offset := -total * 0.5 + segment_length * (float(index) + 0.5)
+		var segment_position := position
+		var segment_size := size
+		if along_x:
+			segment_position.x += offset
+			segment_size.x = segment_length - 0.035
+		else:
+			segment_position.z += offset
+			segment_size.z = segment_length - 0.035
+		_add_visual_box("%s%02d" % [prefix, index + 1], segment_position, segment_size, material, self)
+
+
+func _build_exit_pad() -> void:
+	var pad_material := _material(Color("#26333b"))
+	_add_plane("ExitPad", Vector3(7.7, 0.025, 7.55), Vector2(3.5, 2.35), pad_material, self)
+	var warning_material := _emissive_material(Color("#d79b43"), 1.6)
+	_add_visual_box("ExitPadLine", Vector3(7.7, 0.055, 6.45), Vector3(3.15, 0.035, 0.09), warning_material, self)
 
 
 func _build_stage_one_modules() -> void:
@@ -445,4 +491,12 @@ func _material(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
 	material.roughness = 0.88
+	return material
+
+
+func _emissive_material(color: Color, energy: float) -> StandardMaterial3D:
+	var material := _material(color)
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = energy
 	return material
