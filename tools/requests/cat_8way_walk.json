@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-request",
+  "engine": "component-row",
+  "character": {
+    "id": "cat",
+    "description": "charcoal tactical cat with amber eyes, white muzzle and chest, brown neck scarf, dark outfit, backpack, and a curled white-tipped tail"
+  },
+  "style": "match the supplied cat reference sheet exactly: chunky pixel-art proportions, dark charcoal fur, amber eyes, white muzzle and chest, warm brown scarf, dark clothing and backpack, crisp dark outline, restrained warm highlights, no painterly rendering",
+  "cell": {
+    "shape": "square",
+    "size": 256,
+    "safe_margin": 24
+  },
+  "chroma_key": {
+    "name": "magenta",
+    "hex": "#FF00FF",
+    "rgb": [255, 0, 255]
+  },
+  "directions": {
+    "set": ["down", "down_right", "right", "up_right", "up", "up_left", "left", "down_left"],
+    "mirror": {},
+    "anchor_suffix": "idle"
+  },
+  "states": {
+    "down_walk": { "frames": 4, "fps": 8, "loop": true, "action": "four-phase walk: left leg forward, passing, right leg forward, passing; keep the cat's identity and tail silhouette locked" },
+    "down_right_walk": { "frames": 4, "fps": 8, "loop": true, "action": "four-phase diagonal walk toward camera-right and slightly toward the viewer" },
+    "right_walk": { "frames": 4, "fps": 8, "loop": true, "action": "four-phase side-profile walk toward camera-right" },
+    "up_right_walk": { "frames": 4, "fps": 8, "loop": true, "action": "four-phase diagonal walk away from the viewer toward camera-right" },
+    "up_walk": { "frames": 4, "fps": 8, "loop": true, "action": "four-phase back-view walk away from the viewer; backpack and tail remain readable" },
+    "up_left_walk": { "frames": 4, "fps": 8, "loop": true, "action": "four-phase diagonal walk away from the viewer toward camera-left" },
+    "left_walk": { "frames": 4, "fps": 8, "loop": true, "action": "four-phase side-profile walk toward camera-left" },
+    "down_left_walk": { "frames": 4, "fps": 8, "loop": true, "action": "four-phase diagonal walk toward camera-left and slightly toward the viewer" }
+  }
+}

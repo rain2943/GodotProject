@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-request",
+  "engine": "component-row",
+  "character": {
+    "id": "cat_left",
+    "description": "charcoal tactical cat in a strict left-facing side profile"
+  },
+  "style": "match the cat reference sheet: chunky pixel art, charcoal fur, one amber eye in side profile, white muzzle/chest, brown scarf, dark outfit, backpack, white-tipped tail",
+  "cell": { "shape": "square", "size": 256, "safe_margin": 24 },
+  "chroma_key": { "name": "magenta", "hex": "#FF00FF", "rgb": [255, 0, 255] },
+  "states": {
+    "left_walk": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "strict left-facing side-view walk with phases left_lead, gather, right_lead, gather"
+    }
+  }
+}

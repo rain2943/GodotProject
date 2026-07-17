@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-request",
+  "engine": "component-row",
+  "character": {
+    "id": "cat_demo",
+    "description": "charcoal tactical cat with amber eyes, white muzzle and chest, brown scarf, dark outfit, backpack, and curled white-tipped tail"
+  },
+  "style": "match the supplied cat reference sheet exactly: chunky pixel-art proportions and crisp dark outlines",
+  "cell": { "shape": "square", "size": 256, "safe_margin": 24 },
+  "chroma_key": { "name": "magenta", "hex": "#FF00FF", "rgb": [255, 0, 255] },
+  "states": {
+    "walk": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "four-phase front-facing walk: left leg forward, passing, right leg forward, passing"
+    }
+  }
+}

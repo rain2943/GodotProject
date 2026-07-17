@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sprite-gen curation</title>
+    <link rel="stylesheet" href="/curator.css?v=manual-auto-generation-1" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="title">
+        <strong>sprite-gen</strong> <span id="t-title"></span>
+        <span id="character" class="muted"></span>
+      </div>
+      <div class="actions">
+        <span id="status" class="status"></span>
+        <div class="notification-center">
+          <button id="notification-toggle" type="button" class="ghost" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span id="notification-badge" hidden></span>
+          </button>
+          <div id="notification-menu" class="notification-menu" hidden>
+            <div class="notification-head"><strong id="notification-title"></strong><button id="notification-read-all" type="button" class="ghost"></button></div>
+            <div id="notification-list" class="notification-list"></div>
+          </div>
+        </div>
+        <button id="lang-toggle" type="button" class="ghost"></button>
+        <label id="pxgrid-wrap" class="pp-apply" hidden>
+          <input type="checkbox" id="pxgrid-check" />
+          <span id="pxgrid-label"></span>
+        </label>
+        <label id="pp-wrap" class="pp-apply" hidden>
+          <input type="checkbox" id="pp-apply" />
+          <span id="pp-label"></span>
+        </label>
+        <button id="grid-toggle" type="button" class="ghost" hidden></button>
+        <button id="skeleton-list-toggle" type="button" class="ghost"></button>
+        <button id="skeleton-save" type="button" class="ghost"></button>
+        <button id="export" type="button"></button>
+        <button id="export-gif" type="button"></button>
+        <button id="compose" type="button"></button>
+      </div>
+    </header>
+    <div id="layout">
+      <aside id="sidebar"></aside>
+      <button id="sidebar-toggle" type="button" aria-label="toggle file tree">
+        <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+          <path d="M10.5 2.5 5 8l5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <main id="states"></main>
+    </div>
+    <footer class="hintbar" id="hintbar"></footer>
+    <script src="/curator.js?v=manual-auto-generation-1"></script>
+  </body>
+</html>
