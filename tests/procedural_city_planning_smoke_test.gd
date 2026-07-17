@@ -95,6 +95,23 @@ func _run() -> void:
 		assert(city.get_node_or_null("ShelterSafehouse") == null)
 		assert(city.find_children("ShelterPortal", "", true, false).is_empty())
 		assert(not bool(city.call("is_position_in_safe_zone", city.call("_cell_center", Vector2i(1, 1)))))
+		var road_covers: Array[Node] = []
+		for child in city.get_children():
+			if child.is_in_group("road_cover_obstacle"):
+				road_covers.append(child)
+		assert(road_covers.size() >= 4)
+		for cover in road_covers:
+			assert(cover is StaticBody3D)
+			assert((cover as StaticBody3D).collision_layer == 1)
+			var cover_cell: Vector2i = cover.get_meta("road_cell")
+			assert(city.call("_is_road_cell", cover_cell))
+			assert(not city.call("_is_subway_vehicle_clearance_cell", cover_cell))
+			assert(not (city.get("vertical_roads").has(cover_cell.x) and city.get("horizontal_roads").has(cover_cell.y)))
+			var cover_collision := cover.get_node("CoverCollision") as CollisionShape3D
+			var cover_shape := cover_collision.shape as BoxShape3D
+			assert(cover_shape.size.x > 1.0)
+			assert(cover_shape.size.z > 1.0)
+			assert(cover.get_node("CoverSprite") is Sprite3D)
 		_assert_sealed_landmark(city, playgrounds[0], "UrbanPlaygroundCollision")
 		assert(apartment_cells.size() == 5)
 		assert(get_nodes_in_group("urban_apartment_complex").size() == 1)

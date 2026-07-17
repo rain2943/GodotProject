@@ -20,8 +20,35 @@ const FAR_DEPTH_OPEN_CELL := Vector2i(GRID_SIZE - 1, GRID_SIZE - 1)
 const ROAD_SETBACK_MODULES := 2
 const INTERIOR_SETBACK_MODULES := 1
 const ROAD_VEHICLE_CHANCE := 0.34
+const ROAD_COVER_OBSTACLE_CHANCE := 0.24
 const DISTRICT_RADIUS_CELLS := 2
 const DISTRICT_MIN_SEPARATION_CELLS := 6
+const ROAD_COVER_DEFINITIONS := {
+	"concrete_barricade_axis_a": {
+		"texture_path": "res://assets/props/road_cover/concrete_barricade_axis_a_v1.png",
+		"collision_size": Vector3(7.8, 1.8, 1.35),
+		"pixel_size": 0.0072,
+		"sprite_height": 2.05,
+	},
+	"concrete_barricade_axis_b": {
+		"texture_path": "res://assets/props/road_cover/concrete_barricade_axis_b_v1.png",
+		"collision_size": Vector3(1.35, 1.8, 7.8),
+		"pixel_size": 0.0072,
+		"sprite_height": 2.05,
+	},
+	"rubble_wall_axis_a": {
+		"texture_path": "res://assets/props/road_cover/rubble_wall_axis_a_v1.png",
+		"collision_size": Vector3(8.2, 2.25, 2.15),
+		"pixel_size": 0.0069,
+		"sprite_height": 2.4,
+	},
+	"rubble_wall_axis_b": {
+		"texture_path": "res://assets/props/road_cover/rubble_wall_axis_b_v1.png",
+		"collision_size": Vector3(2.15, 2.25, 8.2),
+		"pixel_size": 0.0069,
+		"sprite_height": 2.4,
+	},
+}
 const MARKET_HANDCART_TEXTURE_PATH := "res://assets/props/market_handcart_v1.png"
 const MARKET_HANDCART_COLLISION_SIZE := Vector3(4.2, 1.55, 2.15)
 const MARKET_HANDCART_FOOTPRINT_CORNERS := [
@@ -529,6 +556,8 @@ func _build_road_cell(cell: Vector2i, center: Vector3, vertical: bool, horizonta
 			_spawn_road_cover_vehicle(center, vertical, "luxury_core", true)
 		elif rng.randf() < ROAD_VEHICLE_CHANCE:
 			_spawn_road_cover_vehicle(center, vertical, _road_district(cell))
+		elif rng.randf() < ROAD_COVER_OBSTACLE_CHANCE:
+			_spawn_road_cover_obstacle(cell, center, vertical)
 
 
 func _road_district(cell: Vector2i) -> String:
@@ -698,6 +727,63 @@ func _spawn_road_cover_vehicle(center: Vector3, vertical: bool, district: String
 	var travel_offset := rng.randf_range(-2.2, 2.2) * WORLD_SCALE
 	var position := center + (Vector3(lane_offset, 0.1, travel_offset) if vertical else Vector3(travel_offset, 0.1, lane_offset))
 	_spawn_vehicle("RoadCover_%d_%d" % [roundi(center.x), roundi(center.z)], vehicle_type, position, vertical)
+
+
+func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool) -> void:
+	var candidates := (
+		["concrete_barricade_axis_b", "rubble_wall_axis_b"]
+		if vertical
+		else ["concrete_barricade_axis_a", "rubble_wall_axis_a"]
+	)
+	var cover_type := str(candidates[rng.randi_range(0, candidates.size() - 1)])
+	var definition: Dictionary = ROAD_COVER_DEFINITIONS.get(cover_type, {})
+	if definition.is_empty():
+		return
+	var texture_path := str(definition.get("texture_path", ""))
+	if not ResourceLoader.exists(texture_path):
+		return
+	var texture := load(texture_path) as Texture2D
+	if texture == null:
+		return
+	var lateral_offset := rng.randf_range(-1.35, 1.35) * WORLD_SCALE
+	var travel_offset := rng.randf_range(-1.7, 1.7) * WORLD_SCALE
+	var position := center + (
+		Vector3(lateral_offset, 0.0, travel_offset)
+		if vertical
+		else Vector3(travel_offset, 0.0, lateral_offset)
+	)
+	var body := StaticBody3D.new()
+	body.name = "RoadCoverObstacle_%d_%d" % [cell.x, cell.y]
+	body.position = position
+	body.collision_layer = 1
+	body.add_to_group("road_cover_obstacle")
+	body.add_to_group("cover_obstacle")
+	body.set_meta("cover_type", cover_type)
+	body.set_meta("road_cell", cell)
+	body.set_meta("cover_axis", "z" if vertical else "x")
+	add_child(body)
+
+	var sprite := Sprite3D.new()
+	sprite.name = "CoverSprite"
+	sprite.texture = texture
+	sprite.pixel_size = float(definition.get("pixel_size", 0.007))
+	sprite.position = Vector3(0.0, float(definition.get("sprite_height", 2.0)), 0.0)
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.transparent = true
+	sprite.shaded = false
+	sprite.no_depth_test = true
+	sprite.render_priority = 4
+	body.add_child(sprite)
+
+	var collision_size: Vector3 = definition.get("collision_size", Vector3(4.0, 1.4, 1.4))
+	body.set_meta("collision_world_size", collision_size)
+	var collision := CollisionShape3D.new()
+	collision.name = "CoverCollision"
+	var shape := BoxShape3D.new()
+	shape.size = collision_size
+	collision.position.y = collision_size.y * 0.5
+	collision.shape = shape
+	body.add_child(collision)
 
 
 func _build_parking_lot(cell: Vector2i) -> void:
