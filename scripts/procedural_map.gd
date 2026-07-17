@@ -26,27 +26,27 @@ const DISTRICT_MIN_SEPARATION_CELLS := 6
 const ROAD_COVER_DEFINITIONS := {
 	"concrete_barricade_axis_a": {
 		"texture_path": "res://assets/props/road_cover/concrete_barricade_axis_a_v1.png",
-		"collision_size": Vector3(7.8, 1.8, 1.35),
-		"pixel_size": 0.0072,
-		"sprite_height": 2.05,
+		"collision_size": Vector3(4.8, 1.35, 0.95),
+		"pixel_size": 0.0048,
+		"sprite_height": 1.45,
 	},
 	"concrete_barricade_axis_b": {
 		"texture_path": "res://assets/props/road_cover/concrete_barricade_axis_b_v1.png",
-		"collision_size": Vector3(1.35, 1.8, 7.8),
-		"pixel_size": 0.0072,
-		"sprite_height": 2.05,
+		"collision_size": Vector3(0.95, 1.35, 4.8),
+		"pixel_size": 0.0048,
+		"sprite_height": 1.45,
 	},
 	"rubble_wall_axis_a": {
 		"texture_path": "res://assets/props/road_cover/rubble_wall_axis_a_v1.png",
-		"collision_size": Vector3(8.2, 2.25, 2.15),
-		"pixel_size": 0.0069,
-		"sprite_height": 2.4,
+		"collision_size": Vector3(5.6, 1.65, 1.45),
+		"pixel_size": 0.0046,
+		"sprite_height": 1.75,
 	},
 	"rubble_wall_axis_b": {
 		"texture_path": "res://assets/props/road_cover/rubble_wall_axis_b_v1.png",
-		"collision_size": Vector3(2.15, 2.25, 8.2),
-		"pixel_size": 0.0069,
-		"sprite_height": 2.4,
+		"collision_size": Vector3(1.45, 1.65, 5.6),
+		"pixel_size": 0.0046,
+		"sprite_height": 1.75,
 	},
 }
 const MARKET_HANDCART_TEXTURE_PATH := "res://assets/props/market_handcart_v1.png"
@@ -784,6 +784,19 @@ func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool)
 	collision.position.y = collision_size.y * 0.5
 	collision.shape = shape
 	body.add_child(collision)
+
+	var debug_mesh := MeshInstance3D.new()
+	debug_mesh.name = "CoverCollisionDebug"
+	debug_mesh.position = Vector3(0.0, 0.035, 0.0)
+	var footprint_mesh := PlaneMesh.new()
+	footprint_mesh.size = Vector2(collision_size.x, collision_size.z)
+	footprint_mesh.material = vehicle_collision_material
+	debug_mesh.mesh = footprint_mesh
+	debug_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	debug_mesh.set_meta("cover_type", cover_type)
+	debug_mesh.set_meta("cover_axis", "z" if vertical else "x")
+	debug_mesh.set_meta("footprint_world_size", Vector2(collision_size.x, collision_size.z))
+	body.add_child(debug_mesh)
 
 
 func _build_parking_lot(cell: Vector2i) -> void:
