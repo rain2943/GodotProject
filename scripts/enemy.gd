@@ -85,6 +85,7 @@ var health_bar_background: Sprite3D
 var health_bar_damage_trail: Sprite3D
 var health_bar_fill: Sprite3D
 var reload_indicator: Sprite3D
+var shot_audio_player: AudioStreamPlayer3D
 var magazine_size := 1
 var magazine_ammo := 1
 var reload_duration := 1.8
@@ -103,6 +104,7 @@ static var weapon_texture_cache: Dictionary = {}
 static var health_bar_texture_cache: Dictionary = {}
 static var reload_texture_cache: Dictionary = {}
 static var reinforcement_call_texture_cache: Dictionary = {}
+static var enemy_gunshot_stream_cache: AudioStreamWAV
 
 
 func configure(
@@ -206,6 +208,7 @@ func _ready() -> void:
 	sprite.render_priority = 30
 	add_child(sprite)
 	_setup_weapon_visual()
+	_setup_enemy_audio()
 	_setup_enemy_health_bar()
 	_setup_reload_indicator()
 	_setup_reinforcement_call_indicator()
@@ -1129,6 +1132,7 @@ func _fire_weapon(direction: Vector3) -> void:
 		_start_reload()
 		return
 	magazine_ammo -= 1
+	_play_enemy_gunshot()
 	var pellet_count := 6 if weapon_id == "double_barrel" else 1
 	var base_spread := float(weapon_stats.get("base_spread_deg", 2.0))
 	var accuracy_multiplier := lerpf(1.55, 0.72, threat_level)
@@ -1150,6 +1154,56 @@ func _fire_weapon(direction: Vector3) -> void:
 
 func _fire_pistol(direction: Vector3) -> void:
 	_fire_weapon(direction)
+
+
+func _setup_enemy_audio() -> void:
+	if weapon_id == "baseball_bat":
+		return
+	shot_audio_player = AudioStreamPlayer3D.new()
+	shot_audio_player.name = "EnemyGunshot"
+	shot_audio_player.stream = _get_enemy_gunshot_stream()
+	shot_audio_player.unit_size = 6.0
+	shot_audio_player.max_distance = 48.0
+	shot_audio_player.volume_db = -6.0
+	add_child(shot_audio_player)
+
+
+func _get_enemy_gunshot_stream() -> AudioStreamWAV:
+	if enemy_gunshot_stream_cache:
+		return enemy_gunshot_stream_cache
+	var mix_rate := 32000
+	var sample_count := int(mix_rate * 0.22)
+	var data := PackedByteArray()
+	data.resize(sample_count * 2)
+	var random := RandomNumberGenerator.new()
+	random.seed = 54019
+	for index in sample_count:
+		var time := float(index) / mix_rate
+		var snap := random.randf_range(-1.0, 1.0) * exp(-time * 42.0)
+		var crack := sin(TAU * 920.0 * time + random.randf_range(-0.2, 0.2)) * exp(-time * 29.0)
+		var body := sin(TAU * 132.0 * time) * exp(-time * 15.0)
+		var tail := 0.0
+		if time > 0.045:
+			tail = random.randf_range(-1.0, 1.0) * exp(-(time - 0.045) * 18.0) * 0.16
+		var sample := tanh((snap * 0.76 + crack * 0.22 + body * 0.3 + tail) * 1.25) * 0.78
+		var encoded := int(clampf(sample, -1.0, 1.0) * 32767.0)
+		data[index * 2] = encoded & 0xff
+		data[index * 2 + 1] = (encoded >> 8) & 0xff
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = mix_rate
+	stream.stereo = false
+	stream.data = data
+	enemy_gunshot_stream_cache = stream
+	return enemy_gunshot_stream_cache
+
+
+func _play_enemy_gunshot() -> void:
+	if not is_instance_valid(shot_audio_player):
+		return
+	shot_audio_player.stop()
+	shot_audio_player.pitch_scale = randf_range(0.94, 1.12)
+	shot_audio_player.play()
 
 
 func _spawn_enemy_muzzle_flash(direction: Vector3) -> void:

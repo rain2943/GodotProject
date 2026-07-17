@@ -72,6 +72,7 @@ var roll_stamina := ROLL_STAMINA_MAX
 var roll_afterimage_timer := 0.0
 var roll_direction := Vector3.ZERO
 var roll_afterimages: Array[Sprite3D] = []
+var roll_audio_player: AudioStreamPlayer3D
 
 
 func _ready() -> void:
@@ -79,6 +80,7 @@ func _ready() -> void:
 	_build_room()
 	_build_stage_one_modules()
 	_build_player()
+	_build_roll_audio()
 	_build_interface()
 	_update_stats()
 	_show_status(_build_offline_status_text(offline_notice))
@@ -561,6 +563,52 @@ func _input(event: InputEvent) -> void:
 		touch_knob.position = Vector2(40, 40) + offset
 
 
+func _build_roll_audio() -> void:
+	if not is_instance_valid(player):
+		return
+	roll_audio_player = AudioStreamPlayer3D.new()
+	roll_audio_player.name = "ShelterRollWhoosh"
+	roll_audio_player.stream = _create_roll_stream()
+	roll_audio_player.unit_size = 4.0
+	roll_audio_player.max_distance = 22.0
+	roll_audio_player.volume_db = -6.0
+	player.add_child(roll_audio_player)
+
+
+func _create_roll_stream() -> AudioStreamWAV:
+	var mix_rate := 32000
+	var sample_count := int(mix_rate * 0.28)
+	var data := PackedByteArray()
+	data.resize(sample_count * 2)
+	var random := RandomNumberGenerator.new()
+	random.seed = 82119
+	for index in sample_count:
+		var time := float(index) / mix_rate
+		var progress := time / 0.28
+		var envelope := sin(clampf(progress, 0.0, 1.0) * PI)
+		var air := random.randf_range(-1.0, 1.0) * envelope
+		var cloth := sin(TAU * (170.0 + 180.0 * progress) * time) * envelope * 0.22
+		var low := sin(TAU * 58.0 * time) * exp(-time * 9.0) * 0.2
+		var sample := clampf(air * 0.34 + cloth + low, -1.0, 1.0)
+		var encoded := int(sample * 32767.0)
+		data[index * 2] = encoded & 0xff
+		data[index * 2 + 1] = (encoded >> 8) & 0xff
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = mix_rate
+	stream.stereo = false
+	stream.data = data
+	return stream
+
+
+func _play_roll_sound() -> void:
+	if not is_instance_valid(roll_audio_player):
+		return
+	roll_audio_player.stop()
+	roll_audio_player.pitch_scale = randf_range(0.94, 1.08)
+	roll_audio_player.play()
+
+
 func _try_start_roll() -> void:
 	if roll_active or roll_stamina < ROLL_STAMINA_COST or not is_instance_valid(player):
 		return
@@ -582,6 +630,7 @@ func _try_start_roll() -> void:
 	roll_elapsed = 0.0
 	roll_afterimage_timer = 0.0
 	_set_motion_state("roll")
+	_play_roll_sound()
 	_spawn_roll_afterimage()
 
 

@@ -52,6 +52,7 @@ func _draw() -> void:
 
 	var data: Dictionary = world.call("get_map_snapshot_data")
 	var grid_size := int(data.get("grid_size", 22))
+	var map_size := float(data.get("map_size", grid_size * 20.0))
 	var map_side := minf(panel_rect.size.x - 70.0, panel_rect.size.y - 105.0)
 	var map_rect := Rect2(panel_rect.position + Vector2((panel_rect.size.x - map_side) * 0.5, 55), Vector2.ONE * map_side)
 	draw_rect(map_rect, Color("#181d1d"), true)
@@ -90,10 +91,16 @@ func _draw() -> void:
 		draw_circle(extraction_center, 2.5, Color("#fff0a8"))
 
 	if is_instance_valid(player):
-		var player_cell: Vector2i = world.call("world_to_map_cell", player.global_position)
-		var player_center := map_rect.position + (Vector2(player_cell.x, player_cell.y) + Vector2.ONE * 0.5) * cell_size
-		draw_circle(player_center, maxf(5.0, cell_size * 0.28), Color("#8fffd0"))
-		draw_circle(player_center, maxf(8.0, cell_size * 0.43), Color(0.56, 1.0, 0.82, 0.38), false, 2.0)
+		var player_center := _world_position_to_map_point(player.global_position, map_rect, map_size)
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
+		var outer_radius := maxf(16.0, cell_size * 0.9) + pulse * 5.0
+		var inner_radius := maxf(7.0, cell_size * 0.34)
+		draw_circle(player_center, outer_radius, Color(0.25, 1.0, 0.78, 0.16))
+		draw_circle(player_center, outer_radius, Color("#8fffd0"), false, 3.0)
+		draw_circle(player_center, inner_radius, Color("#081110"))
+		draw_circle(player_center, inner_radius * 0.68, Color("#8fffd0"))
+		_draw_player_heading(player_center, maxf(20.0, cell_size * 1.0))
+		draw_string(UI_FONT, player_center + Vector2(14, -13), "내 위치", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#b9ffe4"))
 
 
 func _panel_style() -> StyleBoxFlat:
@@ -103,3 +110,32 @@ func _panel_style() -> StyleBoxFlat:
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(5)
 	return style
+
+
+func _world_position_to_map_point(world_position: Vector3, map_rect: Rect2, map_size: float) -> Vector2:
+	var half_map := map_size * 0.5
+	var normalized := Vector2(
+		clampf((world_position.x + half_map) / map_size, 0.0, 1.0),
+		clampf((world_position.z + half_map) / map_size, 0.0, 1.0)
+	)
+	return map_rect.position + normalized * map_rect.size
+
+
+func _draw_player_heading(center: Vector2, length: float) -> void:
+	if not is_instance_valid(player):
+		return
+	var forward_3d := -player.global_transform.basis.z
+	var direction := Vector2(forward_3d.x, forward_3d.z)
+	if direction.length_squared() < 0.001:
+		direction = Vector2.UP
+	direction = direction.normalized()
+	var tip := center + direction * length
+	var side := Vector2(-direction.y, direction.x)
+	var back := center + direction * (length * 0.25)
+	var points := PackedVector2Array([
+		tip,
+		back + side * length * 0.32,
+		back - side * length * 0.32,
+	])
+	draw_colored_polygon(points, Color("#8fffd0"))
+	draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[0]]), Color("#06100e"), 2.0)

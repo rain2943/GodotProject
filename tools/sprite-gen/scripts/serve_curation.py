@@ -121,8 +121,10 @@ def _active_skeleton_profile(run_dir: Path) -> tuple[Path, dict] | None:
                 profile_id = str(assignment.get("profileId") or "")
                 if profile_id:
                     return _skeleton_profile_by_id(run_dir, profile_id)
-                # A new skeleton draft intentionally has no shared pose source yet.
-                if assignment.get("mode") == "new":
+                # New skeleton drafts and directionless characters intentionally
+                # have no shared pose source. Do not fall back to the legacy
+                # global pointer for either mode.
+                if assignment.get("mode") in {"new", "none"}:
                     return None
         except (OSError, json.JSONDecodeError):
             pass
@@ -588,8 +590,14 @@ def create_studio_character(studio_root: Path, initial_run_dir: Path, name: str,
                 "profileId": profile[1]["profileId"],
                 "name": _infer_skeleton_name(profile[1]),
             }
+        elif mode == "none":
+            # A base-only character has no directional animation contract. This
+            # keeps the curation view empty until animation structure is added.
+            request["states"] = {}
+            request.pop("directions", None)
+            request["studio_skeleton"] = {"mode": "none"}
         else:
-            raise ValueError("skeleton mode must be existing or new")
+            raise ValueError("skeleton mode must be existing, new, or none")
         request["character"] = {
             "id": character_id,
             "description": name,

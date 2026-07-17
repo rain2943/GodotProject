@@ -16,7 +16,7 @@ func _run() -> void:
 	await physics_frame
 	assert(float(main_scene.get("night_intensity")) > 0.9)
 	var enemies: Array = main_scene.get("enemies")
-	assert(enemies.size() == 10)
+	assert(enemies.size() == 17)
 	var initial_spawn_distances: Array[float] = []
 	for initial_enemy in enemies:
 		initial_spawn_distances.append(
@@ -32,7 +32,7 @@ func _run() -> void:
 	main_scene.call("_update_enemy_pressure", 1.0)
 	await process_frame
 	enemies = main_scene.get("enemies")
-	assert(enemies.size() == 11)
+	assert(enemies.size() == 18)
 	var enemy: Node = enemies[0]
 	assert(enemy.get_node_or_null("VisionFan") is MeshInstance3D)
 	assert(float(enemy.call("_get_vision_range")) >= 9.5)

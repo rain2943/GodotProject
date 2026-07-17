@@ -1208,6 +1208,8 @@ func get_extraction_position() -> Vector3:
 func get_map_snapshot_data() -> Dictionary:
 	return {
 		"grid_size": GRID_SIZE,
+		"map_size": MAP_SIZE,
+		"cell_size": CELL_SIZE,
 		"vertical_roads": vertical_roads.duplicate(),
 		"horizontal_roads": horizontal_roads.duplicate(),
 		"river_columns": river_columns.duplicate(),

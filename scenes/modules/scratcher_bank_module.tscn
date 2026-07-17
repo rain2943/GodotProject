@@ -1,7 +1,7 @@
 [gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/scratcher_bank_module.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/interiors/modules/scratcher_bank_wall_aligned_v1.png" id="2_texture"]
+[ext_resource type="Texture2D" path="res://assets/interiors/modules/scratcher_bank_wall_v2.png" id="2_texture"]
 
 [sub_resource type="BoxShape3D" id="BoxShape_bank"]
 size = Vector3(5.65, 1.22, 1.55)

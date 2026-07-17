@@ -252,6 +252,31 @@ button.character-select:hover { background: transparent; box-shadow: none; }
 }
 .new-character-form select { cursor: pointer; }
 .new-character-form textarea { min-height: 88px; resize: vertical; font: inherit; }
+.new-character-form .directional-generation-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 11px 0 0;
+  cursor: pointer;
+}
+.new-character-form .directional-generation-toggle input {
+  width: auto;
+  margin: 0;
+}
+.new-character-form .directional-generation-help {
+  margin: 5px 0 9px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.directional-generation-fields {
+  min-width: 0;
+  margin: 9px 0 0;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.directional-generation-fields[hidden] { display: none; }
 .new-character-form .skeleton-choice-help {
   margin: 7px 0 9px;
   color: var(--muted);
@@ -265,8 +290,6 @@ button.character-select:hover { background: transparent; box-shadow: none; }
 .new-skeleton-fields[hidden] { display: none; }
 .new-skeleton-fields label:not(:first-child) { margin-top: 9px; }
 .new-character-form > div { display: flex; justify-content: flex-end; gap: 6px; margin-top: 9px; }
-.new-character-form > .new-skeleton-fields { display: block; }
-.new-character-form > .new-skeleton-fields[hidden] { display: none; }
 
 /* named skeleton library */
 #skeleton-library-modal {

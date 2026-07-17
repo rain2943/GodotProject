@@ -36,7 +36,9 @@ func _ready() -> void:
 	sprite = AnimatedSprite3D.new()
 	sprite.name = "Sprite"
 	sprite.sprite_frames = _create_sprite_frames()
-	sprite.pixel_size = 0.0078
+	sprite.pixel_size = 0.0086
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.shaded = false
 	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
 	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	sprite.render_priority = 125
@@ -92,16 +94,22 @@ func _physics_process(_delta: float) -> void:
 
 
 func _set_facing_from_world_direction(world_direction: Vector3) -> void:
+	if world_direction.length_squared() <= 0.01:
+		return
 	var screen_direction := Vector2(
 		world_direction.x - world_direction.z,
 		world_direction.x + world_direction.z
 	).normalized()
 	var angle := fposmod(rad_to_deg(atan2(screen_direction.x, -screen_direction.y)), 360.0)
 	var index := int(round(angle / 45.0)) % DIRECTION_NAMES.size()
-	var next_facing: String = DIRECTION_NAMES[index]
-	if facing != next_facing:
-		facing = next_facing
-		_play_animation()
+	_set_facing(DIRECTION_NAMES[index])
+
+
+func _set_facing(next_facing: String) -> void:
+	if facing == next_facing:
+		return
+	facing = next_facing
+	_play_animation()
 
 
 func _set_motion_state(next_state: String) -> void:
@@ -113,6 +121,8 @@ func _set_motion_state(next_state: String) -> void:
 
 func _play_animation() -> void:
 	if sprite:
+		sprite.flip_h = false
+		sprite.rotation = Vector3.ZERO
 		sprite.play("%s_%s" % [motion_state, facing])
 
 

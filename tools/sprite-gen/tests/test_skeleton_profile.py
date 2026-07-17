@@ -159,6 +159,21 @@ class SkeletonProfileTests(unittest.TestCase):
         self.assertEqual(request["studio_skeleton"]["mode"], "new")
         self.assertIsNone(server._active_skeleton_profile(run_dir))
 
+    def test_directionless_character_has_no_precreated_animation_sections(self) -> None:
+        created = server.create_studio_character(
+            self.studio_root,
+            self.run_dir,
+            "portrait-only cat",
+            {"mode": "none"},
+        )
+        run_dir = self.studio_root / created["path"]
+        request = json.loads((run_dir / "sprite-request.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(request["states"], {})
+        self.assertNotIn("directions", request)
+        self.assertEqual(request["studio_skeleton"], {"mode": "none"})
+        self.assertIsNone(server._active_skeleton_profile(run_dir))
+
     def test_character_list_has_thumbnail_and_deletes_non_template_character(self) -> None:
         created = server.create_studio_character(
             self.studio_root,

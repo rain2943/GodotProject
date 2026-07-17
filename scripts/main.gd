@@ -73,8 +73,9 @@ const MAP_CONTENT_SCALE := ProceduralCityMap.WORLD_SCALE
 const SECONDS_PER_GAME_HOUR := 36.0
 const NIGHT_START_HOUR := 19.0
 const DEEP_NIGHT_HOUR := 22.0
-const BASE_ENEMY_COUNT := 10
-const MAX_NIGHT_ENEMY_COUNT := 24
+const BASE_ENEMY_COUNT := 17
+const MAX_NIGHT_ENEMY_COUNT := 34
+const BASE_FIELD_LOOT_COUNT := 16
 const MELEE_ATTACK_COOLDOWN := 0.72
 const MELEE_ATTACK_RANGE := 2.2
 const MELEE_ATTACK_DAMAGE := 38
@@ -85,22 +86,18 @@ const FIELD_INTERACTION_DISTANCE := 2.8
 const SALVAGE_HOLD_DURATION := 2.4
 const RESCUE_HOLD_DURATION := 1.8
 const FATIGUE_MAX := 100.0
-const FATIGUE_MOVING_RATE := 0.025
+const FATIGUE_MOVING_RATE := 0.055
 const FATIGUE_IDLE_RATE := 0.0
-const FATIGUE_SHOT_GAIN := 0.18
-const FATIGUE_MELEE_GAIN := 0.7
-const FATIGUE_RELOAD_GAIN := 0.45
-const FATIGUE_LOOT_GAIN := 0.55
-const FATIGUE_SALVAGE_GAIN := 2.2
-const FATIGUE_RESCUE_GAIN := 1.4
+const FATIGUE_SHOT_GAIN := 0.28
+const FATIGUE_MELEE_GAIN := 1.1
+const FATIGUE_RELOAD_GAIN := 0.8
+const FATIGUE_LOOT_GAIN := 0.85
+const FATIGUE_SALVAGE_GAIN := 3.5
+const FATIGUE_RESCUE_GAIN := 2.2
+const FATIGUE_ROLL_GAIN := 0.45
+const FATIGUE_DAMAGE_PER_POINT := 0.045
 const FATIGUE_SPEED_MIN := 0.58
 const ESCORT_SPEED_PENALTY := 0.07
-const AMMO_PICKUP_POSITIONS := [
-	Vector3(2, 0.3, 2),
-	Vector3(15, 0.3, -4),
-	Vector3(-14, 0.3, 16),
-	Vector3(18, 0.3, 18),
-]
 const DIRECTION_VECTORS := {
 	"n": Vector2(0, -1),
 	"ne": Vector2(1, -1),
@@ -152,6 +149,8 @@ var magazine_ammo := 30
 var reserve_ammo := 90
 var gunshot_players: Array[AudioStreamPlayer3D] = []
 var gunshot_index := 0
+var roll_audio_player: AudioStreamPlayer3D
+var bgm_player: AudioStreamPlayer
 var building_canvas: CanvasLayer
 var building_overlays := {}
 var vehicle_overlays := {}
@@ -307,6 +306,8 @@ func _ready() -> void:
 	_spawn_ammo_pickups()
 	_build_weapon_hud()
 	_build_gunshot_audio()
+	_build_roll_audio()
+	_build_bgm_audio()
 	_spawn_enemies()
 	_setup_building_overlays()
 	_build_day_night_tint()
@@ -511,12 +512,14 @@ func _try_start_roll() -> void:
 	_set_facing_from_world_direction(roll_direction)
 	roll_active = true
 	roll_stamina = maxf(0.0, roll_stamina - ROLL_STAMINA_COST)
+	_add_fatigue(FATIGUE_ROLL_GAIN)
 	player_activity_heat = minf(1.0, player_activity_heat + 0.12)
 	roll_elapsed = 0.0
 	roll_afterimage_timer = 0.0
 	recoil_velocity = Vector3.ZERO
 	_set_motion_state("roll")
 	state_label.text = "회피 구르기"
+	_play_roll_sound()
 	_spawn_roll_afterimage()
 
 
@@ -1370,12 +1373,54 @@ func _spawn_ak_pickup() -> void:
 
 
 func _spawn_ammo_pickups() -> void:
-	for index in AMMO_PICKUP_POSITIONS.size():
-		_create_loot_pickup(
-			"ammo",
-			_safe_map_position(_scale_map_position(AMMO_PICKUP_POSITIONS[index])),
-			{"ammo_id": "762_fmj", "amount": AMMO_PICKUP_AMOUNT, "display_name": "7.62mm 탄약"}
+	var world := $World as ProceduralCityMap
+	var occupied_positions: Array[Vector3] = []
+	var component_ids := ["rubber_gasket", "scope_lens", "magazine_spring"]
+	var component_names := {
+		"rubber_gasket": "소음기용 고무 패킹",
+		"scope_lens": "스코프 렌즈",
+		"magazine_spring": "탄창 스프링",
+	}
+	for index in BASE_FIELD_LOOT_COUNT:
+		var position := _find_stratified_map_position(
+			world,
+			index,
+			BASE_FIELD_LOOT_COUNT,
+			12.0,
+			9.0,
+			occupied_positions,
+			0.34
 		)
+		occupied_positions.append(position)
+		match index % 4:
+			0, 2:
+				_create_loot_pickup(
+					"ammo",
+					position,
+					{
+						"ammo_id": "762_fmj",
+						"amount": AMMO_PICKUP_AMOUNT,
+						"display_name": "7.62mm 탄약",
+					}
+				)
+			1:
+				_create_loot_pickup(
+					"canned_food",
+					position,
+					{"amount": 1, "display_name": "통조림"}
+				)
+			_:
+				var component_index := floori(float(index) / 4.0) % component_ids.size()
+				var component_id: String = component_ids[component_index]
+				_create_loot_pickup(
+					"mod_component",
+					position,
+					{
+						"component_id": component_id,
+						"amount": 1,
+						"display_name": component_names[component_id],
+					}
+				)
 
 
 func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dictionary = {}) -> Node3D:
@@ -1836,6 +1881,13 @@ func _build_weapon_hud() -> void:
 		"magazine_spring": MAGAZINE_SPRING_TEXTURE,
 	})
 	inventory_ui.connect("open_state_changed", _on_inventory_open_state_changed)
+	inventory_ui.connect("weapon_mods_changed", _on_inventory_weapon_mods_changed)
+	_update_equipment_ui()
+
+
+func _on_inventory_weapon_mods_changed() -> void:
+	equipped_weapon_mods.assign(GameState.equipped_weapon_mods)
+	_refresh_weapon_stats()
 	_update_equipment_ui()
 
 
@@ -1929,6 +1981,10 @@ func _fire_ak47() -> void:
 	if weapon_reloading:
 		return
 	if magazine_ammo <= 0:
+		if reserve_ammo > 0:
+			_reload_ak47()
+		else:
+			_show_no_ammo_notice()
 		return
 	if _weapon_jammed():
 		return
@@ -2109,6 +2165,8 @@ func _reload_ak47() -> void:
 		return
 	if reserve_ammo <= 0 or magazine_ammo >= magazine_size:
 		fire_cooldown = 0.35
+		if reserve_ammo <= 0:
+			_show_no_ammo_notice()
 		return
 	weapon_reloading = true
 	reload_timer = float(weapon_stats.get("reload_time", 2.15))
@@ -2139,6 +2197,15 @@ func _finish_reload() -> void:
 	]
 	ammo_notice.visible = true
 	ammo_notice_time = 1.4
+	_update_equipment_ui()
+
+
+func _show_no_ammo_notice() -> void:
+	fire_cooldown = maxf(fire_cooldown, 0.35)
+	if ammo_notice:
+		ammo_notice.text = "탄약 없음\n예비탄을 확보해야 합니다."
+		ammo_notice.visible = true
+		ammo_notice_time = 1.1
 	_update_equipment_ui()
 
 
@@ -2344,35 +2411,128 @@ func _build_gunshot_audio() -> void:
 		var audio := AudioStreamPlayer3D.new()
 		audio.name = "Gunshot%d" % index
 		audio.stream = stream
-		audio.unit_size = 7.0
-		audio.max_distance = 42.0
-		audio.volume_db = -3.0
+		audio.unit_size = 9.0
+		audio.max_distance = 72.0
+		audio.volume_db = -1.0
 		player.add_child(audio)
 		gunshot_players.append(audio)
 
 
 func _create_gunshot_stream() -> AudioStreamWAV:
-	var mix_rate := 22050
-	var sample_count := int(mix_rate * 0.16)
+	var mix_rate := 44100
+	var sample_count := int(mix_rate * 0.34)
 	var data := PackedByteArray()
 	data.resize(sample_count * 2)
 	var random := RandomNumberGenerator.new()
 	random.seed = 47047
 	for index in sample_count:
 		var time := float(index) / mix_rate
-		var envelope := exp(-time * 27.0)
-		var crack := random.randf_range(-1.0, 1.0) * envelope
-		var body := sin(TAU * 118.0 * time) * exp(-time * 18.0)
-		var sample := clampf(crack * 0.72 + body * 0.42, -1.0, 1.0)
-		var encoded := int(sample * 32767.0)
-		data[index * 2] = encoded & 0xff
-		data[index * 2 + 1] = (encoded >> 8) & 0xff
+		var muzzle_blast := random.randf_range(-1.0, 1.0) * exp(-time * 35.0)
+		var metallic_crack := sin(TAU * 720.0 * time + random.randf_range(-0.18, 0.18)) * exp(-time * 23.0)
+		var low_thump := sin(TAU * 86.0 * time) * exp(-time * 11.0)
+		var tail_noise := random.randf_range(-1.0, 1.0) * exp(-maxf(0.0, time - 0.045) * 9.0) * 0.34
+		var slapback := 0.0
+		if time > 0.055:
+			slapback += random.randf_range(-1.0, 1.0) * exp(-(time - 0.055) * 19.0) * 0.18
+		if time > 0.115:
+			slapback += random.randf_range(-1.0, 1.0) * exp(-(time - 0.115) * 14.0) * 0.11
+		var sample := muzzle_blast * 0.82 + metallic_crack * 0.26 + low_thump * 0.58 + tail_noise + slapback
+		_write_wav_sample(data, index, tanh(sample * 1.35) * 0.92)
+	return _make_wav_stream(data, mix_rate)
+
+
+func _build_roll_audio() -> void:
+	roll_audio_player = AudioStreamPlayer3D.new()
+	roll_audio_player.name = "RollWhoosh"
+	roll_audio_player.stream = _create_roll_stream()
+	roll_audio_player.unit_size = 4.0
+	roll_audio_player.max_distance = 24.0
+	roll_audio_player.volume_db = -5.0
+	player.add_child(roll_audio_player)
+
+
+func _create_roll_stream() -> AudioStreamWAV:
+	var mix_rate := 32000
+	var sample_count := int(mix_rate * 0.28)
+	var data := PackedByteArray()
+	data.resize(sample_count * 2)
+	var random := RandomNumberGenerator.new()
+	random.seed = 82119
+	for index in sample_count:
+		var time := float(index) / mix_rate
+		var progress := time / 0.28
+		var envelope := sin(clampf(progress, 0.0, 1.0) * PI)
+		var air := random.randf_range(-1.0, 1.0) * envelope
+		var cloth := sin(TAU * (170.0 + 180.0 * progress) * time) * envelope * 0.22
+		var low := sin(TAU * 58.0 * time) * exp(-time * 9.0) * 0.2
+		_write_wav_sample(data, index, clampf(air * 0.34 + cloth + low, -1.0, 1.0))
+	return _make_wav_stream(data, mix_rate)
+
+
+func _play_roll_sound() -> void:
+	if not is_instance_valid(roll_audio_player):
+		return
+	roll_audio_player.stop()
+	roll_audio_player.pitch_scale = randf_range(0.94, 1.08)
+	roll_audio_player.play()
+
+
+func _build_bgm_audio() -> void:
+	bgm_player = AudioStreamPlayer.new()
+	bgm_player.name = "ApocalypseSeoulBGM"
+	bgm_player.stream = _create_apocalypse_bgm_stream()
+	bgm_player.volume_db = -21.0
+	bgm_player.bus = "Master"
+	add_child(bgm_player)
+	bgm_player.play()
+
+
+func _create_apocalypse_bgm_stream() -> AudioStreamWAV:
+	var mix_rate := 22050
+	var duration := 18.0
+	var sample_count := int(mix_rate * duration)
+	var data := PackedByteArray()
+	data.resize(sample_count * 2)
+	var random := RandomNumberGenerator.new()
+	random.seed = 130713
+	var noise_hold := 0.0
+	for index in sample_count:
+		var time := float(index) / mix_rate
+		if index % 300 == 0:
+			noise_hold = random.randf_range(-1.0, 1.0)
+		var fade_in := clampf(time / 2.0, 0.0, 1.0)
+		var fade_out := clampf((duration - time) / 2.0, 0.0, 1.0)
+		var loop_fade := minf(fade_in, fade_out)
+		var drone := sin(TAU * 43.65 * time) * 0.26
+		drone += sin(TAU * 65.41 * time + 1.7) * 0.12
+		drone += sin(TAU * 98.0 * time + 0.4) * 0.06
+		var distant_alarm := sin(TAU * 0.075 * time) * sin(TAU * 392.0 * time) * 0.045
+		var rain_static := noise_hold * 0.04
+		var pulse := 0.0
+		var pulse_phase := fmod(time, 6.0)
+		if pulse_phase < 0.55:
+			pulse = sin(TAU * 72.0 * time) * exp(-pulse_phase * 7.0) * 0.16
+		_write_wav_sample(data, index, clampf((drone + distant_alarm + rain_static + pulse) * loop_fade, -1.0, 1.0))
+	var stream := _make_wav_stream(data, mix_rate)
+	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	stream.loop_begin = 0
+	stream.loop_end = sample_count
+	return stream
+
+
+func _make_wav_stream(data: PackedByteArray, mix_rate: int) -> AudioStreamWAV:
 	var stream := AudioStreamWAV.new()
 	stream.format = AudioStreamWAV.FORMAT_16_BITS
 	stream.mix_rate = mix_rate
 	stream.stereo = false
 	stream.data = data
 	return stream
+
+
+func _write_wav_sample(data: PackedByteArray, index: int, sample: float) -> void:
+	var encoded := int(clampf(sample, -1.0, 1.0) * 32767.0)
+	data[index * 2] = encoded & 0xff
+	data[index * 2 + 1] = (encoded >> 8) & 0xff
 
 
 func _play_gunshot() -> void:
@@ -2396,32 +2556,31 @@ func _find_distributed_enemy_position(
 	index: int,
 	total_count: int
 ) -> Vector3:
-	var map_limit := world.get_map_limit() - 5.0
-	var radius_factors := [0.1, 0.28, 0.52, 0.78]
-	var base_angle := TAU * float(index) / float(maxi(1, total_count))
-	for attempt in 10:
-		var ring_index := (index + attempt) % radius_factors.size()
-		var angle := base_angle + float(attempt) * 0.41
-		var radius := map_limit * float(radius_factors[ring_index])
-		var requested := Vector3(cos(angle) * radius, 0.78, sin(angle) * radius)
-		var candidate := world.find_nearest_open_position(requested)
-		candidate.y = 0.78
-		if candidate.distance_to(player.global_position) < 14.0:
-			continue
-		if world.is_position_in_safe_zone(candidate):
-			continue
-		var overlaps_enemy := false
-		for enemy in enemies:
-			if is_instance_valid(enemy) and enemy.global_position.distance_to(candidate) < 3.0:
-				overlaps_enemy = true
-				break
-		if not overlaps_enemy:
-			return candidate
-	return _safe_map_position(Vector3(
-		cos(base_angle) * map_limit * 0.55,
-		0.78,
-		sin(base_angle) * map_limit * 0.55
-	))
+	var occupied_positions: Array[Vector3] = []
+	for enemy in enemies:
+		if is_instance_valid(enemy):
+			occupied_positions.append(enemy.global_position)
+	if index == 0:
+		var map_limit := world.get_map_limit() - 8.0
+		for attempt in 16:
+			var angle := TAU * float(attempt) / 16.0 + spawn_random.randf_range(-0.12, 0.12)
+			var requested := player.global_position + Vector3(cos(angle), 0.0, sin(angle)) * 28.0
+			requested.x = clampf(requested.x, -map_limit, map_limit)
+			requested.z = clampf(requested.z, -map_limit, map_limit)
+			requested.y = 0.78
+			var nearby_candidate := world.find_nearest_open_position(requested)
+			nearby_candidate.y = 0.78
+			if nearby_candidate.distance_to(player.global_position) >= 16.0:
+				return nearby_candidate
+	return _find_stratified_map_position(
+		world,
+		index - 1,
+		total_count - 1,
+		16.0,
+		7.0,
+		occupied_positions,
+		0.78
+	)
 
 
 func _spawn_enemy(kind: String, spawn_position: Vector3, threat: float) -> CharacterBody3D:
@@ -2873,6 +3032,7 @@ func _install_perception_system() -> void:
 func take_damage(amount: int) -> void:
 	if amount <= 0 or player_health <= 0:
 		return
+	_add_fatigue(minf(1.8, float(amount) * FATIGUE_DAMAGE_PER_POINT))
 	player_health = maxi(0, player_health - amount)
 	GameState.player_health = player_health
 	player_hit_flash_time = 0.32
@@ -3300,6 +3460,50 @@ func _find_random_field_position(world: ProceduralCityMap, minimum_player_distan
 		candidate.y = 0.08
 		fallback = candidate
 		if candidate.distance_to(player.global_position) >= minimum_player_distance:
+			return candidate
+	return fallback
+
+
+func _find_stratified_map_position(
+	world: ProceduralCityMap,
+	index: int,
+	total_count: int,
+	minimum_player_distance: float,
+	minimum_separation: float,
+	occupied_positions: Array[Vector3],
+	world_y: float
+) -> Vector3:
+	var grid_side := maxi(1, ceili(sqrt(float(maxi(1, total_count)))))
+	var sector_x := index % grid_side
+	var sector_z := floori(float(index) / float(grid_side))
+	var map_limit := world.get_map_limit() - 8.0
+	var sector_size := map_limit * 2.0 / float(grid_side)
+	var sector_center := Vector3(
+		-map_limit + (float(sector_x) + 0.5) * sector_size,
+		world_y,
+		-map_limit + (float(sector_z) + 0.5) * sector_size
+	)
+	var fallback := world.find_nearest_open_position(sector_center)
+	fallback.y = world_y
+	for attempt in 24:
+		var jitter_scale := sector_size * (0.12 + 0.015 * float(attempt % 8))
+		var angle := spawn_random.randf_range(0.0, TAU)
+		var requested := sector_center + Vector3(cos(angle), 0.0, sin(angle)) * jitter_scale
+		requested.x = clampf(requested.x, -map_limit, map_limit)
+		requested.z = clampf(requested.z, -map_limit, map_limit)
+		var candidate := world.find_nearest_open_position(requested)
+		candidate.y = world_y
+		fallback = candidate
+		if candidate.distance_to(player.global_position) < minimum_player_distance:
+			continue
+		if world.is_position_in_safe_zone(candidate):
+			continue
+		var separated := true
+		for occupied_position in occupied_positions:
+			if occupied_position.distance_to(candidate) < minimum_separation:
+				separated = false
+				break
+		if separated:
 			return candidate
 	return fallback
 
@@ -3855,10 +4059,7 @@ func _input(event: InputEvent) -> void:
 func _handle_combat_mouse_button(mouse_event: InputEventMouseButton) -> void:
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 		if mouse_event.pressed:
-			if magazine_ammo <= 0:
-				mouse_fire_held = false
-				_try_melee_attack()
-			elif laser_aim_held:
+			if laser_aim_held:
 				mouse_fire_held = true
 				_try_fire_ak47()
 			else:

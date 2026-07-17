@@ -191,7 +191,7 @@ const STR = {
 const STUDIO = {
   en: {
     baseTitle: "Base character",
-    baseNote: "Upload the identity reference used by all eight directions.",
+    baseNote: "Upload the image that defines this character's appearance.",
     uploadBase: "Upload / replace image",
     uploading: "Uploading base image...",
     basePromptTitle: "Base character prompt",
@@ -202,6 +202,7 @@ const STUDIO = {
     baseCreating: "Creating base character with GPT Image...",
     chooseBaseFirst: "Choose an image first.",
     baseCreateFail: "Base character creation failed: ",
+    baseReady: "Base character ready.",
     baseReadyForAuto: "Base character ready. Click Auto-generate with skeleton when you want to start animation generation.",
     autoGenerate: "Auto-generate missing animations",
     autoGenerateHelp: "Uses the saved pose skeleton to generate every missing direction and animation section in order.",
@@ -274,6 +275,8 @@ const STUDIO = {
     skeletonDeleteBlocked: "This is the only compatible skeleton used by a character.",
     skeletonStates: "sections",
     skeletonDirections: "directions",
+    directionalGeneration: "Generate directional frames",
+    directionalGenerationHelp: "Turn this on only when this character needs directional animation sections.",
     skeletonChoice: "Animation skeleton",
     skeletonExistingHelp: "The new character will be generated with the selected saved pose skeleton.",
     skeletonNewOption: "+ Create a new skeleton",
@@ -305,7 +308,7 @@ const STUDIO = {
   },
   ko: {
     baseTitle: "베이스 캐릭터",
-    baseNote: "8방향 전체의 외형 기준이 되는 이미지를 직접 올립니다.",
+    baseNote: "이 캐릭터의 외형 기준이 되는 이미지를 직접 올립니다.",
     uploadBase: "이미지 업로드 / 교체",
     uploading: "베이스 이미지 업로드 중...",
     basePromptTitle: "베이스 캐릭터 프롬프트",
@@ -316,6 +319,7 @@ const STUDIO = {
     baseCreating: "GPT 이미지로 베이스 캐릭터 생성 중...",
     chooseBaseFirst: "먼저 참고 이미지를 선택하세요.",
     baseCreateFail: "베이스 캐릭터 생성 실패: ",
+    baseReady: "베이스 캐릭터 준비 완료.",
     baseReadyForAuto: "베이스 캐릭터 준비 완료 · 애니메이션을 만들 때 스켈레톤 기준 자동 생성을 눌러주세요.",
     autoGenerate: "스켈레톤 기준 자동 생성",
     autoGenerateHelp: "저장된 스켈레톤을 기준으로 아직 비어 있는 모든 방향·애니메이션 섹션을 순서대로 생성합니다.",
@@ -388,6 +392,8 @@ const STUDIO = {
     skeletonDeleteBlocked: "캐릭터가 사용하는 유일한 호환 스켈레톤이라 삭제할 수 없습니다.",
     skeletonStates: "개 섹션",
     skeletonDirections: "방향",
+    directionalGeneration: "방향별 프레임 생성",
+    directionalGenerationHelp: "방향별 애니메이션이 필요한 캐릭터일 때만 체크하세요.",
     skeletonChoice: "애니메이션 스켈레톤",
     skeletonExistingHelp: "선택한 스켈레톤의 포즈와 프레임 구조로 새 캐릭터를 생성합니다.",
     skeletonNewOption: "+ 새 스켈레톤 만들기",
@@ -2307,6 +2313,10 @@ function renderCharacterSidebar() {
     `<form class="new-character-form" hidden>` +
     `<label>${studioText("characterName")}</label>` +
     `<input type="text" maxlength="80" required placeholder="${escapeHtml(studioText("characterNamePlaceholder"))}" />` +
+    `<label class="directional-generation-toggle"><input name="directionalGeneration" type="checkbox" />` +
+    `<span>${studioText("directionalGeneration")}</span></label>` +
+    `<p class="directional-generation-help">${studioText("directionalGenerationHelp")}</p>` +
+    `<fieldset class="directional-generation-fields" hidden>` +
     `<label>${studioText("skeletonChoice")}</label>` +
     `<select name="skeletonChoice">${skeletonOptions}` +
     `<option value="__new__" ${profiles.length ? "" : "selected"}>${studioText("skeletonNewOption")}</option></select>` +
@@ -2319,6 +2329,7 @@ function renderCharacterSidebar() {
     `<label>${studioText("skeletonMotionPrompt")}</label>` +
     `<textarea name="skeletonPrompt" maxlength="4000" placeholder="${escapeHtml(studioText("skeletonMotionPromptPlaceholder"))}"></textarea>` +
     `</div>` +
+    `</fieldset>` +
     `<div><button type="button" class="ghost form-cancel">${studioText("cancel")}</button>` +
     `<button type="submit">${studioText("addCharacter")}</button></div></form>`;
   const list = panel.querySelector(".character-list");
@@ -2397,6 +2408,8 @@ function renderCharacterSidebar() {
   const newButton = panel.querySelector(".new-character-btn");
   const form = panel.querySelector(".new-character-form");
   const input = form.querySelector("input");
+  const directionalGeneration = form.elements.directionalGeneration;
+  const directionalFields = form.querySelector(".directional-generation-fields");
   const skeletonSelect = form.elements.skeletonChoice;
   const newSkeletonFields = form.querySelector(".new-skeleton-fields");
   const skeletonHelp = form.querySelector(".skeleton-choice-help");
@@ -2404,11 +2417,16 @@ function renderCharacterSidebar() {
     const isNew = skeletonSelect.value === "__new__";
     newSkeletonFields.hidden = !isNew;
     skeletonHelp.textContent = studioText(isNew ? "skeletonNewHelp" : "skeletonExistingHelp");
-    form.elements.skeletonName.required = isNew;
-    form.elements.skeletonPrompt.required = isNew;
+    form.elements.skeletonName.required = directionalGeneration.checked && isNew;
+    form.elements.skeletonPrompt.required = directionalGeneration.checked && isNew;
+  };
+  const syncDirectionalGeneration = () => {
+    directionalFields.hidden = !directionalGeneration.checked;
+    syncSkeletonChoice();
   };
   skeletonSelect.addEventListener("change", syncSkeletonChoice);
-  syncSkeletonChoice();
+  directionalGeneration.addEventListener("change", syncDirectionalGeneration);
+  syncDirectionalGeneration();
   newButton.addEventListener("click", () => {
     newButton.hidden = true;
     form.hidden = false;
@@ -2418,7 +2436,7 @@ function renderCharacterSidebar() {
     form.hidden = true;
     newButton.hidden = false;
     form.reset();
-    syncSkeletonChoice();
+    syncDirectionalGeneration();
   });
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -2426,16 +2444,17 @@ function renderCharacterSidebar() {
     submit.disabled = true;
     submit.textContent = studioText("creatingCharacter");
     try {
+      const isDirectional = directionalGeneration.checked;
       const isNewSkeleton = skeletonSelect.value === "__new__";
-      const skeleton = isNewSkeleton ? {
-        mode: "new",
-        name: form.elements.skeletonName.value,
-        frames: Number(form.elements.skeletonFrames.value),
-        prompt: form.elements.skeletonPrompt.value,
-      } : {
-        mode: "existing",
-        profileId: skeletonSelect.value,
-      };
+      const skeleton = !isDirectional ? { mode: "none" } : (isNewSkeleton ? {
+          mode: "new",
+          name: form.elements.skeletonName.value,
+          frames: Number(form.elements.skeletonFrames.value),
+          prompt: form.elements.skeletonPrompt.value,
+        } : {
+          mode: "existing",
+          profileId: skeletonSelect.value,
+        });
       const res = await fetch("/api/characters/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2717,7 +2736,7 @@ function renderBaseRow() {
   const baseButtonLabel = run.baseUrl && canReuseBaseReference
     ? studioText("baseRegenerate") : studioText("baseCreate");
   const autoHelp = skeletonReady ? studioText("autoGenerateHelp") : studioText("autoRequiresSkeleton");
-  const autoControls = run.baseUrl
+  const autoControls = run.baseUrl && run.states.length
     ? `<button type="button" class="base-auto-generate-btn" data-has-missing="${missingStateCount > 0}" ${skeletonReady && missingStateCount ? "" : "disabled"}>${studioText("autoGenerate")}</button>`
     : "";
   wrap.innerHTML =
@@ -2737,8 +2756,8 @@ function renderBaseRow() {
     `<textarea rows="6" maxlength="4000" placeholder="${escapeHtml(studioText("basePromptPlaceholder"))}"></textarea>` +
     `<div class="base-action-row"><button type="button" class="base-create-btn" ${canReuseBaseReference ? "" : "disabled"}>${baseButtonLabel}</button>` +
     autoControls + `</div>` +
-    (run.baseUrl ? `<div class="base-auto-status">${escapeHtml(missingStateCount ? autoHelp : studioText("autoNothing"))}</div>` : "") +
-    (run.baseUrl ? `<div class="base-auto-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>` +
+    (run.baseUrl && run.states.length ? `<div class="base-auto-status">${escapeHtml(missingStateCount ? autoHelp : studioText("autoNothing"))}</div>` : "") +
+    (run.baseUrl && run.states.length ? `<div class="base-auto-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>` +
       `<div><span class="base-auto-progress-label"></span><strong class="base-auto-progress-percent">0%</strong></div>` +
       `<span class="base-auto-progress-track"><i></i></span></div>` : "") +
     `</div></div>`;
@@ -2791,7 +2810,7 @@ function renderBaseRow() {
       });
       const result = await res.json();
       if (!res.ok || result.error) throw new Error(result.error || res.statusText);
-      setStatus(studioText("baseReadyForAuto"), "ok");
+      setStatus(studioText(run.states.length ? "baseReadyForAuto" : "baseReady"), "ok");
       location.reload();
     } catch (e) {
       setStatus(studioText("baseCreateFail") + e.message, "err");
