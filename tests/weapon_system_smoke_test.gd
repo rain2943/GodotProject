@@ -109,6 +109,7 @@ func _run() -> void:
 	assert(not bool(main_scene.get("mouse_fire_held")))
 	var bat_overlay := main_scene.get("melee_bat_overlay") as Sprite2D
 	assert(bat_overlay.visible)
+	assert(bat_overlay.scale.x < 0.05)
 	main_scene.set("laser_aim_held", true)
 	main_scene.set("locked_aim_direction", Vector3.RIGHT)
 	main_scene.call("_update_scope_camera", 0.5)

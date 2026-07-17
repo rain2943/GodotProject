@@ -1,0 +1,127 @@
+{
+  "ok": true,
+  "rule": "left_forward -> feet_together -> right_forward -> feet_together",
+  "rows": [
+    {
+      "direction": "down",
+      "frames": 4,
+      "populated": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "lower_diff": [
+        10645,
+        11819,
+        11830
+      ]
+    },
+    {
+      "direction": "down_right",
+      "frames": 4,
+      "populated": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "lower_diff": [
+        13320,
+        13268,
+        13198
+      ]
+    },
+    {
+      "direction": "right",
+      "frames": 4,
+      "populated": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "lower_diff": [
+        11991,
+        11966,
+        12272
+      ]
+    },
+    {
+      "direction": "up_right",
+      "frames": 4,
+      "populated": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "lower_diff": [
+        10683,
+        10696,
+        10662
+      ]
+    },
+    {
+      "direction": "up",
+      "frames": 4,
+      "populated": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "lower_diff": [
+        9358,
+        9281,
+        9356
+      ]
+    },
+    {
+      "direction": "up_left",
+      "frames": 4,
+      "populated": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "lower_diff": [
+        10662,
+        10696,
+        10683
+      ]
+    },
+    {
+      "direction": "left",
+      "frames": 4,
+      "populated": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "lower_diff": [
+        12272,
+        11966,
+        11991
+      ]
+    },
+    {
+      "direction": "down_left",
+      "frames": 4,
+      "populated": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "lower_diff": [
+        13198,
+        13268,
+        13320
+      ]
+    }
+  ],
+  "note": "This automated check catches missing frames and frozen lower-body phases; visual curation still confirms anatomical left/right identity."
+}

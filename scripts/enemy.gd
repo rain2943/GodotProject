@@ -2,6 +2,7 @@ extends CharacterBody3D
 
 signal died(enemy: CharacterBody3D)
 signal reinforcement_called(enemy: CharacterBody3D)
+signal damaged(enemy: CharacterBody3D, amount: int)
 
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
@@ -1275,6 +1276,7 @@ func take_melee_hit(amount: int, hit_direction: Vector3, backstab: bool) -> void
 	var fatal_damage := maxi(amount, health)
 	backstab_stunned = true
 	health = 0
+	damaged.emit(self, fatal_damage)
 	_register_health_damage()
 	_spawn_damage_number(fatal_damage, true, hit_direction)
 	combat_state = "stagger"
@@ -1315,6 +1317,7 @@ func take_hit(amount: int, hit_direction: Vector3, is_critical: bool = false) ->
 		_cancel_reinforcement_call()
 	var lethal := amount >= health
 	health -= amount
+	damaged.emit(self, amount)
 	_register_health_damage()
 	_spawn_damage_number(amount, is_critical or lethal, hit_direction)
 	threat_marker.visible = false

@@ -13,6 +13,7 @@ var fog_rect: ColorRect
 var fog_material: ShaderMaterial
 var aim_world_direction := Vector3(1, 0, 1).normalized()
 var vision_world_range := VISION_WORLD_RANGE
+var aim_expanded := false
 var sound_timers := {}
 var sound_waves: Array[Control] = []
 var last_player_combat_sound_msec := -10000
@@ -45,6 +46,10 @@ func set_aim_direction(world_direction: Vector3) -> void:
 
 func set_vision_range(world_range: float) -> void:
 	vision_world_range = maxf(2.0, world_range)
+
+
+func set_aim_expanded(value: bool) -> void:
+	aim_expanded = value
 
 
 func report_sound(world_position: Vector3, sound_kind: String, strength: float = 1.0) -> void:
@@ -119,6 +124,7 @@ uniform int occluder_count = 0;
 uniform float fov_half_angle = 58.0;
 uniform float vision_radius = 470.0;
 uniform float darkness = 0.92;
+uniform float aim_expanded = 0.0;
 
 float cross_2d(vec2 a, vec2 b) {
 	return a.x * b.y - a.y * b.x;
@@ -144,8 +150,8 @@ void fragment() {
 	float alignment = dot(view_direction, normalize(aim_screen_direction));
 	float cone_visibility = smoothstep(cone_limit - 0.08, cone_limit + 0.035, alignment);
 	float range_visibility = 1.0 - smoothstep(vision_radius - 95.0, vision_radius, distance_px);
-	float awareness = 1.0 - smoothstep(58.0, 105.0, distance_px);
-	float visibility = max(awareness, cone_visibility * range_visibility);
+	float awareness = 1.0 - smoothstep(78.0, 155.0, distance_px);
+	float visibility = mix(awareness, max(awareness, cone_visibility * range_visibility), aim_expanded);
 	float blocked = 0.0;
 	for (int index = 0; index < MAX_OCCLUDERS; index++) {
 		if (index < occluder_count) {
@@ -182,6 +188,7 @@ func _update_fog() -> void:
 	fog_material.set_shader_parameter("viewport_size", viewport_size)
 	fog_material.set_shader_parameter("player_uv", player_screen / viewport_size)
 	fog_material.set_shader_parameter("aim_screen_direction", screen_aim)
+	fog_material.set_shader_parameter("aim_expanded", 1.0 if aim_expanded else 0.0)
 	var segments := PackedVector4Array()
 	segments.resize(MAX_OCCLUDERS)
 	var occluders := _collect_nearby_occluders()

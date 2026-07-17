@@ -1,0 +1,7 @@
+Create one production-ready base character image using the attached uploaded image as the identity and visual-style reference.
+
+User request: 아예 다른 종류의 고양이처럼 보이게 해서 악당 고양이 만들어줘, 아포칼립스 서울이 배경이라서 의상에 좀 참고해줬으면 좋겠어 의상 색깔도 달라야 하고 흉터나 선글라스 등을 잘 활용하면 더 좋고
+
+Preserve the recognizable character identity, species, face, body proportions, palette, line weight, and rendering style of the reference. Apply the user's requested role, outfit, props, or design change clearly, while keeping it the same character. match the supplied base character exactly: preserve its proportions, face, clothing, accessories, palette, outline weight, and rendering style; do not redesign it
+
+Output exactly one centered, isolated, full-body character in a neutral standing pose, facing the viewer or a slight three-quarter front view. Keep the entire silhouette visible with generous padding. Transparent background. No text, labels, border, sprite sheet, multiple views, multiple characters, scenery, or cast shadow.

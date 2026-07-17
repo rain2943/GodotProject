@@ -1,0 +1,322 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-curation",
+  "states": {
+    "down_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "f5a7ec448df7"
+      ]
+    },
+    "down_right_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "588f67c7c7cc"
+      ]
+    },
+    "right_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "4be0eae2b729"
+      ]
+    },
+    "up_right_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "909c15aa311e"
+      ]
+    },
+    "up_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "0596e9e886cc"
+      ]
+    },
+    "up_left_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "f2baa778c858"
+      ]
+    },
+    "left_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "9d24c0cfdcd0"
+      ]
+    },
+    "down_left_idle": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "fe84ac92e845"
+      ]
+    },
+    "down_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "45c39dbb255b"
+      ]
+    },
+    "down_right_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "01fcc83ad652"
+      ]
+    },
+    "right_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "5df3f6842a03"
+      ]
+    },
+    "up_right_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "fa93a3c1ec51"
+      ]
+    },
+    "up_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "9830011e4883"
+      ]
+    },
+    "up_left_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "9fef569ac3e1"
+      ]
+    },
+    "left_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "082660f17493"
+      ]
+    },
+    "down_left_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "5dfe0ed8ed10"
+      ]
+    },
+    "custom_animation": {
+      "selected": [],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": false
+    }
+  },
+  "run_revision": "8823b0134330e57c"
+}

@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "fe19a79954164f299af3cdd5c0d5beeb",
+      "kind": "base_generated",
+      "state": "__base__",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "generated": true,
+        "provider": "codex"
+      },
+      "createdAt": "2026-07-16T19:29:38+0900",
+      "read": false
+    },
+    {
+      "id": "a3a6f827ef7d4dfda6fc1166a32dcd16",
+      "kind": "state_generated",
+      "state": "left_walk",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260716-212530-0159bf",
+        "frameCount": 4
+      },
+      "createdAt": "2026-07-16T21:26:39+0900",
+      "read": false
+    },
+    {
+      "id": "12103103d9544b85964d398e7de569ae",
+      "kind": "state_generated",
+      "state": "up_left_walk",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260716-212524-1d7569",
+        "frameCount": 4
+      },
+      "createdAt": "2026-07-16T21:26:46+0900",
+      "read": false
+    },
+    {
+      "id": "920da384752542d591635bf1eda7c924",
+      "kind": "state_generated",
+      "state": "down_left_walk",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260716-212534-a49cd7",
+        "frameCount": 4
+      },
+      "createdAt": "2026-07-16T21:26:53+0900",
+      "read": true
+    }
+  ]
+}

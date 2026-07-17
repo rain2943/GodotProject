@@ -1,0 +1,7 @@
+Create one production-ready base character image using the attached uploaded image as the identity and visual-style reference.
+
+User request: 아니 서울 아포칼립스 배경인데 의상이 이러면 안돼 그리고 뒤에 왠 배경이 있는거야 필요없어, 그냥 도둑놈들 같이 만들어주면 돼 의상 색깔도 다른걸 써서 고양이 악당 말이야
+
+Preserve the recognizable character identity, species, face, body proportions, palette, line weight, and rendering style of the reference. Apply the user's requested role, outfit, props, or design change clearly, while keeping it the same character. match the supplied base character exactly: preserve its proportions, face, clothing, accessories, palette, outline weight, and rendering style; do not redesign it
+
+Output exactly one centered, isolated, full-body character in a neutral standing pose, facing the viewer or a slight three-quarter front view. Keep the entire silhouette visible with generous padding. Transparent background. No text, labels, border, sprite sheet, multiple views, multiple characters, scenery, or cast shadow.

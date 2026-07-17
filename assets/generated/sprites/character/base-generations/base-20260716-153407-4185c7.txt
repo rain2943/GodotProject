@@ -1,0 +1,7 @@
+Create one production-ready base character image using the attached uploaded image as the identity and visual-style reference.
+
+User request: 이 고양이 여자 고양이로 바꿔줘
+
+Preserve the recognizable character identity, species, face, body proportions, palette, line weight, and rendering style of the reference. Apply the user's requested role, outfit, props, or design change clearly, while keeping it the same character. match the supplied base character exactly: preserve its proportions, face, clothing, accessories, palette, outline weight, and rendering style; do not redesign it
+
+Output exactly one centered, isolated, full-body character in a neutral standing pose, facing the viewer or a slight three-quarter front view. Keep the entire silhouette visible with generous padding. Transparent background. No text, labels, border, sprite sheet, multiple views, multiple characters, scenery, or cast shadow.

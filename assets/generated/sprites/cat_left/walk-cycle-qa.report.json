@@ -1,0 +1,6 @@
+{
+  "ok": false,
+  "kind": "walk-cycle-qa",
+  "state": "left_walk",
+  "error": "frame 2 is not right-leading enough: offset=-7.90"
+}

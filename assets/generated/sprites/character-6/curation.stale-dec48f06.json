@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-curation",
+  "states": {
+    "down_action": {
+      "selected": [
+        2
+      ],
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "transforms": {
+        "2": {
+          "rotate": 0,
+          "scale": 1,
+          "dx": 8.421052631578947,
+          "dy": 0,
+          "shx": 0,
+          "shy": 0,
+          "flipX": 0
+        }
+      },
+      "skeleton_included": true,
+      "revision": [
+        "bf3c7c3d83f6"
+      ]
+    },
+    "down_right_action": {
+      "selected": [
+        1
+      ],
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "transforms": {
+        "1": {
+          "rotate": 0,
+          "scale": 1,
+          "dx": -15.157894736842104,
+          "dy": 1.6842105263157894,
+          "shx": 0,
+          "shy": 0,
+          "flipX": 0
+        }
+      },
+      "skeleton_included": true,
+      "revision": [
+        "82fb7f0794b8"
+      ]
+    },
+    "right_action": {
+      "selected": [],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true
+    },
+    "up_right_action": {
+      "selected": [],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true
+    },
+    "up_action": {
+      "selected": [],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true
+    },
+    "up_left_action": {
+      "selected": [],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true
+    },
+    "left_action": {
+      "selected": [],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true
+    },
+    "down_left_action": {
+      "selected": [],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true
+    }
+  },
+  "run_revision": "c158a2ee620f8453"
+}

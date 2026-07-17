@@ -1,0 +1,465 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-curation",
+  "states": {
+    "down_idle": {
+      "selected": [
+        9,
+        10,
+        11,
+        8
+      ],
+      "order": [
+        9,
+        10,
+        11,
+        8
+      ],
+      "transforms": {
+        "2": {
+          "rotate": 0,
+          "scale": 1,
+          "dx": 8.328485335476094,
+          "dy": -21.503897147448775,
+          "shx": 0,
+          "shy": 0,
+          "flipX": 0
+        },
+        "3": {
+          "rotate": 0,
+          "scale": 1,
+          "dx": -227.3684210526316,
+          "dy": -5.052631578947368,
+          "shx": 0,
+          "shy": 0,
+          "flipX": 0
+        },
+        "7": {
+          "rotate": 0,
+          "scale": 1,
+          "dx": 165.05263157894737,
+          "dy": 35.36842105263158,
+          "shx": 0,
+          "shy": 0,
+          "flipX": 0
+        }
+      },
+      "skeleton_included": true,
+      "deleted": [
+        3,
+        2,
+        0,
+        7,
+        4,
+        6,
+        5,
+        1
+      ],
+      "revision": [
+        "1383b6c9525f",
+        "f4ad7dc1a512",
+        "226ac5282b15"
+      ]
+    },
+    "down_right_idle": {
+      "selected": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        1,
+        0,
+        2,
+        3
+      ],
+      "revision": [
+        "069357e17719",
+        "76aa8f369563"
+      ]
+    },
+    "right_idle": {
+      "selected": [
+        0,
+        4,
+        5,
+        6
+      ],
+      "order": [
+        0,
+        4,
+        5,
+        6
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        1,
+        2,
+        3,
+        7
+      ],
+      "revision": [
+        "b2dbd4f4ee9e",
+        "207ec2bc66ac"
+      ]
+    },
+    "up_right_idle": {
+      "selected": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "ee812f7fa5f4",
+        "088ab6dacc92"
+      ]
+    },
+    "up_idle": {
+      "selected": [
+        8,
+        1,
+        3,
+        9
+      ],
+      "order": [
+        8,
+        1,
+        3,
+        9
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        5,
+        6,
+        10,
+        11,
+        2,
+        7,
+        0,
+        4
+      ],
+      "revision": [
+        "751b1234bb53",
+        "1eeb4eb1f27d",
+        "820269554a47"
+      ]
+    },
+    "up_left_idle": {
+      "selected": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "fd703aef4f51",
+        "6548b71a6dbe"
+      ]
+    },
+    "left_idle": {
+      "selected": [
+        5,
+        6,
+        7,
+        4
+      ],
+      "order": [
+        5,
+        6,
+        7,
+        4
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        2,
+        3,
+        1
+      ],
+      "revision": [
+        "5152463a414c",
+        "7c7b8af25616"
+      ]
+    },
+    "down_left_idle": {
+      "selected": [
+        4,
+        5,
+        6,
+        11
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        11
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        1,
+        3,
+        2,
+        0,
+        7,
+        8,
+        9,
+        10
+      ],
+      "revision": [
+        "83965d925d83",
+        "fc1d872eb779",
+        "369a960a4630"
+      ]
+    },
+    "down_walk": {
+      "selected": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        2,
+        3,
+        1
+      ],
+      "revision": [
+        "c22b6acc6792",
+        "c83b079963ba"
+      ]
+    },
+    "down_right_walk": {
+      "selected": [
+        10,
+        9,
+        8,
+        11
+      ],
+      "order": [
+        10,
+        9,
+        8,
+        11
+      ],
+      "transforms": {
+        "4": {
+          "rotate": 0,
+          "scale": 0.9523809523809523,
+          "dx": -5.052631578947368,
+          "dy": -8.421052631578947,
+          "shx": 0,
+          "shy": 0,
+          "flipX": 0
+        }
+      },
+      "skeleton_included": true,
+      "deleted": [
+        1,
+        6,
+        7,
+        0,
+        2,
+        3,
+        5,
+        4
+      ],
+      "revision": [
+        "c7f95ff31618",
+        "e6a8ac6e7485",
+        "5996622bd075"
+      ]
+    },
+    "right_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "216653dbc92d"
+      ]
+    },
+    "up_right_walk": {
+      "selected": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        1,
+        2,
+        3,
+        0
+      ],
+      "revision": [
+        "e2acb864fe31",
+        "4cb911d7ba39"
+      ]
+    },
+    "up_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "e89621d5f4c8"
+      ]
+    },
+    "up_left_walk": {
+      "selected": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "d68feabca7a6",
+        "76dc2cc6c3af"
+      ]
+    },
+    "left_walk": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "3bc986262764"
+      ]
+    },
+    "down_left_walk": {
+      "selected": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3,
+        8,
+        9,
+        10,
+        11
+      ],
+      "revision": [
+        "50971eae8d76",
+        "d51d6c78af26",
+        "c404760de635"
+      ]
+    }
+  },
+  "run_revision": "69ac8bda4cbb3b19"
+}

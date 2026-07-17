@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "491f50358fba4a4baa1f41c97f65da49",
+      "kind": "base_generated",
+      "state": "__base__",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "generated": true,
+        "provider": "codex"
+      },
+      "createdAt": "2026-07-16T19:13:46+0900",
+      "read": true
+    },
+    {
+      "id": "ef53600adc98467ea1ce61a6e6ca54f9",
+      "kind": "base_generated",
+      "state": "__base__",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "generated": true,
+        "provider": "codex"
+      },
+      "createdAt": "2026-07-16T19:25:04+0900",
+      "read": true
+    },
+    {
+      "id": "bb4becb6458e4893ad54720b036c5175",
+      "kind": "auto_failed",
+      "state": "up_right_walk",
+      "phase": null,
+      "success": false,
+      "detail": {
+        "error": "Traceback (most recent call last):\n  File \"C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\tools\\sprite-gen\\scripts\\extract_sprite_row_frames.py\", line 16, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\tools\\sprite-gen\\sprite_gen\\extract.py\", line 2688, in main\n    return _run(args)\n  File \"C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\tools\\sprite-gen\\sprite_gen\\extract.py\", line 2056, in _run\n    return _run_locked(args, run_dir)\n  File \"C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\tools\\sprite-gen\\sprite_gen\\extract.py\", line 2572, in _run_locked\n    _commit_generation(run_dir, frames_root, result, target, all_state_names)\n    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\tools\\sprite-gen\\sprite_gen\\extract.py\", line 2015, in _commit_generation\n    staging.rename(frames_final)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"C:\\Users\\rain2\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\pathlib\\_local.py\", line 767, in rename\n    os.rename(self, target)\n    ~~~~~~~~~^^^^^^^^^^^^^^\nPermissionError: [WinError 5] 액세스가 거부되었습니다: 'C:\\\\Users\\\\rain2\\\\Documents\\\\GitHub\\\\GodotProject\\\\assets\\\\generated\\\\sprites\\\\character-2\\\\.frames.sg-staging' -> 'C:\\\\Users\\\\rain2\\\\Documents\\\\GitHub\\\\GodotProject\\\\assets\\\\generated\\\\sprites\\\\character-2\\\\frames'",
+        "name": null,
+        "total": 16
+      },
+      "createdAt": "2026-07-16T19:41:37+0900",
+      "read": false
+    },
+    {
+      "id": "be8955dbd2884338bb5712ad235f62a5",
+      "kind": "state_generated",
+      "state": "up_right_walk",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "recovered": true,
+        "frameCount": 4
+      },
+      "createdAt": "2026-07-16T20:36:18+0900",
+      "read": false
+    },
+    {
+      "id": "f6efbb1bb326425096fc13a20325e0c7",
+      "kind": "state_generated",
+      "state": "left_walk",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260716-203710-a59f33",
+        "frameCount": 4
+      },
+      "createdAt": "2026-07-16T20:38:23+0900",
+      "read": false
+    },
+    {
+      "id": "d60993e2a2f64daaab7cb45555f18edc",
+      "kind": "state_generated",
+      "state": "down_left_walk",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260716-203714-71bb88",
+        "frameCount": 4
+      },
+      "createdAt": "2026-07-16T20:38:42+0900",
+      "read": false
+    }
+  ]
+}

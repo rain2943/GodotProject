@@ -1,0 +1,170 @@
+{
+  "ok": true,
+  "kind": "sprite-gen-score-report",
+  "source_report": "C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\assets\\generated\\sprites\\cat_8way",
+  "overall_score": 100.0,
+  "candidate_rank": 6400,
+  "rows": [
+    {
+      "state": "down_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "down_right_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "right_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "up_right_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "up_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "up_left_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "left_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "down_left_idle",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "down_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "down_right_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "right_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "up_right_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "up_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "up_left_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "left_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    },
+    {
+      "state": "down_left_walk",
+      "score": 100.0,
+      "candidate_rank": 400,
+      "expected_frames": 4,
+      "found_frames": 4,
+      "errors": [],
+      "warnings": [],
+      "hints": []
+    }
+  ],
+  "hints": []
+}

@@ -4,7 +4,7 @@
 [ext_resource type="Texture2D" path="res://assets/interiors/shelter_bed_module_v2.png" id="2_texture"]
 
 [sub_resource type="BoxShape3D" id="BoxShape_bed"]
-size = Vector3(2.2, 0.9, 2.9)
+size = Vector3(2.35, 0.9, 2.95)
 
 [sub_resource type="Shader" id="Shader_bed_shadow"]
 code = "shader_type spatial;\nrender_mode unshaded, cull_disabled, depth_draw_never;\n\nvoid fragment() {\n\tvec2 centered = (UV - vec2(0.5)) * vec2(2.0, 2.0);\n\tfloat ellipse = dot(centered, centered);\n\tfloat alpha = (1.0 - smoothstep(0.18, 1.0, ellipse)) * 0.42;\n\tALBEDO = vec3(0.0);\n\tALPHA = alpha;\n}\n"
@@ -29,9 +29,9 @@ position = Vector3(0, 0.4, 0)
 shape = SubResource("BoxShape_bed")
 
 [node name="BedSprite" type="Sprite3D" parent="."]
-position = Vector3(0, 0.48, 0)
+position = Vector3(0, 0.52, -0.08)
 texture = ExtResource("2_texture")
-pixel_size = 0.00305
+pixel_size = 0.00325
 billboard = 1
 shaded = false
 transparent = true
@@ -40,6 +40,6 @@ render_priority = 20
 flip_h = true
 
 [node name="GroundShadow" type="MeshInstance3D" parent="."]
-position = Vector3(0, 0.045, 0)
+position = Vector3(0, 0.045, -0.05)
 mesh = SubResource("PlaneMesh_bed_shadow")
 cast_shadow = 0

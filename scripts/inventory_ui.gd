@@ -9,11 +9,20 @@ var weapon_ammo_label: Label
 var ammo_slot_label: Label
 var food_slot_label: Label
 var weapon_slot_label: Label
+var rubber_gasket_slot_label: Label
+var scope_lens_slot_label: Label
+var magazine_spring_slot_label: Label
 var capacity_label: Label
+var progression_label: Label
 var opened := false
 
 
-func setup(font: Font, weapon_texture: Texture2D, ammo_texture: Texture2D) -> void:
+func setup(
+	font: Font,
+	weapon_texture: Texture2D,
+	ammo_texture: Texture2D,
+	component_textures: Dictionary = {}
+) -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -142,6 +151,12 @@ func setup(font: Font, weapon_texture: Texture2D, ammo_texture: Texture2D) -> vo
 	section_title.add_theme_font_size_override("font_size", 15)
 	section_title.add_theme_color_override("font_color", Color("#aeb8ae"))
 	content.add_child(section_title)
+	progression_label = Label.new()
+	progression_label.text = "피로 0%  ·  구조 주민 0명"
+	progression_label.add_theme_font_override("font", font)
+	progression_label.add_theme_font_size_override("font_size", 13)
+	progression_label.add_theme_color_override("font_color", Color("#8fa99b"))
+	content.add_child(progression_label)
 
 	var grid := GridContainer.new()
 	grid.columns = 4
@@ -153,8 +168,18 @@ func setup(font: Font, weapon_texture: Texture2D, ammo_texture: Texture2D) -> vo
 	_add_item_slot(grid, font, null, "붕대", "x3", Color("#a8aaa0"), "+")
 	food_slot_label = _add_item_slot(grid, font, null, "통조림", "x0", Color("#8b7657"), "캔")
 	weapon_slot_label = _add_item_slot(grid, font, null, "보관 무기", "x0", Color("#9b7657"), "총")
-	for index in 3:
-		_add_item_slot(grid, font, null, "빈 슬롯", "", Color("#39423d"), "")
+	rubber_gasket_slot_label = _add_item_slot(
+		grid, font, component_textures.get("rubber_gasket") as Texture2D,
+		"고무 패킹", "x0", Color("#b69a68")
+	)
+	scope_lens_slot_label = _add_item_slot(
+		grid, font, component_textures.get("scope_lens") as Texture2D,
+		"스코프 렌즈", "x0", Color("#72b7c5")
+	)
+	magazine_spring_slot_label = _add_item_slot(
+		grid, font, component_textures.get("magazine_spring") as Texture2D,
+		"탄창 스프링", "x0", Color("#a6aaa2")
+	)
 	set_open(false)
 
 
@@ -217,7 +242,10 @@ func update_state(
 	durability: float = 100.0,
 	mod_names: Array[String] = [],
 	canned_food: int = 0,
-	stored_weapons: int = 0
+	stored_weapons: int = 0,
+	mod_components: Dictionary = {},
+	rescued_workers: int = 0,
+	fatigue: float = 0.0
 ) -> void:
 	var total := magazine + reserve
 	weapon_name_label.text = weapon_name if has_weapon else "미장착"
@@ -233,7 +261,18 @@ func update_state(
 	ammo_slot_label.text = "x%d" % reserve
 	food_slot_label.text = "x%d" % canned_food
 	weapon_slot_label.text = "x%d" % stored_weapons
-	var occupied_slots := 3 + (1 if has_weapon else 0) + (1 if canned_food > 0 else 0) + (1 if stored_weapons > 0 else 0)
+	rubber_gasket_slot_label.text = "x%d" % int(mod_components.get("rubber_gasket", 0))
+	scope_lens_slot_label.text = "x%d" % int(mod_components.get("scope_lens", 0))
+	magazine_spring_slot_label.text = "x%d" % int(mod_components.get("magazine_spring", 0))
+	progression_label.text = "피로 %d%%  ·  구조 주민 %d명  ·  통조림으로 가동 %d명" % [
+		roundi(fatigue),
+		rescued_workers,
+		mini(rescued_workers, canned_food),
+	]
+	var component_slots := 0
+	for component_count in mod_components.values():
+		component_slots += 1 if int(component_count) > 0 else 0
+	var occupied_slots := 3 + component_slots + (1 if has_weapon else 0) + (1 if canned_food > 0 else 0) + (1 if stored_weapons > 0 else 0)
 	capacity_label.text = "사용  %d / 16" % occupied_slots
 
 

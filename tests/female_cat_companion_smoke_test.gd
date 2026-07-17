@@ -18,9 +18,13 @@ func _run() -> void:
 	assert(companion != null)
 	assert(companion.get("target") == main_scene.get_node("Player"))
 	assert(sprite != null)
+	assert(not bool(main_scene.get("companion_active")))
+	assert(not companion.visible)
+	assert(companion.collision_layer == 0)
 	assert(not sprite.visible)
 	var companion_overlay := main_scene.get("companion_overlay") as Sprite2D
 	assert(companion_overlay != null)
+	assert(not companion_overlay.visible)
 	assert(is_equal_approx(sprite.pixel_size, 0.0098))
 	for direction in DIRECTIONS:
 		for state in ["idle", "walk"]:
@@ -37,6 +41,12 @@ func _run() -> void:
 	companion.call("_set_facing_from_world_direction", Vector3(-1, 0, -1))
 	assert(companion.get("facing") == "n")
 	assert(not sprite.flip_h)
+
+	main_scene.call("activate_companion")
+	assert(bool(main_scene.get("companion_active")))
+	assert(companion.visible)
+	assert(companion.collision_layer == 16)
+	assert(companion_overlay.visible)
 
 	var player := main_scene.get_node("Player") as CharacterBody3D
 	player.position = Vector3(0, 0.78, 0)

@@ -1,17 +1,15 @@
 extends Control
 
 const UI_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
-const EXTRACTION_TEXTURE := preload("res://assets/extraction/sewer_exit.png")
-
 var world: Node3D
 var player: Node3D
-var extraction_position := Vector3.ZERO
+var extraction_positions: Array[Vector3] = []
 
 
-func setup(world_node: Node3D, player_node: Node3D, extraction_world_position: Vector3) -> void:
+func setup(world_node: Node3D, player_node: Node3D, extraction_world_positions: Array[Vector3]) -> void:
 	world = world_node
 	player = player_node
-	extraction_position = extraction_world_position
+	extraction_positions.assign(extraction_world_positions)
 
 
 func _ready() -> void:
@@ -77,11 +75,19 @@ func _draw() -> void:
 		draw_rect(rect.grow(-cell_size * 0.12), Color("#111515"), true)
 		draw_rect(rect.grow(-cell_size * 0.12), Color("#59605b"), false, 1.0)
 
-	var extraction_cell: Vector2i = world.call("world_to_map_cell", extraction_position)
-	var extraction_center := map_rect.position + (Vector2(extraction_cell.x, extraction_cell.y) + Vector2.ONE * 0.5) * cell_size
-	var marker_size := maxf(28.0, cell_size * 1.35)
-	draw_circle(extraction_center, marker_size * 0.57, Color(0.95, 0.72, 0.18, 0.24))
-	draw_texture_rect(EXTRACTION_TEXTURE, Rect2(extraction_center - Vector2.ONE * marker_size * 0.5, Vector2.ONE * marker_size), false)
+	var marker_size := maxf(18.0, cell_size * 0.92)
+	for extraction_position in extraction_positions:
+		var extraction_cell: Vector2i = world.call("world_to_map_cell", extraction_position)
+		var extraction_center := map_rect.position + (Vector2(extraction_cell.x, extraction_cell.y) + Vector2.ONE * 0.5) * cell_size
+		draw_circle(extraction_center, marker_size * 0.72, Color(0.95, 0.72, 0.18, 0.18))
+		draw_circle(extraction_center, marker_size * 0.48, Color("#dcb64b"), false, 3.0)
+		draw_line(
+			extraction_center + Vector2(0, -marker_size * 0.35),
+			extraction_center + Vector2(0, marker_size * 0.28),
+			Color("#f0d77d"),
+			2.0
+		)
+		draw_circle(extraction_center, 2.5, Color("#fff0a8"))
 
 	if is_instance_valid(player):
 		var player_cell: Vector2i = world.call("world_to_map_cell", player.global_position)

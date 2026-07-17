@@ -5,8 +5,12 @@ const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png
 const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
 const ESCAPE_PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
 const BED_MODULE_SCENE := preload("res://scenes/modules/shelter_bed_module.tscn")
+const WORKBENCH_MODULE_SCENE := preload("res://scenes/modules/shelter_workbench_module.tscn")
+const SCRATCHER_BANK_MODULE_SCENE := preload("res://scenes/modules/scratcher_bank_module.tscn")
 const MOVE_SPEED := 4.6
 const CAT_ANIMATION_ROOT := "res://assets/characters/cat_8way"
+const CAT_ROLL_ANIMATION_ROOT := "res://assets/characters/cat_roll"
+const ROLL_COOLDOWN_INDICATOR_SCRIPT := preload("res://scripts/roll_cooldown_indicator.gd")
 const CAT_DIRECTION_STATES := {
 	"n": "up",
 	"ne": "up_right",
@@ -18,16 +22,26 @@ const CAT_DIRECTION_STATES := {
 	"nw": "up_left",
 }
 const CAT_FRAME_COUNT := 4
+const ROLL_FRAME_COUNT := 4
+const ROLL_DURATION := 0.46
+const ROLL_STAMINA_MAX := 100.0
+const ROLL_STAMINA_COST := 35.0
+const ROLL_STAMINA_RECOVERY_PER_SECOND := 30.0
+const ROLL_START_SPEED := 18.0
+const ROLL_END_SPEED := 4.2
+const ROLL_AFTERIMAGE_INTERVAL := 0.06
 const ROOM_ART_SIZE := Vector2(44.0, 25.0)
 const PLAYER_BOUNDS := Vector2(21.2, 11.7)
 const BED_MODULE_PLATE_SIZE := Vector2(2.65, 3.45)
 const STAGE_ONE_BED_POSITIONS := [
-	Vector3(-15.0, 0, -10.35),
-	Vector3(-11.5, 0, -10.35),
-	Vector3(-8.0, 0, -10.35),
-	Vector3(-4.5, 0, -10.35),
-	Vector3(-1.0, 0, -10.35),
+	Vector3(-20.05, 0, -8.0),
+	Vector3(-20.05, 0, -4.35),
+	Vector3(-20.05, 0, -0.7),
+	Vector3(-20.05, 0, 2.95),
+	Vector3(-20.05, 0, 6.6),
 ]
+const WORKBENCH_POSITION := Vector3(6.0, 0.0, -11.72)
+const SCRATCHER_BANK_POSITION := Vector3(13.1, 0.0, -11.74)
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const STATIONS := {
 	"pipe_exit": {"position": Vector2(16.0, -10.55), "label": "파이프를 타고 도시로 올라가기", "radius": 2.2},
@@ -44,24 +58,40 @@ var current_module: Node3D
 var prompt_label: Label
 var status_label: Label
 var stats_label: Label
+var scrap_gain_label: Label
 var interact_button: Button
+var roll_cooldown_indicator: Control
 var touch_stick: Control
 var touch_knob: Control
 var touch_id := -1
 var touch_origin := Vector2.ZERO
 var touch_vector := Vector2.ZERO
+var roll_active := false
+var roll_elapsed := 0.0
+var roll_stamina := ROLL_STAMINA_MAX
+var roll_afterimage_timer := 0.0
+var roll_direction := Vector3.ZERO
+var roll_afterimages: Array[Sprite3D] = []
 
 
 func _ready() -> void:
+	var offline_notice: Dictionary = GameState.process_shelter_progress()
 	_build_room()
 	_build_stage_one_modules()
 	_build_player()
 	_build_interface()
 	_update_stats()
-	_show_status("1단계 쉘터입니다. 5개의 침대 모듈이 설치되어 있습니다.")
+	_show_status(_build_offline_status_text(offline_notice))
 
 
 func _physics_process(delta: float) -> void:
+	if not is_instance_valid(player):
+		return
+	if not roll_active:
+		roll_stamina = minf(
+			ROLL_STAMINA_MAX,
+			roll_stamina + ROLL_STAMINA_RECOVERY_PER_SECOND * delta
+		)
 	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if Input.is_key_pressed(KEY_A): input_vector.x -= 1.0
 	if Input.is_key_pressed(KEY_D): input_vector.x += 1.0
@@ -71,7 +101,9 @@ func _physics_process(delta: float) -> void:
 	if touch_vector.length_squared() > input_vector.length_squared():
 		input_vector = touch_vector
 	var world_direction := Vector3(input_vector.x + input_vector.y, 0, -input_vector.x + input_vector.y)
-	if world_direction.length_squared() > 0.01:
+	if roll_active:
+		_update_roll(delta)
+	elif world_direction.length_squared() > 0.01:
 		world_direction = world_direction.normalized()
 		player.velocity = world_direction * MOVE_SPEED
 		_update_facing(input_vector)
@@ -84,7 +116,11 @@ func _physics_process(delta: float) -> void:
 	player.position.z = clampf(player.position.z, -PLAYER_BOUNDS.y, PLAYER_BOUNDS.y)
 	_update_camera(delta)
 	_update_nearby_station()
+	_update_roll_feedback()
+	_update_live_shelter_income(delta)
 	status_label.modulate.a = move_toward(status_label.modulate.a, 0.0, delta * 0.08)
+	if scrap_gain_label:
+		scrap_gain_label.modulate.a = move_toward(scrap_gain_label.modulate.a, 0.0, delta * 1.8)
 
 
 func _build_room() -> void:
@@ -185,12 +221,21 @@ func _build_stage_one_modules() -> void:
 	module_root.set_meta("module_grid_size", BED_MODULE_PLATE_SIZE)
 	add_child(module_root)
 	for index in STAGE_ONE_BED_POSITIONS.size():
-		_build_module_plate(module_root, STAGE_ONE_BED_POSITIONS[index], index + 1)
+		_build_module_plate(module_root, STAGE_ONE_BED_POSITIONS[index], index + 1, 90.0)
 		var bed := BED_MODULE_SCENE.instantiate() as Node3D
 		bed.name = "BedModule%02d" % (index + 1)
 		bed.position = STAGE_ONE_BED_POSITIONS[index]
+		bed.rotation_degrees.y = 90.0
 		bed.set("bed_index", index + 1)
 		module_root.add_child(bed)
+	var workbench := WORKBENCH_MODULE_SCENE.instantiate() as Node3D
+	workbench.name = "WeaponWorkbench"
+	workbench.position = WORKBENCH_POSITION
+	module_root.add_child(workbench)
+	var bank := SCRATCHER_BANK_MODULE_SCENE.instantiate() as Node3D
+	bank.name = "ScratcherBank"
+	bank.position = SCRATCHER_BANK_POSITION
+	module_root.add_child(bank)
 
 
 func _build_player() -> void:
@@ -253,9 +298,18 @@ func _build_interface() -> void:
 	margin.add_theme_constant_override("margin_right", 14)
 	margin.add_theme_constant_override("margin_bottom", 12)
 	panel.add_child(margin)
+	var stats_box := VBoxContainer.new()
+	stats_box.add_theme_constant_override("separation", 3)
+	margin.add_child(stats_box)
 	stats_label = Label.new()
 	stats_label.add_theme_font_size_override("font_size", 16)
-	margin.add_child(stats_label)
+	stats_box.add_child(stats_label)
+	scrap_gain_label = Label.new()
+	scrap_gain_label.add_theme_font_override("font", FONT)
+	scrap_gain_label.add_theme_font_size_override("font_size", 14)
+	scrap_gain_label.add_theme_color_override("font_color", Color("#f0d16f"))
+	scrap_gain_label.modulate.a = 0.0
+	stats_box.add_child(scrap_gain_label)
 	prompt_label = Label.new()
 	prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	prompt_label.position = Vector2(-220, -112)
@@ -288,6 +342,9 @@ func _build_interface() -> void:
 	interact_button.add_theme_font_size_override("font_size", 17)
 	interact_button.pressed.connect(_interact)
 	canvas.add_child(interact_button)
+	roll_cooldown_indicator = ROLL_COOLDOWN_INDICATOR_SCRIPT.new() as Control
+	roll_cooldown_indicator.name = "ShelterRollCooldownIndicator"
+	canvas.add_child(roll_cooldown_indicator)
 	_build_touch_stick(canvas)
 
 
@@ -362,13 +419,33 @@ func _interact() -> void:
 
 
 func _update_stats() -> void:
-	stats_label.text = "SHELTER 01  ·  1단계\n수용 규모  5마리    침대  5개\n체력  %d / 100    고철  %d" % [GameState.player_health, GameState.scrap]
+	GameState._ensure_resident_records()
+	stats_label.text = "SHELTER 01  ·  1단계\n체력  %d / 100    고철  %d\n작업대 Lv.%d    복사소 Lv.%d\n일꾼  %d / %d    통조림  %d" % [
+		GameState.player_health,
+		GameState.scrap,
+		GameState.shelter_workbench_level,
+		GameState.scratcher_bank_level,
+		GameState.get_active_scratcher_workers(),
+		GameState.get_scratcher_worker_slots(),
+		GameState.canned_food,
+	]
 
 
-func _build_module_plate(parent: Node3D, position: Vector3, slot_index: int) -> void:
+func _update_live_shelter_income(delta: float) -> void:
+	var gained := GameState.tick_shelter_live(delta)
+	if gained <= 0:
+		return
+	_update_stats()
+	if scrap_gain_label:
+		scrap_gain_label.text = "+%d 고철   %.2f/s" % [gained, GameState.get_scrap_per_second()]
+		scrap_gain_label.modulate.a = 1.0
+
+
+func _build_module_plate(parent: Node3D, position: Vector3, slot_index: int, rotation_y := 0.0) -> void:
 	var slot := Node3D.new()
 	slot.name = "BedSlot%02d" % slot_index
 	slot.position = position + Vector3(0.0, 0.028, 0.0)
+	slot.rotation_degrees.y = rotation_y
 	slot.add_to_group("shelter_module_slot")
 	slot.set_meta("slot_index", slot_index)
 	slot.set_meta("module_kind", "bed")
@@ -390,6 +467,14 @@ func _build_module_plate(parent: Node3D, position: Vector3, slot_index: int) -> 
 func _show_status(message: String) -> void:
 	status_label.text = message
 	status_label.modulate.a = 1.0
+
+
+func _build_offline_status_text(progress: Dictionary) -> String:
+	var scrap_gain := int(progress.get("scrap", 0))
+	var repair_gain := float(progress.get("repair", 0.0))
+	if scrap_gain > 0 or repair_gain > 0.01:
+		return "오프라인 정산  ·  고철 +%d  ·  내구도 +%.1f%%" % [scrap_gain, repair_gain]
+	return "쉘터에 복귀했습니다. 작업대와 꾹꾹이 복사소를 사용할 수 있습니다."
 
 
 func _update_facing(screen_direction: Vector2) -> void:
@@ -434,6 +519,21 @@ func _create_cat_frames() -> SpriteFrames:
 					push_error("Missing cat animation frame: %s" % texture_path)
 					continue
 				frames.add_frame(animation_name, texture)
+		var roll_animation_name := "roll_%s" % direction_name
+		frames.add_animation(roll_animation_name)
+		frames.set_animation_loop(roll_animation_name, false)
+		frames.set_animation_speed(roll_animation_name, 10.0)
+		for frame_index in ROLL_FRAME_COUNT:
+			var roll_texture_path := "%s/%s_action-frame-%d.png" % [
+				CAT_ROLL_ANIMATION_ROOT,
+				state_prefix,
+				frame_index,
+			]
+			var roll_texture := load(roll_texture_path) as Texture2D
+			if roll_texture == null:
+				push_error("Missing cat roll animation frame: %s" % roll_texture_path)
+				continue
+			frames.add_frame(roll_animation_name, roll_texture)
 	return frames
 
 
@@ -441,6 +541,8 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_E:
 			_interact()
+		elif event.keycode == KEY_SPACE:
+			_try_start_roll()
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed and touch.position.x < get_viewport().get_visible_rect().size.x * 0.55:
@@ -457,6 +559,107 @@ func _input(event: InputEvent) -> void:
 		var offset: Vector2 = (event.position - touch_origin).limit_length(radius)
 		touch_vector = offset / radius
 		touch_knob.position = Vector2(40, 40) + offset
+
+
+func _try_start_roll() -> void:
+	if roll_active or roll_stamina < ROLL_STAMINA_COST or not is_instance_valid(player):
+		return
+	var roll_input := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	if Input.is_key_pressed(KEY_A): roll_input.x -= 1.0
+	if Input.is_key_pressed(KEY_D): roll_input.x += 1.0
+	if Input.is_key_pressed(KEY_W): roll_input.y -= 1.0
+	if Input.is_key_pressed(KEY_S): roll_input.y += 1.0
+	roll_input = roll_input.limit_length(1.0)
+	if touch_vector.length_squared() > roll_input.length_squared():
+		roll_input = touch_vector
+	if roll_input.length_squared() > 0.01:
+		roll_direction = Vector3(roll_input.x + roll_input.y, 0.0, -roll_input.x + roll_input.y).normalized()
+		_update_facing(roll_input)
+	else:
+		roll_direction = _get_current_facing_world_direction()
+	roll_active = true
+	roll_stamina = maxf(0.0, roll_stamina - ROLL_STAMINA_COST)
+	roll_elapsed = 0.0
+	roll_afterimage_timer = 0.0
+	_set_motion_state("roll")
+	_spawn_roll_afterimage()
+
+
+func _update_roll(delta: float) -> void:
+	roll_elapsed += delta
+	var progress := clampf(roll_elapsed / ROLL_DURATION, 0.0, 1.0)
+	var speed_weight := pow(1.0 - progress, 2.35)
+	var roll_speed := lerpf(ROLL_END_SPEED, ROLL_START_SPEED, speed_weight)
+	player.velocity = roll_direction * roll_speed
+	roll_afterimage_timer -= delta
+	if roll_afterimage_timer <= 0.0:
+		roll_afterimage_timer += ROLL_AFTERIMAGE_INTERVAL
+		_spawn_roll_afterimage()
+	if roll_elapsed >= ROLL_DURATION:
+		_finish_roll()
+
+
+func _finish_roll() -> void:
+	if not roll_active:
+		return
+	roll_active = false
+	roll_elapsed = 0.0
+	player.velocity = roll_direction * ROLL_END_SPEED
+	_set_motion_state("idle")
+
+
+func _spawn_roll_afterimage() -> void:
+	if survivor == null or survivor.sprite_frames == null:
+		return
+	var ghost_texture := survivor.sprite_frames.get_frame_texture(survivor.animation, survivor.frame)
+	if ghost_texture == null:
+		return
+	var ghost := Sprite3D.new()
+	ghost.name = "ShelterRollAfterimage"
+	ghost.texture = ghost_texture
+	ghost.position = player.position + Vector3(0, 0.3, 0)
+	ghost.pixel_size = survivor.pixel_size
+	ghost.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	ghost.shaded = false
+	ghost.transparent = true
+	ghost.no_depth_test = true
+	ghost.render_priority = survivor.render_priority - 1
+	ghost.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	ghost.modulate = Color(0.72, 0.82, 0.9, 0.42)
+	add_child(ghost)
+	roll_afterimages.append(ghost)
+	var tween := create_tween().set_parallel(true)
+	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(ghost, "modulate", Color(0.62, 0.68, 0.72, 0.0), 0.28)
+	tween.tween_property(ghost, "scale", Vector3.ONE * 1.08, 0.28)
+	tween.finished.connect(func():
+		roll_afterimages.erase(ghost)
+		if is_instance_valid(ghost):
+			ghost.queue_free()
+	)
+
+
+func _update_roll_feedback() -> void:
+	if roll_cooldown_indicator == null or shelter_camera == null or player == null:
+		return
+	var stamina_ratio := clampf(roll_stamina / ROLL_STAMINA_MAX, 0.0, 1.0)
+	var stamina_is_active := roll_active or stamina_ratio < 0.999
+	var head_position := shelter_camera.unproject_position(player.global_position + Vector3(0, 2.05, 0))
+	roll_cooldown_indicator.position = head_position + Vector2(26.0, -9.0)
+	roll_cooldown_indicator.call("set_cooldown_progress", stamina_ratio, stamina_is_active)
+
+
+func _get_current_facing_world_direction() -> Vector3:
+	match facing:
+		"n": return Vector3(-1, 0, -1).normalized()
+		"ne": return Vector3(0, 0, -1)
+		"e": return Vector3(1, 0, -1).normalized()
+		"se": return Vector3(1, 0, 0)
+		"s": return Vector3(1, 0, 1).normalized()
+		"sw": return Vector3(0, 0, 1)
+		"w": return Vector3(-1, 0, 1).normalized()
+		"nw": return Vector3(-1, 0, 0)
+	return Vector3(1, 0, 1).normalized()
 
 
 func _add_obstacle(node_name: String, position: Vector3, size: Vector3) -> void:

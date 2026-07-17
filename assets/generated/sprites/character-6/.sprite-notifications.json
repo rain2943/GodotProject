@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "df0209b0da0a47848da570a0dc75448e",
+      "kind": "base_generated",
+      "state": "__base__",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "generated": false
+      },
+      "createdAt": "2026-07-17T11:41:24+0900",
+      "read": false
+    },
+    {
+      "id": "58b7d91953e54e4cb04b56ca96de4492",
+      "kind": "auto_completed",
+      "state": "down_action",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": "움추리기",
+        "total": 8
+      },
+      "createdAt": "2026-07-17T11:50:10+0900",
+      "read": false
+    }
+  ]
+}

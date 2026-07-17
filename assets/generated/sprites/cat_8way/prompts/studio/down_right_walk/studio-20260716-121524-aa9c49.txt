@@ -1,0 +1,16 @@
+Create a production-ready 2D game sprite strip from the supplied base character.
+
+Identity lock: preserve the exact character design, proportions, face, clothing, backpack, tail, palette, outline weight, and pixel-art rendering from the base reference. Do not redesign or beautify the character.
+Direction: down_right — three-quarter front view, moving down-right. The head, torso, hips, legs, and feet must all face and move in this same direction.
+Action: four-phase diagonal walk toward camera-right and slightly toward the viewer.
+Motion contract, left to right, exactly four panels:
+1. frame 1: left leg forward, right leg back
+2. frame 2: both feet gathered in the passing pose
+3. frame 3: right leg forward, left leg back
+4. frame 4: both feet gathered in the passing pose
+The left/right leg alternation is mandatory. Frames 1 and 3 must use opposite leading legs. Frames 2 and 4 are gathered passing poses, not copies of a leading-leg pose.
+This is a targeted reroll for frame 2: both feet gathered in the passing pose. Make that panel especially clear, while still returning the complete four-panel cycle so identity and motion can be checked.
+User correction: 양발 모음인데 꼬리가 안보여.. 꼬리가 보여야 함
+
+Output contract: one horizontal strip containing exactly four isolated full-body sprites, in the specified order, evenly spaced, equal scale and ground line. Use a perfectly flat solid #FF00FF background. No text, labels, arrows, borders, grid, scenery, cast shadow, extra character, or extra panel. Keep generous magenta separation between panels.
+Style contract: match the supplied cat reference sheet exactly: chunky pixel-art proportions, dark charcoal fur, amber eyes, white muzzle and chest, warm brown scarf, dark clothing and backpack, crisp dark outline, restrained warm highlights, no painterly rendering

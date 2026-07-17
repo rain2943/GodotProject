@@ -1,0 +1,529 @@
+{
+  "ok": true,
+  "engine": "component-row",
+  "kind": "sprite-gen-inspect-report",
+  "run_dir": "C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\assets\\generated\\sprites\\cat_8way",
+  "states": [
+    "down_idle",
+    "down_right_idle",
+    "right_idle",
+    "up_right_idle",
+    "up_idle",
+    "up_left_idle",
+    "left_idle",
+    "down_left_idle",
+    "down_walk",
+    "down_right_walk",
+    "right_walk",
+    "up_right_walk",
+    "up_walk",
+    "up_left_walk",
+    "left_walk",
+    "down_left_walk"
+  ],
+  "thresholds": {
+    "histogram_min": 0.0,
+    "dhash_min": 0.55,
+    "motion_min": 0.01
+  },
+  "rows": [
+    {
+      "state": "down_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/down/idle/frame-0.png",
+        "frames/down/idle/frame-1.png",
+        "frames/down/idle/frame-2.png",
+        "frames/down/idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9252245364115805,
+          "mean": 0.9482114376162232
+        },
+        "dhash_similarity": {
+          "min": 0.9375,
+          "mean": 0.9609375
+        },
+        "motion_presence": 0.02831967422385621,
+        "centroid_sigma": {
+          "x": 1.0082635483462228,
+          "y": 0.3861163996759259
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "down_right_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/down/right_idle/frame-0.png",
+        "frames/down/right_idle/frame-1.png",
+        "frames/down/right_idle/frame-2.png",
+        "frames/down/right_idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9578229789968691,
+          "mean": 0.9674380835000299
+        },
+        "dhash_similarity": {
+          "min": 0.84375,
+          "mean": 0.9010416666666666
+        },
+        "motion_presence": 0.04202218647875817,
+        "centroid_sigma": {
+          "x": 3.648308762918405,
+          "y": 2.6655220495487066
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "right_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/right/idle/frame-0.png",
+        "frames/right/idle/frame-1.png",
+        "frames/right/idle/frame-2.png",
+        "frames/right/idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9544345493377638,
+          "mean": 0.9673052365144499
+        },
+        "dhash_similarity": {
+          "min": 0.890625,
+          "mean": 0.9322916666666666
+        },
+        "motion_presence": 0.04254102519914216,
+        "centroid_sigma": {
+          "x": 1.7281778435668662,
+          "y": 1.7815772128921339
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "up_right_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/up_right/idle/frame-0.png",
+        "frames/up_right/idle/frame-1.png",
+        "frames/up_right/idle/frame-2.png",
+        "frames/up_right/idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9516916453999849,
+          "mean": 0.9630087376643877
+        },
+        "dhash_similarity": {
+          "min": 0.90625,
+          "mean": 0.9479166666666666
+        },
+        "motion_presence": 0.02197345409517974,
+        "centroid_sigma": {
+          "x": 0.36196967103825267,
+          "y": 1.3856031216366234
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "up_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/up/idle/frame-0.png",
+        "frames/up/idle/frame-1.png",
+        "frames/up/idle/frame-2.png",
+        "frames/up/idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9716478902449348,
+          "mean": 0.979415586179123
+        },
+        "dhash_similarity": {
+          "min": 0.9375,
+          "mean": 0.96875
+        },
+        "motion_presence": 0.010582538679534313,
+        "centroid_sigma": {
+          "x": 0.4138168237974054,
+          "y": 0.23790509688651418
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "up_left_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/up/left_idle/frame-0.png",
+        "frames/up/left_idle/frame-1.png",
+        "frames/up/left_idle/frame-2.png",
+        "frames/up/left_idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9516916453999849,
+          "mean": 0.9630087376643877
+        },
+        "dhash_similarity": {
+          "min": 0.90625,
+          "mean": 0.9479166666666666
+        },
+        "motion_presence": 0.02197345409517974,
+        "centroid_sigma": {
+          "x": 0.36196967103825267,
+          "y": 1.3856031216366234
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "left_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/left/idle/frame-0.png",
+        "frames/left/idle/frame-1.png",
+        "frames/left/idle/frame-2.png",
+        "frames/left/idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9544345493377638,
+          "mean": 0.9673052365144499
+        },
+        "dhash_similarity": {
+          "min": 0.875,
+          "mean": 0.921875
+        },
+        "motion_presence": 0.04254102519914216,
+        "centroid_sigma": {
+          "x": 1.728177843566863,
+          "y": 1.7815772128921339
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "down_left_idle",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/down/left_idle/frame-0.png",
+        "frames/down/left_idle/frame-1.png",
+        "frames/down/left_idle/frame-2.png",
+        "frames/down/left_idle/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9578229789968691,
+          "mean": 0.9674380835000299
+        },
+        "dhash_similarity": {
+          "min": 0.890625,
+          "mean": 0.9322916666666666
+        },
+        "motion_presence": 0.04202218647875817,
+        "centroid_sigma": {
+          "x": 3.648308762918413,
+          "y": 2.6655220495487066
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "down_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/down/walk/frame-0.png",
+        "frames/down/walk/frame-1.png",
+        "frames/down/walk/frame-2.png",
+        "frames/down/walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9252245364115805,
+          "mean": 0.9482114376162232
+        },
+        "dhash_similarity": {
+          "min": 0.9375,
+          "mean": 0.9609375
+        },
+        "motion_presence": 0.02831967422385621,
+        "centroid_sigma": {
+          "x": 1.0082635483462228,
+          "y": 0.3861163996759259
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "down_right_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/down/right_walk/frame-0.png",
+        "frames/down/right_walk/frame-1.png",
+        "frames/down/right_walk/frame-2.png",
+        "frames/down/right_walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9578229789968691,
+          "mean": 0.9674380835000299
+        },
+        "dhash_similarity": {
+          "min": 0.84375,
+          "mean": 0.9010416666666666
+        },
+        "motion_presence": 0.04202218647875817,
+        "centroid_sigma": {
+          "x": 3.648308762918405,
+          "y": 2.6655220495487066
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "right_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/right/walk/frame-0.png",
+        "frames/right/walk/frame-1.png",
+        "frames/right/walk/frame-2.png",
+        "frames/right/walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9544345493377638,
+          "mean": 0.9673052365144499
+        },
+        "dhash_similarity": {
+          "min": 0.890625,
+          "mean": 0.9322916666666666
+        },
+        "motion_presence": 0.04254102519914216,
+        "centroid_sigma": {
+          "x": 1.7281778435668662,
+          "y": 1.7815772128921339
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "up_right_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/up_right/walk/frame-0.png",
+        "frames/up_right/walk/frame-1.png",
+        "frames/up_right/walk/frame-2.png",
+        "frames/up_right/walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9516916453999849,
+          "mean": 0.9630087376643877
+        },
+        "dhash_similarity": {
+          "min": 0.90625,
+          "mean": 0.9479166666666666
+        },
+        "motion_presence": 0.02197345409517974,
+        "centroid_sigma": {
+          "x": 0.36196967103825267,
+          "y": 1.3856031216366234
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "up_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/up/walk/frame-0.png",
+        "frames/up/walk/frame-1.png",
+        "frames/up/walk/frame-2.png",
+        "frames/up/walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9716478902449348,
+          "mean": 0.979415586179123
+        },
+        "dhash_similarity": {
+          "min": 0.9375,
+          "mean": 0.96875
+        },
+        "motion_presence": 0.010582538679534313,
+        "centroid_sigma": {
+          "x": 0.4138168237974054,
+          "y": 0.23790509688651418
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "up_left_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/up/left_walk/frame-0.png",
+        "frames/up/left_walk/frame-1.png",
+        "frames/up/left_walk/frame-2.png",
+        "frames/up/left_walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9516916453999849,
+          "mean": 0.9630087376643877
+        },
+        "dhash_similarity": {
+          "min": 0.90625,
+          "mean": 0.9479166666666666
+        },
+        "motion_presence": 0.02197345409517974,
+        "centroid_sigma": {
+          "x": 0.36196967103825267,
+          "y": 1.3856031216366234
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "left_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/left/walk/frame-0.png",
+        "frames/left/walk/frame-1.png",
+        "frames/left/walk/frame-2.png",
+        "frames/left/walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9544345493377638,
+          "mean": 0.9673052365144499
+        },
+        "dhash_similarity": {
+          "min": 0.875,
+          "mean": 0.921875
+        },
+        "motion_presence": 0.04254102519914216,
+        "centroid_sigma": {
+          "x": 1.728177843566863,
+          "y": 1.7815772128921339
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "state": "down_left_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/down/left_walk/frame-0.png",
+        "frames/down/left_walk/frame-1.png",
+        "frames/down/left_walk/frame-2.png",
+        "frames/down/left_walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9578229789968691,
+          "mean": 0.9674380835000299
+        },
+        "dhash_similarity": {
+          "min": 0.890625,
+          "mean": 0.9322916666666666
+        },
+        "motion_presence": 0.04202218647875817,
+        "centroid_sigma": {
+          "x": 3.648308762918413,
+          "y": 2.6655220495487066
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    }
+  ],
+  "errors": [],
+  "warnings": []
+}

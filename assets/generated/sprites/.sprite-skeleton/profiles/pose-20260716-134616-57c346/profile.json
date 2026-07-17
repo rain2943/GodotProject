@@ -1,0 +1,177 @@
+{
+  "version": 1,
+  "profileId": "pose-20260716-134616-57c346",
+  "savedAt": "2026-07-16T13:46:17+0900",
+  "sourceCharacterId": "cat_8way",
+  "cell": {
+    "shape": "square",
+    "width": 256,
+    "height": 256,
+    "safe_margin_x": 24,
+    "safe_margin_y": 24,
+    "size": 256,
+    "safe_margin": 24
+  },
+  "states": {
+    "down_idle": {
+      "strip": "states/down_idle.png",
+      "phases": [
+        "phases/down_idle/frame-1.png",
+        "phases/down_idle/frame-2.png",
+        "phases/down_idle/frame-3.png",
+        "phases/down_idle/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "down_right_idle": {
+      "strip": "states/down_right_idle.png",
+      "phases": [
+        "phases/down_right_idle/frame-1.png",
+        "phases/down_right_idle/frame-2.png",
+        "phases/down_right_idle/frame-3.png",
+        "phases/down_right_idle/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "right_idle": {
+      "strip": "states/right_idle.png",
+      "phases": [
+        "phases/right_idle/frame-1.png",
+        "phases/right_idle/frame-2.png",
+        "phases/right_idle/frame-3.png",
+        "phases/right_idle/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "up_right_idle": {
+      "strip": "states/up_right_idle.png",
+      "phases": [
+        "phases/up_right_idle/frame-1.png",
+        "phases/up_right_idle/frame-2.png",
+        "phases/up_right_idle/frame-3.png",
+        "phases/up_right_idle/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "up_idle": {
+      "strip": "states/up_idle.png",
+      "phases": [
+        "phases/up_idle/frame-1.png",
+        "phases/up_idle/frame-2.png",
+        "phases/up_idle/frame-3.png",
+        "phases/up_idle/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "up_left_idle": {
+      "strip": "states/up_left_idle.png",
+      "phases": [
+        "phases/up_left_idle/frame-1.png",
+        "phases/up_left_idle/frame-2.png",
+        "phases/up_left_idle/frame-3.png",
+        "phases/up_left_idle/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "left_idle": {
+      "strip": "states/left_idle.png",
+      "phases": [
+        "phases/left_idle/frame-1.png",
+        "phases/left_idle/frame-2.png",
+        "phases/left_idle/frame-3.png",
+        "phases/left_idle/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "down_left_idle": {
+      "strip": "states/down_left_idle.png",
+      "phases": [
+        "phases/down_left_idle/frame-1.png",
+        "phases/down_left_idle/frame-2.png",
+        "phases/down_left_idle/frame-3.png",
+        "phases/down_left_idle/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "down_walk": {
+      "strip": "states/down_walk.png",
+      "phases": [
+        "phases/down_walk/frame-1.png",
+        "phases/down_walk/frame-2.png",
+        "phases/down_walk/frame-3.png",
+        "phases/down_walk/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "down_right_walk": {
+      "strip": "states/down_right_walk.png",
+      "phases": [
+        "phases/down_right_walk/frame-1.png",
+        "phases/down_right_walk/frame-2.png",
+        "phases/down_right_walk/frame-3.png",
+        "phases/down_right_walk/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "right_walk": {
+      "strip": "states/right_walk.png",
+      "phases": [
+        "phases/right_walk/frame-1.png",
+        "phases/right_walk/frame-2.png",
+        "phases/right_walk/frame-3.png",
+        "phases/right_walk/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "up_right_walk": {
+      "strip": "states/up_right_walk.png",
+      "phases": [
+        "phases/up_right_walk/frame-1.png",
+        "phases/up_right_walk/frame-2.png",
+        "phases/up_right_walk/frame-3.png",
+        "phases/up_right_walk/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "up_walk": {
+      "strip": "states/up_walk.png",
+      "phases": [
+        "phases/up_walk/frame-1.png",
+        "phases/up_walk/frame-2.png",
+        "phases/up_walk/frame-3.png",
+        "phases/up_walk/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "up_left_walk": {
+      "strip": "states/up_left_walk.png",
+      "phases": [
+        "phases/up_left_walk/frame-1.png",
+        "phases/up_left_walk/frame-2.png",
+        "phases/up_left_walk/frame-3.png",
+        "phases/up_left_walk/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "left_walk": {
+      "strip": "states/left_walk.png",
+      "phases": [
+        "phases/left_walk/frame-1.png",
+        "phases/left_walk/frame-2.png",
+        "phases/left_walk/frame-3.png",
+        "phases/left_walk/frame-4.png"
+      ],
+      "frames": 4
+    },
+    "down_left_walk": {
+      "strip": "states/down_left_walk.png",
+      "phases": [
+        "phases/down_left_walk/frame-1.png",
+        "phases/down_left_walk/frame-2.png",
+        "phases/down_left_walk/frame-3.png",
+        "phases/down_left_walk/frame-4.png"
+      ],
+      "frames": 4
+    }
+  }
+}

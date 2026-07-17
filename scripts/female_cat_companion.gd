@@ -32,6 +32,7 @@ var downed := false
 var hit_stun_time := 0.0
 var hit_flash_time := 0.0
 var hit_velocity := Vector3.ZERO
+var active := true
 var health_bar_background: Sprite3D
 var health_bar_fill: Sprite3D
 
@@ -50,6 +51,9 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if not active:
+		velocity = Vector3.ZERO
+		return
 	hit_stun_time = maxf(0.0, hit_stun_time - delta)
 	hit_flash_time = maxf(0.0, hit_flash_time - delta)
 	if hit_flash_time <= 0.0 and not downed:
@@ -84,6 +88,19 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector3.ZERO
 		_set_motion_state("idle")
 	move_and_slide()
+
+
+func set_active(is_active: bool) -> void:
+	active = is_active
+	visible = is_active
+	collision_layer = 16 if is_active else 0
+	collision_mask = 1 if is_active else 0
+	set_physics_process(is_active)
+	velocity = Vector3.ZERO
+	if health_bar_background:
+		health_bar_background.visible = false
+	if health_bar_fill:
+		health_bar_fill.visible = false
 
 
 func _setup_health_bar() -> void:

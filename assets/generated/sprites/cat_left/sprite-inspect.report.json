@@ -1,0 +1,49 @@
+{
+  "ok": true,
+  "engine": "component-row",
+  "kind": "sprite-gen-inspect-report",
+  "run_dir": "C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\assets\\generated\\sprites\\cat_left",
+  "states": [
+    "left_walk"
+  ],
+  "thresholds": {
+    "histogram_min": 0.0,
+    "dhash_min": 0.55,
+    "motion_min": 0.01
+  },
+  "rows": [
+    {
+      "state": "left_walk",
+      "source": "frames",
+      "expected_frames": 4,
+      "found_frames": 4,
+      "natural_pose_count": 4,
+      "frame_files": [
+        "frames/left_walk/frame-0.png",
+        "frames/left_walk/frame-1.png",
+        "frames/left_walk/frame-2.png",
+        "frames/left_walk/frame-3.png"
+      ],
+      "metrics": {
+        "histogram_intersection": {
+          "min": 0.9736805033328051,
+          "mean": 0.9808277645140849
+        },
+        "dhash_similarity": {
+          "min": 0.875,
+          "mean": 0.9114583333333334
+        },
+        "motion_presence": 0.053280340456495094,
+        "centroid_sigma": {
+          "x": 2.526366839182024,
+          "y": 1.944531077257721
+        }
+      },
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    }
+  ],
+  "errors": [],
+  "warnings": []
+}

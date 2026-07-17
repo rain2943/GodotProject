@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "01e89a5e986e48a0b642bfdaddb39c86",
+      "kind": "auto_failed",
+      "state": "down_right_idle",
+      "phase": null,
+      "success": false,
+      "detail": {
+        "error": "{\n  \"ok\": false,\n  \"engine\": \"component-row\",\n  \"engine_revision\": \"8d7a959f9d6c\",\n  \"extract_args\": {\n    \"allow_slot_fallback\": true\n  },\n  \"run_dir\": \"C:\\\\Users\\\\rain2\\\\Documents\\\\GitHub\\\\GodotProject\\\\assets\\\\generated\\\\sprites\\\\character\",\n  \"cell\": {\n    \"shape\": \"square\",\n    \"width\": 256,\n    \"height\": 256,\n    \"safe_margin_x\": 24,\n    \"safe_margin_y\": 24,\n    \"size\": 256,\n    \"safe_margin\": 24\n  },\n  \"chroma_key\": {\n    \"name\": \"magenta\",\n    \"hex\": \"#FF00FF\",\n    \"rgb\": [\n      255,\n      0,\n      255\n    ],\n    \"selection\": \"manual\"\n  },\n  \"errors\": [\n    \"down_right_idle: missing raw strip C:\\\\Users\\\\rain2\\\\Documents\\\\GitHub\\\\GodotProject\\\\assets\\\\generated\\\\sprites\\\\character\\\\raw\\\\down\\\\right_idle.png\"\n  ],\n  \"warnings\": []\n}",
+        "name": null,
+        "total": 15
+      },
+      "createdAt": "2026-07-16T16:08:49+0900",
+      "read": true
+    },
+    {
+      "id": "f61ced9ce21c496eb88b09a52a15ba04",
+      "kind": "auto_completed",
+      "state": "right_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": null,
+        "total": 14
+      },
+      "createdAt": "2026-07-16T16:37:33+0900",
+      "read": false
+    },
+    {
+      "id": "5f573d12b3574e898065ee78d395c146",
+      "kind": "animation_added",
+      "state": "custom_animation",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": "구르기",
+        "frames": 4,
+        "stateCount": 1
+      },
+      "createdAt": "2026-07-16T18:58:34+0900",
+      "read": false
+    },
+    {
+      "id": "e8a58291fc0440a8b9ed88bbc5947ff1",
+      "kind": "custom_animation_failed",
+      "state": "custom_animation",
+      "phase": null,
+      "success": false,
+      "detail": {
+        "error": "run dir is locked by export_curated_pngs (pid 20064): C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\assets\\generated\\sprites\\character\n  another sprite-gen process is writing this run dir; wait for it to finish,\n  or delete C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\assets\\generated\\sprites\\character\\.sprite-gen.lock if you are sure that process is gone",
+        "name": "구르기",
+        "total": 1
+      },
+      "createdAt": "2026-07-16T18:59:38+0900",
+      "read": false
+    }
+  ]
+}

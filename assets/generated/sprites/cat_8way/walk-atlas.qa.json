@@ -1,0 +1,168 @@
+{
+  "ok": true,
+  "asset": "assets\\generated\\sprites\\cat_8way\\walk-atlas.png",
+  "cell": {
+    "width": 256,
+    "height": 256
+  },
+  "columns": 4,
+  "rows": 8,
+  "directions": [
+    "down",
+    "down_right",
+    "right",
+    "up_right",
+    "up",
+    "up_left",
+    "left",
+    "down_left"
+  ],
+  "phase_rule": "left_forward -> feet_together -> right_forward -> feet_together",
+  "rows_report": [
+    {
+      "direction": "down",
+      "row": 0,
+      "frames": 4,
+      "fps": 8,
+      "phase_order": [
+        "left_forward",
+        "feet_together",
+        "right_forward",
+        "feet_together"
+      ],
+      "nonempty_frames": [
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "direction": "down_right",
+      "row": 1,
+      "frames": 4,
+      "fps": 8,
+      "phase_order": [
+        "left_forward",
+        "feet_together",
+        "right_forward",
+        "feet_together"
+      ],
+      "nonempty_frames": [
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "direction": "right",
+      "row": 2,
+      "frames": 4,
+      "fps": 8,
+      "phase_order": [
+        "left_forward",
+        "feet_together",
+        "right_forward",
+        "feet_together"
+      ],
+      "nonempty_frames": [
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "direction": "up_right",
+      "row": 3,
+      "frames": 4,
+      "fps": 8,
+      "phase_order": [
+        "left_forward",
+        "feet_together",
+        "right_forward",
+        "feet_together"
+      ],
+      "nonempty_frames": [
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "direction": "up",
+      "row": 4,
+      "frames": 4,
+      "fps": 8,
+      "phase_order": [
+        "left_forward",
+        "feet_together",
+        "right_forward",
+        "feet_together"
+      ],
+      "nonempty_frames": [
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "direction": "up_left",
+      "row": 5,
+      "frames": 4,
+      "fps": 8,
+      "phase_order": [
+        "left_forward",
+        "feet_together",
+        "right_forward",
+        "feet_together"
+      ],
+      "nonempty_frames": [
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "direction": "left",
+      "row": 6,
+      "frames": 4,
+      "fps": 8,
+      "phase_order": [
+        "left_forward",
+        "feet_together",
+        "right_forward",
+        "feet_together"
+      ],
+      "nonempty_frames": [
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "direction": "down_left",
+      "row": 7,
+      "frames": 4,
+      "fps": 8,
+      "phase_order": [
+        "left_forward",
+        "feet_together",
+        "right_forward",
+        "feet_together"
+      ],
+      "nonempty_frames": [
+        true,
+        true,
+        true,
+        true
+      ]
+    }
+  ],
+  "note": "Structural QA verifies 32 populated frames; left/right anatomical identity remains an intentional curation rule."
+}

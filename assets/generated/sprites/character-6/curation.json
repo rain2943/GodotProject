@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-curation",
+  "states": {
+    "down_action": {
+      "selected": [
+        2
+      ],
+      "order": [
+        2
+      ],
+      "transforms": {
+        "2": {
+          "rotate": 0,
+          "scale": 1,
+          "dx": 8.421052631578947,
+          "dy": 0,
+          "shx": 0,
+          "shy": 0,
+          "flipX": 0
+        }
+      },
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        3
+      ],
+      "revision": [
+        "bf3c7c3d83f6"
+      ]
+    },
+    "down_right_action": {
+      "selected": [
+        1
+      ],
+      "order": [
+        1
+      ],
+      "transforms": {
+        "1": {
+          "rotate": 0,
+          "scale": 1,
+          "dx": -15.157894736842104,
+          "dy": 1.6842105263157894,
+          "shx": 0,
+          "shy": 0,
+          "flipX": 0
+        }
+      },
+      "skeleton_included": true,
+      "deleted": [
+        3,
+        0,
+        2
+      ],
+      "revision": [
+        "82fb7f0794b8"
+      ]
+    },
+    "right_action": {
+      "selected": [
+        3
+      ],
+      "order": [
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        2,
+        1,
+        0
+      ],
+      "revision": [
+        "e8f458bb2e57"
+      ]
+    },
+    "up_right_action": {
+      "selected": [
+        0
+      ],
+      "order": [
+        0
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        2,
+        3,
+        1
+      ],
+      "revision": [
+        "ef8f92a7477f"
+      ]
+    },
+    "up_action": {
+      "selected": [
+        0
+      ],
+      "order": [
+        0
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "32e5ddd30738"
+      ]
+    },
+    "up_left_action": {
+      "selected": [
+        0
+      ],
+      "order": [
+        0
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "a7485a83c3ee"
+      ]
+    },
+    "left_action": {
+      "selected": [
+        3
+      ],
+      "order": [
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2
+      ],
+      "revision": [
+        "5779a0f5f886"
+      ]
+    },
+    "down_left_action": {
+      "selected": [
+        2
+      ],
+      "order": [
+        2
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        1,
+        0,
+        3
+      ],
+      "revision": [
+        "bd8993734659"
+      ]
+    }
+  },
+  "run_revision": "37e231de464214f1"
+}

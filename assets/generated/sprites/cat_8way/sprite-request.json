@@ -1,0 +1,252 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-request",
+  "engine": "component-row",
+  "character": {
+    "id": "cat_8way",
+    "description": "",
+    "base_image": "base-source.png"
+  },
+  "cell": {
+    "shape": "square",
+    "width": 256,
+    "height": 256,
+    "safe_margin_x": 24,
+    "safe_margin_y": 24,
+    "size": 256,
+    "safe_margin": 24
+  },
+  "chroma_key": {
+    "name": "magenta",
+    "hex": "#FF00FF",
+    "rgb": [
+      255,
+      0,
+      255
+    ],
+    "selection": "manual"
+  },
+  "states": {
+    "down_idle": {
+      "frames": 4,
+      "fps": 4,
+      "loop": true,
+      "action": "standing idle, facing the viewer (front view); subtle breathing; canonical direction anchor derived from the base",
+      "takes": [
+        {
+          "label": "studio-20260716-115530-8551e0",
+          "frames": 4
+        },
+        {
+          "label": "studio-20260716-121358-947138",
+          "frames": 4
+        }
+      ]
+    },
+    "down_right_idle": {
+      "frames": 4,
+      "fps": 4,
+      "loop": true,
+      "action": "standing idle, facing the down_right direction; subtle breathing; canonical direction anchor derived from the base",
+      "takes": [
+        {
+          "label": "studio-20260716-121453-5f1761",
+          "frames": 4
+        }
+      ]
+    },
+    "right_idle": {
+      "frames": 4,
+      "fps": 4,
+      "loop": true,
+      "action": "standing idle, pure side profile view facing camera-right; subtle breathing; canonical direction anchor derived from the base",
+      "takes": [
+        {
+          "label": "studio-20260716-122315-191cef",
+          "frames": 4
+        }
+      ]
+    },
+    "up_right_idle": {
+      "frames": 4,
+      "fps": 4,
+      "loop": true,
+      "action": "standing idle, facing the up_right direction; subtle breathing; canonical direction anchor derived from the base",
+      "takes": [
+        {
+          "label": "studio-20260716-122353-b52d8d",
+          "frames": 4
+        }
+      ]
+    },
+    "up_idle": {
+      "frames": 4,
+      "fps": 4,
+      "loop": true,
+      "action": "standing idle, facing away from the viewer (back view, no visible face); subtle breathing; canonical direction anchor derived from the base",
+      "takes": [
+        {
+          "label": "studio-20260716-122421-c22b33",
+          "frames": 4
+        },
+        {
+          "label": "studio-20260716-122916-a583c5",
+          "frames": 4
+        }
+      ]
+    },
+    "up_left_idle": {
+      "frames": 4,
+      "fps": 4,
+      "loop": true,
+      "action": "standing idle, facing the up_left direction; subtle breathing; canonical direction anchor derived from the base",
+      "takes": [
+        {
+          "label": "studio-20260716-122939-a2064f",
+          "frames": 4
+        }
+      ]
+    },
+    "left_idle": {
+      "frames": 4,
+      "fps": 4,
+      "loop": true,
+      "action": "standing idle, pure side profile view facing camera-left; subtle breathing; canonical direction anchor derived from the base",
+      "takes": [
+        {
+          "label": "studio-20260716-122958-8dffb3",
+          "frames": 4
+        }
+      ]
+    },
+    "down_left_idle": {
+      "frames": 4,
+      "fps": 4,
+      "loop": true,
+      "action": "standing idle, facing the down_left direction; subtle breathing; canonical direction anchor derived from the base",
+      "takes": [
+        {
+          "label": "studio-20260716-123018-afb60f",
+          "frames": 4
+        },
+        {
+          "label": "studio-20260716-124352-27f8d4",
+          "frames": 4
+        }
+      ]
+    },
+    "down_walk": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "four-phase walk: left leg forward, passing, right leg forward, passing; keep the cat's identity and tail silhouette locked",
+      "takes": [
+        {
+          "label": "studio-20260716-121404-92e2a5",
+          "frames": 4
+        }
+      ]
+    },
+    "down_right_walk": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "four-phase diagonal walk toward camera-right and slightly toward the viewer",
+      "takes": [
+        {
+          "label": "studio-20260716-121524-aa9c49",
+          "frames": 4
+        },
+        {
+          "label": "studio-20260716-122301-b61220",
+          "frames": 4
+        }
+      ]
+    },
+    "right_walk": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "four-phase side-profile walk toward camera-right"
+    },
+    "up_right_walk": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "four-phase diagonal walk away from the viewer toward camera-right",
+      "takes": [
+        {
+          "label": "studio-20260716-122405-811723",
+          "frames": 4
+        }
+      ]
+    },
+    "up_walk": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "four-phase back-view walk away from the viewer; backpack and tail remain readable"
+    },
+    "up_left_walk": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "four-phase diagonal walk away from the viewer toward camera-left",
+      "takes": [
+        {
+          "label": "studio-20260716-122945-2a24ff",
+          "frames": 4
+        }
+      ]
+    },
+    "left_walk": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "four-phase side-profile walk toward camera-left"
+    },
+    "down_left_walk": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "four-phase diagonal walk toward camera-left and slightly toward the viewer",
+      "takes": [
+        {
+          "label": "studio-20260716-123036-398acd",
+          "frames": 4
+        },
+        {
+          "label": "studio-20260716-123618-18f7e5",
+          "frames": 4
+        }
+      ]
+    }
+  },
+  "style": "match the supplied cat reference sheet exactly: chunky pixel-art proportions, dark charcoal fur, amber eyes, white muzzle and chest, warm brown scarf, dark clothing and backpack, crisp dark outline, restrained warm highlights, no painterly rendering",
+  "motion_phase_guides": false,
+  "directions": {
+    "set": [
+      "down",
+      "down_right",
+      "right",
+      "up_right",
+      "up",
+      "up_left",
+      "left",
+      "down_left"
+    ],
+    "mirror": {},
+    "anchor_suffix": "idle"
+  },
+  "layout": "taxonomy/v1",
+  "chroma": {
+    "mode": "rgb",
+    "unmix_reach": 4,
+    "spill_max_fraction": 0.005
+  },
+  "studio_skeleton": {
+    "mode": "existing",
+    "profileId": "pose-20260716-201338-5886ab",
+    "name": "8방향 이동"
+  }
+}

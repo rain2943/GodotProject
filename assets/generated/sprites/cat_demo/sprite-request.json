@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-request",
+  "engine": "component-row",
+  "character": {
+    "id": "cat_demo",
+    "description": "",
+    "base_image": "base-source.png"
+  },
+  "cell": {
+    "shape": "square",
+    "width": 256,
+    "height": 256,
+    "safe_margin_x": 24,
+    "safe_margin_y": 24,
+    "size": 256,
+    "safe_margin": 24
+  },
+  "chroma_key": {
+    "name": "magenta",
+    "hex": "#FF00FF",
+    "rgb": [
+      255,
+      0,
+      255
+    ],
+    "selection": "manual"
+  },
+  "states": {
+    "walk": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "four-phase front-facing walk: left leg forward, passing, right leg forward, passing"
+    }
+  },
+  "style": "match the supplied cat reference sheet exactly: chunky pixel-art proportions and crisp dark outlines",
+  "motion_phase_guides": false,
+  "layout": "taxonomy/v1",
+  "chroma": {
+    "mode": "rgb",
+    "unmix_reach": 4,
+    "spill_max_fraction": 0.005
+  }
+}

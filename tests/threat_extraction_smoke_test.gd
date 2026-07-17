@@ -24,8 +24,15 @@ func _run() -> void:
 		_fail("obsolete disturbance meter is still visible")
 		return
 	var extraction_site: Node3D = main.get("extraction_site")
-	if not is_instance_valid(extraction_site) or extraction_site.get_node_or_null("SewerEntrance") == null:
-		_fail("sewer extraction site was not created")
+	var extraction_sites := main.get("extraction_sites") as Array
+	if extraction_sites.size() != 3:
+		_fail("three randomized sewer extraction sites were not created")
+		return
+	if not is_instance_valid(extraction_site) or extraction_site.get_node_or_null("ExtractionBeacon") == null:
+		_fail("lit sewer extraction beacon was not created")
+		return
+	if extraction_site.get_node_or_null("SewerEntrance") != null:
+		_fail("placeholder sewer art should not be visible yet")
 		return
 	var tactical_map: Control = main.get("tactical_map")
 	if not is_instance_valid(tactical_map):
@@ -38,13 +45,11 @@ func _run() -> void:
 	tactical_map.call("close")
 
 	var companion: CharacterBody3D = main.get("companion")
-	if companion.collision_layer != 16:
-		_fail("companion projectile collision layer is incorrect")
+	if bool(main.get("companion_active")):
+		_fail("companion should not be active at raid start")
 		return
-	var health_before := int(companion.get("health"))
-	companion.call("take_hit", 8, Vector3.RIGHT)
-	if int(companion.get("health")) != health_before - 8:
-		_fail("companion did not receive projectile damage")
+	if companion.visible or companion.collision_layer != 0:
+		_fail("companion should be hidden and non-colliding until story activation")
 		return
 
 	var ranged_enemy: CharacterBody3D

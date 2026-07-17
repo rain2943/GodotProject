@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "01a89489660944fb88c8265de5a3b81e",
+      "kind": "base_generated",
+      "state": "__base__",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "generated": false
+      },
+      "createdAt": "2026-07-16T20:14:41+0900",
+      "read": true
+    },
+    {
+      "id": "2bbbcc2243904bb9ba172c2a1c101745",
+      "kind": "auto_completed",
+      "state": "down_action",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": "구르기",
+        "total": 8
+      },
+      "createdAt": "2026-07-16T20:24:17+0900",
+      "read": false
+    }
+  ]
+}

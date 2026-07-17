@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-request",
+  "engine": "component-row",
+  "character": {
+    "id": "character-6",
+    "description": "일꾼 고양이 움추리기",
+    "base_image": "base-source.png"
+  },
+  "cell": {
+    "shape": "square",
+    "width": 256,
+    "height": 256,
+    "safe_margin_x": 24,
+    "safe_margin_y": 24,
+    "size": 256,
+    "safe_margin": 24
+  },
+  "chroma_key": {
+    "name": "magenta",
+    "hex": "#FF00FF",
+    "rgb": [
+      255,
+      0,
+      255
+    ],
+    "selection": "manual"
+  },
+  "states": {
+    "down_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "잔뜩 움추려서 구출을 기다리는 동작",
+      "custom_animation": {
+        "id": "2a5e8b8e63684e29a887fa59bb504ebc",
+        "name": "움추리기",
+        "prompt": "잔뜩 움추려서 구출을 기다리는 동작",
+        "directional_skeleton": true
+      }
+    },
+    "down_right_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "잔뜩 움추려서 구출을 기다리는 동작",
+      "custom_animation": {
+        "id": "2a5e8b8e63684e29a887fa59bb504ebc",
+        "name": "움추리기",
+        "prompt": "잔뜩 움추려서 구출을 기다리는 동작",
+        "directional_skeleton": true
+      }
+    },
+    "right_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "잔뜩 움추려서 구출을 기다리는 동작",
+      "custom_animation": {
+        "id": "2a5e8b8e63684e29a887fa59bb504ebc",
+        "name": "움추리기",
+        "prompt": "잔뜩 움추려서 구출을 기다리는 동작",
+        "directional_skeleton": true
+      }
+    },
+    "up_right_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "잔뜩 움추려서 구출을 기다리는 동작",
+      "custom_animation": {
+        "id": "2a5e8b8e63684e29a887fa59bb504ebc",
+        "name": "움추리기",
+        "prompt": "잔뜩 움추려서 구출을 기다리는 동작",
+        "directional_skeleton": true
+      }
+    },
+    "up_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "잔뜩 움추려서 구출을 기다리는 동작",
+      "custom_animation": {
+        "id": "2a5e8b8e63684e29a887fa59bb504ebc",
+        "name": "움추리기",
+        "prompt": "잔뜩 움추려서 구출을 기다리는 동작",
+        "directional_skeleton": true
+      }
+    },
+    "up_left_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "잔뜩 움추려서 구출을 기다리는 동작",
+      "custom_animation": {
+        "id": "2a5e8b8e63684e29a887fa59bb504ebc",
+        "name": "움추리기",
+        "prompt": "잔뜩 움추려서 구출을 기다리는 동작",
+        "directional_skeleton": true
+      }
+    },
+    "left_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "잔뜩 움추려서 구출을 기다리는 동작",
+      "custom_animation": {
+        "id": "2a5e8b8e63684e29a887fa59bb504ebc",
+        "name": "움추리기",
+        "prompt": "잔뜩 움추려서 구출을 기다리는 동작",
+        "directional_skeleton": true
+      }
+    },
+    "down_left_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "잔뜩 움추려서 구출을 기다리는 동작",
+      "custom_animation": {
+        "id": "2a5e8b8e63684e29a887fa59bb504ebc",
+        "name": "움추리기",
+        "prompt": "잔뜩 움추려서 구출을 기다리는 동작",
+        "directional_skeleton": true
+      }
+    }
+  },
+  "style": "match the supplied base character exactly: preserve its proportions, face, clothing, accessories, palette, outline weight, and rendering style; do not redesign it",
+  "motion_phase_guides": false,
+  "directions": {
+    "set": [
+      "down",
+      "down_right",
+      "right",
+      "up_right",
+      "up",
+      "up_left",
+      "left",
+      "down_left"
+    ],
+    "mirror": {},
+    "anchor_suffix": "idle",
+    "match_longest": true
+  },
+  "layout": "taxonomy/v1",
+  "chroma": {
+    "mode": "rgb",
+    "unmix_reach": 4,
+    "spill_max_fraction": 0.005
+  },
+  "studio_skeleton": {
+    "mode": "new",
+    "name": "움추리기",
+    "prompt": "잔뜩 움추려서 구출을 기다리는 동작",
+    "frames": 4
+  }
+}

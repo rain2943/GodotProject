@@ -44,13 +44,20 @@ func _run() -> void:
 	assert(not (main_scene.get("roll_afterimages") as Array).is_empty())
 	main_scene.call("_update_roll", 0.5)
 	assert(not main_scene.get("roll_active"))
-	assert(is_equal_approx(float(main_scene.get("roll_cooldown_remaining")), 1.5))
-	main_scene.set("roll_cooldown_remaining", 0.0)
+	assert(is_equal_approx(float(main_scene.get("roll_stamina")), 65.0))
 	main_scene.call("_try_start_roll")
 	assert(main_scene.get("roll_active"))
 	main_scene.call("_update_roll", 0.01)
 	var roll_velocity := (main_scene.get_node("Player") as CharacterBody3D).velocity.length()
 	assert(roll_velocity > 34.0)
+	main_scene.call("_finish_roll")
+	main_scene.set("roll_stamina", 30.0)
+	main_scene.call("_try_start_roll")
+	assert(not main_scene.get("roll_active"))
+	main_scene.set("roll_stamina", 30.0)
+	main_scene.set("roll_active", false)
+	main_scene.call("_physics_process", 1.0)
+	assert(float(main_scene.get("roll_stamina")) > 55.0)
 	main_scene.queue_free()
 	await process_frame
 
@@ -59,6 +66,25 @@ func _run() -> void:
 	await process_frame
 	var shelter_sprite := shelter_scene.get_node("ShelterPlayer/Survivor") as AnimatedSprite3D
 	_assert_cat_frames(shelter_sprite)
+	for direction in DIRECTIONS:
+		var shelter_roll_animation := "roll_%s" % direction
+		assert(shelter_sprite.sprite_frames.has_animation(shelter_roll_animation))
+		assert(shelter_sprite.sprite_frames.get_frame_count(shelter_roll_animation) == 4)
+		assert(not shelter_sprite.sprite_frames.get_animation_loop(shelter_roll_animation))
+	assert(shelter_scene.get("roll_cooldown_indicator") is Control)
+	shelter_scene.call("_try_start_roll")
+	assert(shelter_scene.get("roll_active"))
+	assert(shelter_sprite.animation == "roll_s")
+	shelter_scene.call("_update_roll", 0.06)
+	assert(not (shelter_scene.get("roll_afterimages") as Array).is_empty())
+	shelter_scene.call("_update_roll", 0.5)
+	assert(not shelter_scene.get("roll_active"))
+	assert(is_equal_approx(float(shelter_scene.get("roll_stamina")), 65.0))
+	shelter_scene.set("roll_stamina", 30.0)
+	shelter_scene.call("_try_start_roll")
+	assert(not shelter_scene.get("roll_active"))
+	shelter_scene.call("_physics_process", 1.0)
+	assert(float(shelter_scene.get("roll_stamina")) > 55.0)
 
 	print("PLAYER_CAT_ANIMATION_OK base_animations=16 roll_animations=8 roll_frames=32 scenes=2")
 	quit(0)

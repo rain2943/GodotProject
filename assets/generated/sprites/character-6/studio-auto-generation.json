@@ -1,0 +1,66 @@
+{
+  "id": "aa2d94b2b35647739fc969927dc5b881",
+  "status": "completed",
+  "total": 8,
+  "completed": 8,
+  "currentState": null,
+  "currentIndex": null,
+  "states": [
+    "down_action",
+    "down_right_action",
+    "right_action",
+    "up_right_action",
+    "up_action",
+    "up_left_action",
+    "left_action",
+    "down_left_action"
+  ],
+  "results": [
+    {
+      "state": "down_action",
+      "poseTemplateUsed": false,
+      "recovered": false
+    },
+    {
+      "state": "down_right_action",
+      "poseTemplateUsed": false,
+      "recovered": false
+    },
+    {
+      "state": "right_action",
+      "poseTemplateUsed": false,
+      "recovered": false
+    },
+    {
+      "state": "up_right_action",
+      "poseTemplateUsed": false,
+      "recovered": false
+    },
+    {
+      "state": "up_action",
+      "poseTemplateUsed": false,
+      "recovered": false
+    },
+    {
+      "state": "up_left_action",
+      "poseTemplateUsed": false,
+      "recovered": false
+    },
+    {
+      "state": "left_action",
+      "poseTemplateUsed": false,
+      "recovered": false
+    },
+    {
+      "state": "down_left_action",
+      "poseTemplateUsed": false,
+      "recovered": false
+    }
+  ],
+  "skeletonProfileId": null,
+  "kind": "skeleton_generation",
+  "label": "움추리기",
+  "startedAt": "2026-07-17T11:41:26+0900",
+  "regenerateExisting": false,
+  "finishedAt": "2026-07-17T11:50:10+0900"
+}

@@ -1,0 +1,114 @@
+{
+  "id": "5017154c060548349cbedbe6a5302d11",
+  "status": "completed",
+  "total": 16,
+  "completed": 16,
+  "currentState": null,
+  "currentIndex": null,
+  "states": [
+    "down_idle",
+    "down_right_idle",
+    "right_idle",
+    "up_right_idle",
+    "up_idle",
+    "up_left_idle",
+    "left_idle",
+    "down_left_idle",
+    "down_walk",
+    "down_right_walk",
+    "right_walk",
+    "up_right_walk",
+    "up_walk",
+    "up_left_walk",
+    "left_walk",
+    "down_left_walk"
+  ],
+  "results": [
+    {
+      "state": "down_idle",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "down_right_idle",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "right_idle",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "up_right_idle",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "up_idle",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "up_left_idle",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "left_idle",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "down_left_idle",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "down_walk",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "down_right_walk",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "right_walk",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "up_right_walk",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "up_walk",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "up_left_walk",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "left_walk",
+      "poseTemplateUsed": true,
+      "recovered": false
+    },
+    {
+      "state": "down_left_walk",
+      "poseTemplateUsed": true,
+      "recovered": false
+    }
+  ],
+  "skeletonProfileId": "pose-20260716-201338-5886ab",
+  "kind": "skeleton_generation",
+  "label": "8방향 이동",
+  "startedAt": "2026-07-16T21:36:48+0900",
+  "regenerateExisting": false,
+  "finishedAt": "2026-07-16T21:57:35+0900"
+}

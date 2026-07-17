@@ -3,6 +3,9 @@
 addons/godot_mcp/cache/
 .codex-remote-attachments/
 .import/
+.venv-sprite-gen/
+__pycache__/
+*.pyc
 
 # Local exports and build output
 build/

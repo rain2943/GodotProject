@@ -5,6 +5,8 @@ const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png
 const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
 const BED_TEXTURE_PATH := "res://assets/interiors/shelter_bed_module_v2.png"
 const PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
+const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_wall_v2.png"
+const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_wall_v2.png"
 
 
 func _initialize() -> void:
@@ -16,6 +18,8 @@ func _run() -> void:
 	assert(ResourceLoader.exists(WALL_TEXTURE_PATH))
 	assert(ResourceLoader.exists(BED_TEXTURE_PATH))
 	assert(ResourceLoader.exists(PIPE_TEXTURE_PATH))
+	assert(ResourceLoader.exists(WORKBENCH_TEXTURE_PATH))
+	assert(ResourceLoader.exists(SCRATCHER_BANK_TEXTURE_PATH))
 	var shelter := load(SHELTER_SCENE_PATH).instantiate() as Node3D
 	root.add_child(shelter)
 	await process_frame
@@ -49,6 +53,8 @@ func _run() -> void:
 	assert(module_root.get_meta("module_grid_size") == Vector2(2.65, 3.45))
 	assert(get_nodes_in_group("shelter_module_slot").size() == 5)
 	assert(get_nodes_in_group("shelter_bed").size() == 5)
+	assert(get_nodes_in_group("shelter_workbench").size() == 1)
+	assert(get_nodes_in_group("scratcher_bank").size() == 1)
 	for slot in get_nodes_in_group("shelter_module_slot"):
 		assert(bool(slot.get_meta("replaceable")))
 		assert(str(slot.get_meta("module_kind")) == "bed")
@@ -59,8 +65,14 @@ func _run() -> void:
 		assert(sprite.flip_h)
 		var collision := (bed as Node).get_node("BedBody/CollisionShape3D") as CollisionShape3D
 		var shape := collision.shape as BoxShape3D
-		assert(shape.size == Vector3(2.2, 0.9, 2.9))
+		assert(shape.size == Vector3(2.35, 0.9, 2.95))
 		assert((bed as Node).get_node("GroundShadow") is MeshInstance3D)
+	var workbench := get_nodes_in_group("shelter_workbench")[0] as Node
+	assert((workbench.get_node("WorkbenchSprite") as Sprite3D).texture.resource_path == WORKBENCH_TEXTURE_PATH)
+	assert(workbench.has_method("interact"))
+	var bank := get_nodes_in_group("scratcher_bank")[0] as Node
+	assert((bank.get_node("BankSprite") as Sprite3D).texture.resource_path == SCRATCHER_BANK_TEXTURE_PATH)
+	assert(bank.has_method("interact"))
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)
 	for wall_name in [
