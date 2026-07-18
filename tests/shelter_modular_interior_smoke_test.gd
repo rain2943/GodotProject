@@ -7,6 +7,7 @@ const BED_TEXTURE_PATH := "res://assets/interiors/shelter_bed_module_v2.png"
 const PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
 const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_wall_aligned_v1.png"
 const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_wall_aligned_v1.png"
+const CATNIP_SCRAPER_TEXTURE_PATH := "res://assets/interiors/modules/catnip_scraper_wall_aligned_v1.png"
 
 
 func _initialize() -> void:
@@ -20,6 +21,7 @@ func _run() -> void:
 	assert(ResourceLoader.exists(PIPE_TEXTURE_PATH))
 	assert(ResourceLoader.exists(WORKBENCH_TEXTURE_PATH))
 	assert(ResourceLoader.exists(SCRATCHER_BANK_TEXTURE_PATH))
+	assert(ResourceLoader.exists(CATNIP_SCRAPER_TEXTURE_PATH))
 	var shelter := load(SHELTER_SCENE_PATH).instantiate() as Node3D
 	root.add_child(shelter)
 	await process_frame
@@ -55,6 +57,7 @@ func _run() -> void:
 	assert(get_nodes_in_group("shelter_bed").size() == 5)
 	assert(get_nodes_in_group("shelter_workbench").size() == 1)
 	assert(get_nodes_in_group("scratcher_bank").size() == 1)
+	assert(get_nodes_in_group("catnip_scraper").size() == 1)
 	for slot in get_nodes_in_group("shelter_module_slot"):
 		assert(bool(slot.get_meta("replaceable")))
 		assert(str(slot.get_meta("module_kind")) == "bed")
@@ -79,6 +82,10 @@ func _run() -> void:
 	assert(bank_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
 	assert(bank_sprite.no_depth_test)
 	assert(bank.has_method("interact"))
+	var catnip_scraper := get_nodes_in_group("catnip_scraper")[0] as Node
+	var catnip_sprite := catnip_scraper.get_node("ScraperSprite") as Sprite3D
+	assert(catnip_sprite.texture.resource_path == CATNIP_SCRAPER_TEXTURE_PATH)
+	assert(catnip_scraper.has_method("interact"))
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)
 	for wall_name in [
@@ -95,5 +102,5 @@ func _run() -> void:
 	key_event.pressed = true
 	assert(bool(shortcut.call("is_shelter_shortcut", key_event)))
 
-	print("SHELTER_MODULAR_OK beds=5 rotated=true pipe_exit=true black_outside=true room=44x25")
+	print("SHELTER_MODULAR_OK beds=5 catnip_scraper=true pipe_exit=true black_outside=true room=44x25")
 	quit(0)

@@ -9,11 +9,13 @@ func _run() -> void:
 	var game_state := root.get_node("GameState")
 	game_state.call("reset_run")
 	game_state.set("scrap", 500)
-	game_state.set("canned_food", 3)
-	game_state.set("rescued_workers", 3)
+	game_state.set("canned_food", 20)
+	game_state.set("rescued_workers", 4)
 	game_state.call("_ensure_resident_records")
-	for resident_id in game_state.get("resident_cat_ids"):
-		game_state.call("assign_worker_to_scratcher", resident_id)
+	var resident_ids := game_state.get("resident_cat_ids") as Array
+	for resident_index in range(3):
+		game_state.call("assign_worker_to_scratcher", resident_ids[resident_index])
+	game_state.call("assign_worker_to_catnip", resident_ids[3])
 	game_state.set("weapon_durability", 42.0)
 	game_state.set("shelter_last_progress_time", int(Time.get_unix_time_from_system()) - 7200)
 	game_state.set("workbench_repair_active", true)
@@ -21,15 +23,38 @@ func _run() -> void:
 	root.add_child(shelter)
 	await process_frame
 	await physics_frame
+	var resident_nodes := get_nodes_in_group("shelter_resident")
+	if resident_nodes.size() != 4:
+		_fail("rescued residents were not instantiated in the shelter")
+	var working_residents := 0
+	for resident in resident_nodes:
+		if bool(resident.get_meta("assigned_to_scratcher", false)):
+			working_residents += 1
+	if working_residents != int(game_state.call("get_active_scratcher_workers")):
+		_fail("visible scratcher workers do not match assigned worker data")
+	var catnip_workers := 0
+	for resident in resident_nodes:
+		if str(resident.get_meta("assignment_kind", "")) == "catnip":
+			catnip_workers += 1
+	if catnip_workers != 1 or int(game_state.call("get_active_catnip_workers")) != 1:
+		_fail("visible catnip worker does not match assigned worker data")
 
 	if int(game_state.get("scrap")) <= 500:
 		_fail("scratcher bank did not produce offline scrap")
 	if float(game_state.get("weapon_durability")) <= 42.0:
 		_fail("workbench did not repair weapon offline")
+	if float(game_state.get("catnip")) <= 0.0:
+		_fail("catnip scraper did not produce offline catnip")
 	var live_scrap_before := int(game_state.get("scrap"))
 	game_state.call("tick_shelter_live", 60.0)
 	if int(game_state.get("scrap")) <= live_scrap_before:
 		_fail("live shelter worker tick did not add scrap")
+	game_state.set("canned_food", 0)
+	var unfed_scrap_before := int(game_state.get("scrap"))
+	game_state.call("tick_shelter_live", 3600.0)
+	if int(game_state.get("scrap")) != unfed_scrap_before:
+		_fail("unfed shelter workers should pause production")
+	game_state.set("canned_food", 20)
 
 	var workbench := get_nodes_in_group("shelter_workbench")[0] as Node
 	workbench.call("interact")
@@ -40,14 +65,38 @@ func _run() -> void:
 	var bank := get_nodes_in_group("scratcher_bank")[0] as Node
 	bank.call("interact")
 	await process_frame
+	var assigned_ids := game_state.get("assigned_worker_ids") as Array
+	if assigned_ids.is_empty():
+		_fail("worker assignment data was unexpectedly empty")
+	var toggled_resident_id := str(assigned_ids[0])
+	bank.call("_toggle_worker", toggled_resident_id)
+	await physics_frame
+	var toggled_resident: Node
+	for resident in resident_nodes:
+		if str(resident.get_meta("resident_id", "")) == toggled_resident_id:
+			toggled_resident = resident
+			break
+	if toggled_resident == null or bool(toggled_resident.get_meta("assigned_to_scratcher", true)):
+		_fail("resident did not leave the scratcher after unassignment")
 
 	var before_level := int(game_state.get("scratcher_bank_level"))
 	var upgraded := bool(game_state.call("try_upgrade_scratcher_bank"))
 	if not upgraded or int(game_state.get("scratcher_bank_level")) != before_level + 1:
 		_fail("scratcher bank upgrade failed")
 
-	print("SHELTER_ECONOMY_OK scrap=%d durability=%.1f workers=%d" % [
+	game_state.set("catnip", 25.0)
+	if not bool(game_state.call("activate_catnip_boost")) or float(game_state.call("get_production_multiplier")) != 10.0:
+		_fail("catnip production boost failed")
+	game_state.set("scrap", 2000)
+	game_state.set("churu", 1)
+	if not bool(game_state.call("try_upgrade_shelter_tier")):
+		_fail("shelter tier upgrade failed")
+	if int(game_state.call("get_resident_capacity")) != 10 or int(game_state.call("get_scratcher_worker_slots")) != 6 or int(game_state.call("get_catnip_worker_slots")) != 2:
+		_fail("tier 2 capacity table is inconsistent")
+
+	print("SHELTER_ECONOMY_OK scrap=%d catnip=%.1f durability=%.1f workers=%d" % [
 		game_state.get("scrap"),
+		game_state.get("catnip"),
 		game_state.get("weapon_durability"),
 		game_state.call("get_active_scratcher_workers"),
 	])

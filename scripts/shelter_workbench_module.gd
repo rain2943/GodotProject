@@ -55,31 +55,60 @@ const RECIPES := {
 			"id": "m1911",
 			"name": "M1911 솜방망이",
 			"desc": "초반 거지런과 최후의 보루용 권총.",
-			"cost": {"scrap": 160, "rubber_gasket": 1},
+			"cost": {"scrap": 160, "canned_food": 2, "rubber_gasket": 1},
 			"result": {"weapon": "m1911", "amount": 1},
+			"required_tier": 1,
 		},
 		{
 			"id": "mp5",
 			"name": "MP5 하악이",
 			"desc": "기동전과 좀비 소탕에 강한 기관단총.",
-			"cost": {"scrap": 260, "magazine_spring": 2, "rubber_gasket": 1},
+			"cost": {"scrap": 260, "canned_food": 3, "magazine_spring": 2, "rubber_gasket": 1},
 			"result": {"weapon": "mp5", "amount": 1},
+			"required_tier": 1,
+		},
+		{
+			"id": "ak47",
+			"name": "AK-47 캣라시니코프",
+			"desc": "강한 반동과 총성을 감수하고 화력을 얻는 소총.",
+			"cost": {"scrap": 620, "canned_food": 6, "scope_lens": 1, "magazine_spring": 2},
+			"result": {"weapon": "ak47", "amount": 1},
+			"required_tier": 2,
+		},
+		{
+			"id": "double_barrel",
+			"name": "더블배럴 참치 헌터",
+			"desc": "장전 중 무방비가 되지만 초근접 저지력이 강한 산탄총.",
+			"cost": {"scrap": 940, "canned_food": 9, "rubber_gasket": 3, "magazine_spring": 2},
+			"result": {"weapon": "double_barrel", "amount": 1},
+			"required_tier": 3,
 		},
 	],
 	"supplies": [
-		{
-			"id": "canned_food",
-			"name": "통조림 x2",
-			"desc": "일꾼 고양이 유지와 기본 거래에 쓰는 핵심 재화.",
-			"cost": {"scrap": 35},
-			"result": {"canned_food": 2},
-		},
 		{
 			"id": "repair_kit",
 			"name": "임시 총기 수리",
 			"desc": "장착 총기의 내구도를 즉시 조금 회복합니다.",
 			"cost": {"scrap": 60, "rubber_gasket": 1},
 			"result": {"repair": 18.0},
+		},
+	],
+	"artisan": [
+		{
+			"id": "artisan_roll",
+			"name": "장인 고양이의 야간 제작",
+			"desc": "통조림과 고철을 맡겨 현재 쉘터 Tier에서 제작 가능한 무기 하나를 받습니다. 10회 안에는 최고 등급이 확정됩니다.",
+			"cost": {},
+			"result": {"artisan": true},
+		},
+	],
+	"enhance": [
+		{
+			"id": "enhance_equipped",
+			"name": "장착 무기 영구 강화",
+			"desc": "장착 중인 무기에 고철을 투자해 +99까지 피해와 안정성을 영구 강화합니다.",
+			"cost": {},
+			"result": {"enhance": true},
 		},
 	],
 }
@@ -89,6 +118,8 @@ const CATEGORY_NAMES := {
 	"ammo": "탄약",
 	"weapons": "무기",
 	"supplies": "보급",
+	"artisan": "장인 제작",
+	"enhance": "+99 강화",
 }
 
 @export var interaction_radius := 2.9
@@ -215,14 +246,14 @@ func _build_header() -> Control:
 func _build_tabs() -> Control:
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 8)
-	for category in ["parts", "ammo", "weapons", "supplies"]:
+	for category in ["parts", "ammo", "weapons", "supplies", "artisan", "enhance"]:
 		var tab := _button(str(CATEGORY_NAMES[category]))
 		tab.toggle_mode = true
 		tab.button_pressed = selected_category == category
 		tab.custom_minimum_size = Vector2(116, 40)
 		tab.pressed.connect(func() -> void:
 			selected_category = category
-			var recipes: Array = RECIPES[selected_category]
+			var recipes: Array = _recipes_for_category(selected_category)
 			if not recipes.is_empty():
 				selected_recipe_id = str((recipes[0] as Dictionary).get("id", ""))
 			_rebuild_ui()
@@ -262,7 +293,7 @@ func _build_detail_panel() -> Control:
 
 func _refresh_recipe_list() -> void:
 	_clear(recipe_list)
-	var recipes: Array = RECIPES[selected_category]
+	var recipes: Array = _recipes_for_category(selected_category)
 	for recipe_raw in recipes:
 		var recipe: Dictionary = recipe_raw
 		var button := _button("%s\n%s" % [str(recipe["name"]), _cost_short_text(recipe)])
@@ -302,11 +333,20 @@ func _refresh_detail_panel() -> void:
 	var cost_box := VBoxContainer.new()
 	cost_box.add_theme_constant_override("separation", 6)
 	detail_box.add_child(cost_box)
-	for key in (recipe.get("cost", {}) as Dictionary).keys():
-		var needed := int((recipe["cost"] as Dictionary)[key])
+	var effective_cost := _effective_cost(recipe)
+	for key in effective_cost.keys():
+		var needed := int(effective_cost[key])
 		var owned := _owned_resource(str(key))
 		var color := Color("#bde5c9") if owned >= needed else Color("#e68576")
 		cost_box.add_child(_label("%s  %d / %d" % [_resource_name(str(key)), owned, needed], 17, color))
+	var required_tier := int(recipe.get("required_tier", 1))
+	if GameState.shelter_tier < required_tier:
+		cost_box.add_child(_label("쉘터 Tier %d에서 해금" % required_tier, 17, Color("#e68576")))
+	if bool((recipe.get("result", {}) as Dictionary).get("artisan", false)):
+		cost_box.add_child(_label("확정 천장 %d / %d" % [GameState.artisan_pity, GameState.ARTISAN_PITY_LIMIT], 16, Color("#d9c579")))
+	if bool((recipe.get("result", {}) as Dictionary).get("enhance", false)):
+		var level := GameState.get_weapon_enhancement_level(GameState.equipped_weapon_id)
+		cost_box.add_child(_label("%s  +%d → +%d" % [GameState.equipped_weapon_id.to_upper(), level, mini(99, level + 1)], 17, Color("#d9c579")))
 
 	var result_label := _label("결과: %s" % _result_text(recipe), 17, Color("#d9c579"))
 	detail_box.add_child(result_label)
@@ -326,27 +366,67 @@ func _refresh_detail_panel() -> void:
 
 
 func _selected_recipe() -> Dictionary:
-	for recipe_raw in (RECIPES[selected_category] as Array):
+	for recipe_raw in _recipes_for_category(selected_category):
 		var recipe: Dictionary = recipe_raw
 		if str(recipe.get("id", "")) == selected_recipe_id:
 			return recipe
 	return {}
 
 
+func _recipes_for_category(category: String) -> Array:
+	var recipes: Array = (RECIPES.get(category, []) as Array).duplicate(true)
+	if category != "enhance":
+		return recipes
+	for mod_id in GameState.equipped_weapon_mods:
+		var definition := WeaponSystem.get_mod(mod_id)
+		if definition.is_empty():
+			continue
+		recipes.append({
+			"id": "enhance_mod_%s" % mod_id,
+			"name": "%s 영구 강화" % str(definition.get("display_name", mod_id)),
+			"desc": "장착 파츠의 고유 보정치를 +99까지 영구 강화합니다.",
+			"cost": {},
+			"result": {"enhance_mod": mod_id},
+		})
+	return recipes
+
+
 func _can_craft(recipe: Dictionary) -> bool:
-	for key in (recipe.get("cost", {}) as Dictionary).keys():
-		if _owned_resource(str(key)) < int((recipe["cost"] as Dictionary)[key]):
+	if GameState.shelter_tier < int(recipe.get("required_tier", 1)):
+		return false
+	for key in _effective_cost(recipe).keys():
+		if _owned_resource(str(key)) < int(_effective_cost(recipe)[key]):
 			return false
+	var result := recipe.get("result", {}) as Dictionary
+	if bool(result.get("enhance", false)):
+		return GameState.get_weapon_enhancement_level(GameState.equipped_weapon_id) < GameState.MAX_WEAPON_ENHANCEMENT
+	if result.has("enhance_mod"):
+		var mod_id := str(result["enhance_mod"])
+		return GameState.equipped_weapon_mods.has(mod_id) and GameState.get_mod_enhancement_level(mod_id) < GameState.MAX_WEAPON_ENHANCEMENT
 	return true
 
 
 func _craft(recipe: Dictionary) -> void:
 	if not _can_craft(recipe):
 		return
-	var cost: Dictionary = recipe.get("cost", {})
+	var result: Dictionary = recipe.get("result", {})
+	if bool(result.get("artisan", false)):
+		var artisan_result := GameState.roll_artisan_weapon()
+		if not artisan_result.is_empty():
+			selected_recipe_id = "artisan_roll"
+		_refresh_after_change()
+		return
+	if bool(result.get("enhance", false)):
+		GameState.try_enhance_weapon(GameState.equipped_weapon_id)
+		_refresh_after_change()
+		return
+	if result.has("enhance_mod"):
+		GameState.try_enhance_mod(str(result["enhance_mod"]))
+		_refresh_after_change()
+		return
+	var cost: Dictionary = _effective_cost(recipe)
 	for key in cost.keys():
 		_consume_resource(str(key), int(cost[key]))
-	var result: Dictionary = recipe.get("result", {})
 	if result.has("component"):
 		GameState.add_mod_component(str(result["component"]), int(result.get("amount", 1)))
 	elif result.has("ammo"):
@@ -358,7 +438,19 @@ func _craft(recipe: Dictionary) -> void:
 		GameState.canned_food += int(result["canned_food"])
 	elif result.has("repair"):
 		GameState.weapon_durability = minf(100.0, GameState.weapon_durability + float(result["repair"]))
+	GameState.save_persistent_state()
 	_refresh_after_change()
+
+
+func _effective_cost(recipe: Dictionary) -> Dictionary:
+	var result := recipe.get("result", {}) as Dictionary
+	if bool(result.get("artisan", false)):
+		return GameState.get_artisan_roll_cost()
+	if bool(result.get("enhance", false)):
+		return {"scrap": GameState.get_weapon_enhancement_cost(GameState.equipped_weapon_id)}
+	if result.has("enhance_mod"):
+		return {"scrap": GameState.get_mod_enhancement_cost(str(result["enhance_mod"]))}
+	return (recipe.get("cost", {}) as Dictionary).duplicate(true)
 
 
 func _start_repair() -> void:
@@ -412,8 +504,8 @@ func _resource_text() -> String:
 
 func _cost_short_text(recipe: Dictionary) -> String:
 	var parts: Array[String] = []
-	for key in (recipe.get("cost", {}) as Dictionary).keys():
-		parts.append("%s %d" % [_resource_name(str(key)), int((recipe["cost"] as Dictionary)[key])])
+	for key in _effective_cost(recipe).keys():
+		parts.append("%s %d" % [_resource_name(str(key)), int(_effective_cost(recipe)[key])])
 	return " / ".join(parts)
 
 
@@ -429,6 +521,13 @@ func _result_text(recipe: Dictionary) -> String:
 		return "통조림 x%d" % int(result["canned_food"])
 	if result.has("repair"):
 		return "내구도 +%d%%" % int(result["repair"])
+	if result.has("artisan"):
+		return "현재 Tier 무기 1정"
+	if result.has("enhance"):
+		return "%s +1" % GameState.equipped_weapon_id.to_upper()
+	if result.has("enhance_mod"):
+		var mod_id := str(result["enhance_mod"])
+		return "%s +%d" % [str(WeaponSystem.get_mod(mod_id).get("display_name", mod_id)), GameState.get_mod_enhancement_level(mod_id) + 1]
 	return "-"
 
 
@@ -444,6 +543,12 @@ func _result_icon_text(recipe: Dictionary) -> String:
 		return "식"
 	if result.has("repair"):
 		return "수"
+	if result.has("artisan"):
+		return "장"
+	if result.has("enhance"):
+		return "+"
+	if result.has("enhance_mod"):
+		return "+"
 	return "?"
 
 
@@ -467,6 +572,10 @@ func _resource_name(key: String) -> String:
 			return "M1911 솜방망이"
 		"mp5":
 			return "MP5 하악이"
+		"ak47":
+			return "AK-47 캣라시니코프"
+		"double_barrel":
+			return "더블배럴 참치 헌터"
 		"canned_food":
 			return "통조림"
 	return key

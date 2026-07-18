@@ -1,5 +1,7 @@
 extends SceneTree
 
+const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
+
 
 func _initialize() -> void:
 	_run.call_deferred()
@@ -11,8 +13,15 @@ func _fail(message: String) -> void:
 
 
 func _run() -> void:
+	for weapon_id in ["ak47", "mp5", "double_barrel"]:
+		var weapon_texture := WEAPON_VISUAL_CATALOG.get_weapon_texture(weapon_id)
+		if weapon_texture == null or weapon_texture.get_width() < 512:
+			_fail("weapon catalog art is missing for %s" % weapon_id)
+			return
 	var game_state := root.get_node("GameState")
 	game_state.call("reset_run")
+	game_state.set("shelter_tier", 2)
+	game_state.call("select_raid_zone", "namdaemun_market")
 	var packed := load("res://scenes/main.tscn") as PackedScene
 	if packed == null:
 		_fail("main scene could not be loaded")
@@ -21,6 +30,14 @@ func _run() -> void:
 	root.add_child(main)
 	await process_frame
 	await physics_frame
+	var boss_found := false
+	for enemy in (main.get("enemies") as Array):
+		if is_instance_valid(enemy) and bool(enemy.get_meta("raid_boss", false)):
+			boss_found = true
+			break
+	if not boss_found:
+		_fail("unlocked high-risk zone did not spawn its raid boss")
+		return
 
 	var extraction_sites := main.get("extraction_sites") as Array
 	if extraction_sites.size() != 3:
@@ -32,7 +49,13 @@ func _run() -> void:
 	for point_value in field_interactions:
 		var point := point_value as Node3D
 		match str(point.get_meta("interaction_type", "")):
-			"salvage": salvage_count += 1
+			"salvage":
+				salvage_count += 1
+				if str(point.get_meta("source_kind", "")) == "broken_sentry":
+					var sentry_sprite := point.get_node_or_null("BrokenSentry") as Sprite3D
+					if sentry_sprite == null or sentry_sprite.texture == null:
+						_fail("broken sentry still uses a placeholder instead of sprite art")
+						return
 			"rescue":
 				rescue_count += 1
 				var cowering_resident := point.get_node_or_null("CoweringResident") as Sprite3D

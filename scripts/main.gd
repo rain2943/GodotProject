@@ -1,5 +1,6 @@
 extends Node3D
 
+const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const MOVE_SPEED := 5.2
 const BASE_CAMERA_SIZE := 28.0
 const CAMERA_DIAGONAL_OFFSET := 13.5
@@ -43,12 +44,13 @@ const ROLL_START_SPEED := 36.0
 const ROLL_END_SPEED := 4.4
 const ROLL_AFTERIMAGE_INTERVAL := 0.055
 const WEAPON_FRAME_SIZE := Vector2(192, 192)
-const WEAPON_VISUAL_PIXEL_SIZE := 0.0094
+const WEAPON_VISUAL_PIXEL_SIZE := 0.0018
 const WEAPON_FLOAT_DISTANCE := 0.72
 const WEAPON_MUZZLE_FORWARD_DISTANCE := 0.64
 const AK_DROP_TEXTURE := preload("res://assets/weapons/ak47_drop.png")
 const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
+const CHURU_TEXTURE := preload("res://assets/items/churu_rare.png")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/baseball_bat_temp.png")
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
@@ -56,6 +58,7 @@ const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const PERCEPTION_SYSTEM_SCRIPT := preload("res://scripts/perception_system.gd")
 const OVERLAY_DEPTH_SORT := preload("res://scripts/overlay_depth_sort.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
+const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const AIM_RETICLE_SCRIPT := preload("res://scripts/aim_reticle.gd")
 const ROLL_COOLDOWN_INDICATOR_SCRIPT := preload("res://scripts/roll_cooldown_indicator.gd")
 const TACTICAL_MAP_SCRIPT := preload("res://scripts/tactical_map.gd")
@@ -63,6 +66,7 @@ const RESCUED_CAT_FOLLOWER_SCRIPT := preload("res://scripts/rescued_cat_follower
 const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
 const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
 const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
+const BROKEN_SENTRY_TEXTURE := preload("res://assets/props/broken_sentry_salvage.png")
 const START_WITH_COMPANION := false
 const AK_PICKUP_POSITION := Vector3(1.15, 0.32, 0.7)
 const PICKUP_DISTANCE := 1.75
@@ -264,10 +268,12 @@ var raid_start_snapshot := {}
 var game_over_canvas: CanvasLayer
 var game_over_fade: ColorRect
 var game_over_label: Label
+var raid_zone_data: Dictionary = {}
 
 
 func _ready() -> void:
 	run_started_msec = Time.get_ticks_msec()
+	raid_zone_data = GameState.get_raid_zone()
 	world_time_hours = GameState.world_time_hours
 	night_intensity = _get_night_intensity(world_time_hours)
 	spawn_random.seed = GameState.map_seed + 9137
@@ -432,6 +438,7 @@ func _physics_process(delta: float) -> void:
 	if not roll_active and aim_is_locked and locked_aim_direction.length_squared() > 0.01:
 		_set_facing_from_world_direction(locked_aim_direction)
 	_update_weapon_pose()
+	player.set_meta("tactical_heading", _get_current_facing_world_direction())
 
 	player.move_and_slide()
 	var map_limit := ($World as ProceduralCityMap).get_map_limit()
@@ -453,7 +460,17 @@ func _physics_process(delta: float) -> void:
 		if perception_system.has_method("set_aim_expanded"):
 			perception_system.call("set_aim_expanded", laser_aim_held)
 	$CameraRig/Rain.position.y = 8.0
-	location_label.text = "종로 생존구역  ·  %02d / %02d" % [roundi(player.position.x + 32), roundi(player.position.z + 32)]
+	var city_world := $World as ProceduralCityMap
+	var sector_label := city_world.get_sector_label(player.global_position)
+	var nearest_exit_distance := INF
+	for extraction_site in extraction_sites:
+		if is_instance_valid(extraction_site):
+			nearest_exit_distance = minf(nearest_exit_distance, player.global_position.distance_to(extraction_site.global_position))
+	location_label.text = "%s  ·  %s  ·  탈출 %.0fm" % [
+		str(raid_zone_data.get("name", "종로 외곽")),
+		sector_label,
+		nearest_exit_distance if nearest_exit_distance < INF else 0.0,
+	]
 
 
 func _update_facing(screen_direction: Vector2) -> void:
@@ -664,7 +681,7 @@ func _create_cat_frames() -> SpriteFrames:
 
 func _setup_weapon_layer() -> void:
 	weapon_sprite = AnimatedSprite3D.new()
-	weapon_sprite.name = "EquippedAK47"
+	weapon_sprite.name = "EquippedWeapon"
 	weapon_sprite.position = Vector3(0, 0.32, 0)
 	weapon_sprite.pixel_size = WEAPON_VISUAL_PIXEL_SIZE
 	weapon_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -675,6 +692,16 @@ func _setup_weapon_layer() -> void:
 	weapon_sprite.visible = false
 	player.add_child(weapon_sprite)
 
+	_rebuild_player_weapon_frames()
+	weapon_sprite.animation_finished.connect(_on_weapon_animation_finished)
+
+
+func _rebuild_player_weapon_frames() -> void:
+	var catalog_texture := WEAPON_VISUAL_CATALOG.get_weapon_texture(equipped_weapon_id)
+	weapon_sprite.pixel_size = WEAPON_VISUAL_CATALOG.get_world_pixel_size(
+		equipped_weapon_id,
+		WEAPON_VISUAL_PIXEL_SIZE
+	)
 	var frames := SpriteFrames.new()
 	frames.remove_animation("default")
 	for direction_index in SCREEN_DIRECTION_NAMES.size():
@@ -683,14 +710,25 @@ func _setup_weapon_layer() -> void:
 		var fire_name := "fire_%s" % direction_name
 		frames.add_animation(idle_name)
 		frames.set_animation_loop(idle_name, true)
-		frames.add_frame(idle_name, _weapon_atlas_frame(direction_index, 0))
+		frames.add_frame(
+			idle_name,
+			catalog_texture if catalog_texture != null else _weapon_atlas_frame(direction_index, 0)
+		)
 		frames.add_animation(fire_name)
 		frames.set_animation_loop(fire_name, false)
 		frames.set_animation_speed(fire_name, 18.0)
-		frames.add_frame(fire_name, _weapon_atlas_frame(direction_index, 1), 1.0)
-		frames.add_frame(fire_name, _weapon_atlas_frame(direction_index, 0), 1.0)
+		frames.add_frame(
+			fire_name,
+			catalog_texture if catalog_texture != null else _weapon_atlas_frame(direction_index, 1),
+			1.0
+		)
+		frames.add_frame(
+			fire_name,
+			catalog_texture if catalog_texture != null else _weapon_atlas_frame(direction_index, 0),
+			1.0
+		)
 	weapon_sprite.sprite_frames = frames
-	weapon_sprite.animation_finished.connect(_on_weapon_animation_finished)
+	_play_weapon_directional_animation("idle")
 
 
 func _weapon_atlas_frame(direction_index: int, row: int) -> AtlasTexture:
@@ -868,7 +906,12 @@ func _create_melee_arc_texture() -> ImageTexture:
 
 
 func _refresh_weapon_stats() -> void:
-	weapon_stats = WEAPON_SYSTEM.build_stats(equipped_weapon_id, equipped_weapon_mods)
+	weapon_stats = WEAPON_SYSTEM.build_stats(
+		equipped_weapon_id,
+		equipped_weapon_mods,
+		GameState.get_weapon_enhancement_level(equipped_weapon_id),
+		GameState.mod_enhancement_levels
+	)
 	var magazine_id: String = GameState.equipped_magazine_id
 	if not WEAPON_SYSTEM.is_magazine_compatible(equipped_weapon_id, magazine_id):
 		magazine_id = str(weapon_stats.get("magazine_id", ""))
@@ -1268,6 +1311,7 @@ func _capture_raid_start_snapshot() -> void:
 		"reserve_ammo": GameState.reserve_ammo,
 		"ammo_inventory": GameState.ammo_inventory.duplicate(true),
 		"canned_food": GameState.canned_food,
+		"churu": GameState.churu,
 		"mod_component_inventory": GameState.mod_component_inventory.duplicate(true),
 		"weapon_inventory": GameState.weapon_inventory.duplicate(true),
 		"weapon_durability": GameState.weapon_durability,
@@ -1284,6 +1328,7 @@ func _restore_raid_start_snapshot_after_death() -> void:
 	GameState.reserve_ammo = int(raid_start_snapshot.get("reserve_ammo", 90))
 	GameState.ammo_inventory = (raid_start_snapshot.get("ammo_inventory", {}) as Dictionary).duplicate(true)
 	GameState.canned_food = int(raid_start_snapshot.get("canned_food", GameState.canned_food))
+	GameState.churu = int(raid_start_snapshot.get("churu", GameState.churu))
 	GameState.mod_component_inventory = (raid_start_snapshot.get("mod_component_inventory", {}) as Dictionary).duplicate(true)
 	GameState.weapon_inventory = (raid_start_snapshot.get("weapon_inventory", {}) as Dictionary).duplicate(true)
 	GameState.weapon_durability = float(raid_start_snapshot.get("weapon_durability", 100.0))
@@ -1332,6 +1377,7 @@ func _begin_player_death_sequence() -> void:
 	tween.tween_callback(func() -> void:
 		Engine.time_scale = 1.0
 		_restore_raid_start_snapshot_after_death()
+		GameState.register_shelter_return()
 		get_tree().change_scene_to_file("res://scenes/shelter_interior.tscn")
 	)
 
@@ -1344,8 +1390,8 @@ func _spawn_ak_pickup() -> void:
 
 	var sprite := Sprite3D.new()
 	sprite.name = "DropSprite"
-	sprite.texture = AK_DROP_TEXTURE
-	sprite.pixel_size = 0.0034
+	sprite.texture = WEAPON_VISUAL_CATALOG.get_weapon_texture("ak47")
+	sprite.pixel_size = WEAPON_VISUAL_CATALOG.get_world_pixel_size("ak47", 0.0034)
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.shaded = false
 	sprite.transparent = true
@@ -1446,6 +1492,10 @@ func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dicti
 			sprite.texture = _get_canned_food_texture()
 			sprite.pixel_size = 0.0062
 			highlight_color = Color("#83c99a")
+		"churu":
+			sprite.texture = CHURU_TEXTURE
+			sprite.pixel_size = 0.0011
+			highlight_color = Color("#f2bd55")
 		"mod_component":
 			var component_id := str(data.get("component_id", "rubber_gasket"))
 			sprite.texture = _get_mod_component_texture(component_id)
@@ -1483,10 +1533,11 @@ func _get_canned_food_texture() -> ImageTexture:
 
 
 func _get_loot_weapon_texture(weapon_id: String) -> Texture2D:
-	if weapon_id == "ak47":
-		return AK_DROP_TEXTURE
 	if weapon_id == "baseball_bat":
 		return BASEBALL_BAT_TEXTURE
+	var catalog_texture := WEAPON_VISUAL_CATALOG.get_weapon_texture(weapon_id)
+	if catalog_texture != null:
+		return catalog_texture
 	if weapon_loot_texture_cache.has(weapon_id):
 		return weapon_loot_texture_cache[weapon_id]
 	var image := Image.create(128, 64, false, Image.FORMAT_RGBA8)
@@ -1558,6 +1609,9 @@ func _collect_nearby_ammo() -> void:
 		"canned_food":
 			GameState.canned_food += amount
 			ammo_notice.text = "통조림 +%d   보유 %d" % [amount, GameState.canned_food]
+		"churu":
+			GameState.churu += amount
+			ammo_notice.text = "희귀 츄르 +%d   보유 %d" % [amount, GameState.churu]
 		"mod_component":
 			var component_id := str(nearby_ammo_pickup.get_meta("component_id", "rubber_gasket"))
 			GameState.add_mod_component(component_id, amount)
@@ -1875,11 +1929,11 @@ func _build_weapon_hud() -> void:
 	inventory_ui = INVENTORY_UI_SCRIPT.new()
 	inventory_ui.name = "InventoryUI"
 	$HUD.add_child(inventory_ui)
-	inventory_ui.call("setup", font, AK_DROP_TEXTURE, AMMO_762_TEXTURE, {
+	inventory_ui.call("setup", font, WEAPON_VISUAL_CATALOG.get_weapon_texture(equipped_weapon_id), AMMO_762_TEXTURE, {
 		"rubber_gasket": RUBBER_GASKET_TEXTURE,
 		"scope_lens": SCOPE_LENS_TEXTURE,
 		"magazine_spring": MAGAZINE_SPRING_TEXTURE,
-	})
+	}, WEAPON_VISUAL_CATALOG.get_inventory_textures())
 	inventory_ui.connect("open_state_changed", _on_inventory_open_state_changed)
 	inventory_ui.connect("weapon_mods_changed", _on_inventory_weapon_mods_changed)
 	_update_equipment_ui()
@@ -2031,7 +2085,7 @@ func _spawn_weapon_projectile(direction: Vector3, pellet_index: int) -> void:
 	var ammo_definition: Dictionary = WEAPON_SYSTEM.get_ammo(GameState.equipped_ammo_id)
 	var damage_multiplier := float(ammo_definition.get("damage_multiplier", 1.0))
 	var projectile_damage := roundi(
-		(int(weapon_stats.get("damage", 24)) + (GameState.weapon_level - 1) * 6) * damage_multiplier
+		float(weapon_stats.get("damage", 24)) * damage_multiplier
 	)
 	var penetration := maxi(
 		int(weapon_stats.get("penetration_count", 0)),
@@ -2098,10 +2152,18 @@ func _update_weapon_pose() -> void:
 	weapon_sprite.visible = has_ak and building_canvas == null
 	if not has_ak:
 		return
-	# The west atlas columns have the muzzle and stock reversed. Mirror the verified
-	# east-side art so all west-facing poses preserve the same weapon construction.
-	weapon_sprite.flip_h = facing in ["w", "sw", "nw"]
-	weapon_sprite.rotation = Vector3.ZERO
+	if WEAPON_VISUAL_CATALOG.has_weapon_texture(equipped_weapon_id):
+		var screen_direction: Vector2 = DIRECTION_VECTORS[facing]
+		weapon_sprite.flip_h = screen_direction.x < -0.01
+		var source_angle := PI if weapon_sprite.flip_h else 0.0
+		weapon_sprite.rotation = Vector3(
+			0,
+			0,
+			wrapf(screen_direction.angle() - source_angle, -PI, PI)
+		)
+	else:
+		weapon_sprite.flip_h = facing in ["w", "sw", "nw"]
+		weapon_sprite.rotation = Vector3.ZERO
 	weapon_sprite.render_priority = 0 if _weapon_renders_behind_player() else 2
 	var direction := _get_current_facing_world_direction()
 	weapon_sprite.position = direction * WEAPON_FLOAT_DISTANCE + Vector3(0, 0.36, 0)
@@ -2214,11 +2276,12 @@ func _update_equipment_ui() -> void:
 	var magazine_size := int(weapon_stats.get("magazine_size", 30))
 	var mod_names: Array[String] = WEAPON_SYSTEM.get_mod_names(equipped_weapon_mods)
 	var ammo_name := str(WEAPON_SYSTEM.get_ammo(GameState.equipped_ammo_id).get("display_name", GameState.equipped_ammo_id))
+	var enhancement_level := GameState.get_weapon_enhancement_level(equipped_weapon_id)
 	mod_names.push_front(ammo_name)
 	var mod_text := ", ".join(mod_names) if not mod_names.is_empty() else "개조 없음"
 	if equipment_label:
-		equipment_label.text = "%s\n탄창 %02d / %02d · 예비 %03d\n내구도 %05.1f%% · 탄퍼짐 %.1f°\n%s%s" % [
-			weapon_name,
+		equipment_label.text = "%s  +%d\n탄창 %02d / %02d · 예비 %03d\n내구도 %05.1f%% · 탄퍼짐 %.1f°\n%s%s" % [
+			weapon_name, enhancement_level,
 			magazine_ammo,
 			magazine_size,
 			reserve_ammo,
@@ -2231,6 +2294,10 @@ func _update_equipment_ui() -> void:
 	if slot_label:
 		slot_label.text = "%s\n%d | %d" % [str(weapon_stats.get("category", "소총")), magazine_ammo, reserve_ammo] if has_ak else "빈 손\n-"
 	if inventory_ui:
+		inventory_ui.call(
+			"set_weapon_texture",
+			WEAPON_VISUAL_CATALOG.get_weapon_texture(equipped_weapon_id)
+		)
 		inventory_ui.call(
 			"update_state",
 			has_ak,
@@ -2552,10 +2619,45 @@ func _play_gunshot() -> void:
 
 func _spawn_enemies() -> void:
 	var world := $World as ProceduralCityMap
-	for index in BASE_ENEMY_COUNT:
+	var enemy_multiplier := float(raid_zone_data.get("enemy_multiplier", 1.0))
+	var total_enemies := maxi(BASE_ENEMY_COUNT, roundi(float(BASE_ENEMY_COUNT) * enemy_multiplier))
+	var zone_threat := float(raid_zone_data.get("threat", 0.0))
+	for index in total_enemies:
 		var kind := "melee" if index < 2 else "pistol"
-		var spawn_position := _find_distributed_enemy_position(world, index, BASE_ENEMY_COUNT)
-		_spawn_enemy(kind, spawn_position, night_intensity)
+		var spawn_position := _find_distributed_enemy_position(world, index, total_enemies)
+		_spawn_enemy(kind, spawn_position, maxf(night_intensity, zone_threat))
+	if bool(raid_zone_data.get("boss", false)):
+		_spawn_zone_boss(world, total_enemies, zone_threat)
+
+
+func _spawn_zone_boss(world: ProceduralCityMap, spawn_index: int, zone_threat: float) -> void:
+	var boss_position := _find_distributed_enemy_position(world, spawn_index, spawn_index + 1)
+	var boss := _spawn_enemy("pistol", boss_position, maxf(0.5, zone_threat))
+	boss.name = "RaidBoss_%s" % GameState.selected_raid_zone
+	boss.set_meta("raid_boss", true)
+	boss.set_meta("zone_id", GameState.selected_raid_zone)
+	var boss_health := roundi(220.0 + zone_threat * 260.0)
+	boss.set("health", boss_health)
+	boss.set("max_health", boss_health)
+	boss.set("health_ratio", 1.0)
+	boss.set("damage_trail_ratio", 1.0)
+	boss.set("threat_level", 1.0)
+	boss.set("alerted", true)
+	boss.set("pursuit_time", 45.0)
+	var marker := Label3D.new()
+	marker.name = "BossMarker"
+	marker.text = "정예"
+	marker.position = Vector3(0.0, 2.68, 0.0)
+	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	marker.no_depth_test = true
+	marker.render_priority = 127
+	marker.font = FONT
+	marker.font_size = 42
+	marker.pixel_size = 0.005
+	marker.modulate = Color("#f1c45d")
+	marker.outline_modulate = Color(0.08, 0.02, 0.01, 0.95)
+	marker.outline_size = 10
+	boss.add_child(marker)
 
 
 func _find_distributed_enemy_position(
@@ -2630,14 +2732,34 @@ func _on_enemy_damaged(_enemy: CharacterBody3D, amount: int) -> void:
 func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 	var drop_position := enemy.global_position
 	var enemy_weapon_id := str(enemy.get("weapon_id"))
+	if bool(enemy.get_meta("raid_boss", false)):
+		var guaranteed_churu := maxi(1, int(raid_zone_data.get("required_tier", 2)) - 1)
+		var boss_drop := _create_loot_pickup(
+			"churu",
+			drop_position,
+			{"amount": guaranteed_churu, "display_name": "정예 보상 츄르"}
+		)
+		_create_loot_pickup(
+			"weapon",
+			drop_position + Vector3(1.0, 0.0, 0.7),
+			{"amount": 1, "weapon_id": enemy_weapon_id, "display_name": _get_loot_weapon_name(enemy_weapon_id)}
+		)
+		return boss_drop
 	var roll := spawn_random.randf()
-	if roll < 0.5:
+	var churu_chance := 0.01 + night_intensity * 0.015 + float(raid_zone_data.get("threat", 0.0)) * 0.018
+	if roll < churu_chance:
+		return _create_loot_pickup(
+			"churu",
+			drop_position,
+			{"amount": 1, "display_name": "희귀 츄르"}
+		)
+	if roll < 0.5 + churu_chance:
 		return _create_loot_pickup(
 			"ammo",
 			drop_position,
 			_get_enemy_ammo_drop(enemy_weapon_id)
 		)
-	if roll < 0.85:
+	if roll < 0.85 + churu_chance:
 		return _create_loot_pickup(
 			"canned_food",
 			drop_position,
@@ -3640,37 +3762,18 @@ func _build_electronics_prop(point: Node3D) -> void:
 
 
 func _build_sentry_prop(point: Node3D) -> void:
-	var metal := StandardMaterial3D.new()
-	metal.albedo_color = Color("#454d4c")
-	metal.metallic = 0.82
-	metal.roughness = 0.68
-	var base_mesh := CylinderMesh.new()
-	base_mesh.top_radius = 0.62
-	base_mesh.bottom_radius = 0.78
-	base_mesh.height = 0.28
-	base_mesh.radial_segments = 10
-	base_mesh.material = metal
-	var base := MeshInstance3D.new()
-	base.name = "BrokenSentry"
-	base.position.y = 0.14
-	base.mesh = base_mesh
-	point.add_child(base)
-	var mount_mesh := BoxMesh.new()
-	mount_mesh.size = Vector3(0.42, 0.78, 0.42)
-	mount_mesh.material = metal
-	var mount := MeshInstance3D.new()
-	mount.position = Vector3(0, 0.64, 0)
-	mount.rotation.z = deg_to_rad(13.0)
-	mount.mesh = mount_mesh
-	point.add_child(mount)
-	var barrel_mesh := BoxMesh.new()
-	barrel_mesh.size = Vector3(1.35, 0.18, 0.22)
-	barrel_mesh.material = metal
-	var barrel := MeshInstance3D.new()
-	barrel.position = Vector3(0.38, 1.02, 0)
-	barrel.rotation = Vector3(0, deg_to_rad(18.0), deg_to_rad(-11.0))
-	barrel.mesh = barrel_mesh
-	point.add_child(barrel)
+	var sprite := Sprite3D.new()
+	sprite.name = "BrokenSentry"
+	sprite.texture = BROKEN_SENTRY_TEXTURE
+	sprite.position = Vector3(0, 0.7, 0)
+	sprite.pixel_size = 0.00215
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.shaded = false
+	sprite.transparent = true
+	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	sprite.render_priority = 8
+	point.add_child(sprite)
 
 
 func _build_rescue_locker(point: Node3D) -> void:
@@ -3818,8 +3921,14 @@ func _update_field_interactions(delta: float) -> void:
 func _complete_field_interaction(point: Node3D) -> void:
 	if not is_instance_valid(point) or bool(point.get_meta("completed", false)):
 		return
-	point.set_meta("completed", true)
 	var interaction_type := str(point.get_meta("interaction_type", ""))
+	if interaction_type == "rescue":
+		var occupied_after_escort: int = GameState.rescued_workers + rescued_followers.size()
+		if occupied_after_escort >= GameState.get_resident_capacity():
+			_show_field_notice("쉘터 수용량 부족 · 침대를 확장해야 구조할 수 있습니다")
+			field_interaction_hold_time = 0.0
+			return
+	point.set_meta("completed", true)
 	match interaction_type:
 		"salvage":
 			_add_fatigue(FATIGUE_SALVAGE_GAIN)
@@ -3916,9 +4025,9 @@ func _commit_rescued_followers() -> int:
 	var rescued_count := rescued_followers.size()
 	if rescued_count <= 0:
 		return 0
-	GameState.rescued_workers += rescued_count
+	var accepted: int = GameState.try_add_rescued_workers(rescued_count)
 	rescued_followers.clear()
-	return rescued_count
+	return accepted
 
 
 func _begin_extraction() -> void:
@@ -3939,6 +4048,7 @@ func _begin_extraction() -> void:
 	tween.tween_interval(0.9)
 	tween.tween_callback(func() -> void:
 		GameState.returning_from_shelter = false
+		GameState.register_shelter_return()
 		get_tree().change_scene_to_file("res://scenes/shelter_interior.tscn")
 	)
 
@@ -3979,6 +4089,7 @@ func _save_run_state() -> void:
 	GameState.weapon_durability = weapon_durability
 	GameState.equipped_weapon_mods.assign(equipped_weapon_mods)
 	GameState.fatigue = fatigue
+	GameState.save_persistent_state()
 
 
 func _input(event: InputEvent) -> void:

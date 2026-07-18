@@ -10,6 +10,8 @@ const SCRIPTS := [
 	"res://scripts/mod_slot_drop_panel.gd",
 	"res://scripts/shelter_workbench_module.gd",
 	"res://scripts/scratcher_bank_module.gd",
+	"res://scripts/catnip_scraper_module.gd",
+	"res://scripts/shelter_resident_cat.gd",
 	"res://scripts/shelter_interior.gd",
 	"res://scripts/tactical_map.gd",
 ]

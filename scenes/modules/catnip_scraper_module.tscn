@@ -1,0 +1,28 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/catnip_scraper_module.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/interiors/modules/catnip_scraper_wall_aligned_v1.png" id="2_texture"]
+
+[sub_resource type="BoxShape3D" id="BoxShape_scraper"]
+size = Vector3(5.35, 1.25, 1.42)
+
+[node name="CatnipScraperModule" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="ScraperBody" type="StaticBody3D" parent="."]
+collision_layer = 1
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ScraperBody"]
+position = Vector3(0, 0.5, 0.58)
+shape = SubResource("BoxShape_scraper")
+
+[node name="ScraperSprite" type="Sprite3D" parent="."]
+position = Vector3(0, 1.1, 0.03)
+texture = ExtResource("2_texture")
+pixel_size = 0.00335
+billboard = 1
+shaded = false
+transparent = true
+no_depth_test = true
+render_priority = 22

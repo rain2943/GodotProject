@@ -209,7 +209,12 @@ static func get_mod(mod_id: String) -> Dictionary:
 	return definition.duplicate(true)
 
 
-static func build_stats(weapon_id: String, mod_ids: Array[String]) -> Dictionary:
+static func build_stats(
+	weapon_id: String,
+	mod_ids: Array[String],
+	enhancement_level: int = 0,
+	mod_enhancement_levels: Dictionary = {}
+) -> Dictionary:
 	var stats := get_weapon(weapon_id)
 	stats["weapon_id"] = weapon_id
 	stats["movement_sound_multiplier"] = 1.0
@@ -230,15 +235,26 @@ static func build_stats(weapon_id: String, mod_ids: Array[String]) -> Dictionary
 		if occupied_slots.has(slot):
 			continue
 		occupied_slots[slot] = mod_id
+		var mod_level := clampi(int(mod_enhancement_levels.get(mod_id, 0)), 0, 99)
+		var mod_power := 1.0 + float(mod_level) * 0.012
 		var multipliers: Dictionary = mod_definition.get("multipliers", {})
 		for stat_name in multipliers:
-			stats[stat_name] = float(stats.get(stat_name, 1.0)) * float(multipliers[stat_name])
+			var base_multiplier := float(multipliers[stat_name])
+			var enhanced_multiplier := maxf(0.1, 1.0 + (base_multiplier - 1.0) * mod_power)
+			stats[stat_name] = float(stats.get(stat_name, 1.0)) * enhanced_multiplier
 		var additives: Dictionary = mod_definition.get("additives", {})
 		for stat_name in additives:
-			stats[stat_name] = float(stats.get(stat_name, 0.0)) + float(additives[stat_name])
+			stats[stat_name] = float(stats.get(stat_name, 0.0)) + float(additives[stat_name]) * mod_power
 		var overrides: Dictionary = mod_definition.get("overrides", {})
 		for stat_name in overrides:
 			stats[stat_name] = overrides[stat_name]
+	var level := clampi(enhancement_level, 0, 99)
+	if level > 0:
+		stats["damage"] = float(stats.get("damage", 1.0)) * (1.0 + float(level) * 0.035)
+		stats["base_spread_deg"] = float(stats.get("base_spread_deg", 2.0)) * maxf(0.72, 1.0 - float(level) * 0.003)
+		stats["recoil"] = float(stats.get("recoil", 1.0)) * maxf(0.76, 1.0 - float(level) * 0.0025)
+		stats["durability_loss"] = float(stats.get("durability_loss", 1.0)) * maxf(0.55, 1.0 - float(level) * 0.0045)
+	stats["enhancement_level"] = level
 	return stats
 
 

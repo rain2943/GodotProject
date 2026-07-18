@@ -30,7 +30,6 @@ func _run() -> void:
 	main_scene.set("nearby_ammo_pickup", food_pickup)
 	main_scene.call("_collect_nearby_ammo")
 	assert(int(game_state.get("canned_food")) == food_before + 2)
-	assert((main_scene.get("inventory_ui") as Control).get("food_slot_label").text == "x2")
 
 	var mp5_before := int(game_state.call("get_weapon_count", "mp5"))
 	var weapon_pickup: Node3D = main_scene.call(
@@ -42,14 +41,23 @@ func _run() -> void:
 	main_scene.set("nearby_ammo_pickup", weapon_pickup)
 	main_scene.call("_collect_nearby_ammo")
 	assert(int(game_state.call("get_weapon_count", "mp5")) == mp5_before + 1)
-	assert((main_scene.get("inventory_ui") as Control).get("weapon_slot_label").text == "x1")
+	var churu_before := int(game_state.get("churu"))
+	var churu_pickup: Node3D = main_scene.call(
+		"_create_loot_pickup",
+		"churu",
+		player.global_position,
+		{"amount": 1, "display_name": "희귀 츄르"}
+	)
+	main_scene.set("nearby_ammo_pickup", churu_pickup)
+	main_scene.call("_collect_nearby_ammo")
+	assert(int(game_state.get("churu")) == churu_before + 1)
 
 	var enemies := main_scene.get("enemies") as Array
 	var pickup_count_before := (main_scene.get("ammo_pickups") as Array).size()
 	var random_drop: Node3D = main_scene.call("_spawn_enemy_loot", enemies[0])
 	assert(is_instance_valid(random_drop))
 	assert((main_scene.get("ammo_pickups") as Array).size() == pickup_count_before + 1)
-	assert(["ammo", "canned_food", "weapon"].has(str(random_drop.get_meta("loot_type"))))
+	assert(["ammo", "canned_food", "churu", "weapon"].has(str(random_drop.get_meta("loot_type"))))
 
 	print("LOOT_DROP_OK start_weapon=ak47 food=%d mp5=%d random=%s" % [
 		game_state.get("canned_food"),

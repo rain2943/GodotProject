@@ -1227,6 +1227,7 @@ func get_extraction_position() -> Vector3:
 
 func get_map_snapshot_data() -> Dictionary:
 	return {
+		"map_seed": map_seed,
 		"grid_size": GRID_SIZE,
 		"map_size": MAP_SIZE,
 		"cell_size": CELL_SIZE,
@@ -1240,6 +1241,14 @@ func get_map_snapshot_data() -> Dictionary:
 
 func world_to_map_cell(world_position: Vector3) -> Vector2i:
 	return _world_to_cell(world_position)
+
+
+func get_sector_label(world_position: Vector3) -> String:
+	var cell := _world_to_cell(world_position)
+	cell.x = clampi(cell.x, 0, GRID_SIZE - 1)
+	cell.y = clampi(cell.y, 0, GRID_SIZE - 1)
+	const COLUMN_NAMES := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	return "%s-%02d" % [COLUMN_NAMES.substr(cell.x, 1), cell.y + 1]
 
 
 func is_position_in_safe_zone(world_position: Vector3) -> bool:

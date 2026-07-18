@@ -6,6 +6,7 @@ signal damaged(enemy: CharacterBody3D, amount: int)
 
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
+const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/baseball_bat_temp.png")
 const DAMAGE_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const DAMAGE_NUMBER_SCRIPT := preload("res://scripts/damage_number.gd")
@@ -837,7 +838,11 @@ func _setup_weapon_visual() -> void:
 	weapon_visual = Sprite3D.new()
 	weapon_visual.name = "EquippedWeapon_%s" % weapon_id
 	weapon_visual.texture = _get_weapon_visual_texture()
-	weapon_visual.pixel_size = 0.00072 if weapon_id == "baseball_bat" else 0.0042
+	weapon_visual.pixel_size = (
+		0.00072
+		if weapon_id == "baseball_bat"
+		else WEAPON_VISUAL_CATALOG.get_world_pixel_size(weapon_id, 0.0042)
+	)
 	weapon_visual.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	weapon_visual.shaded = false
 	weapon_visual.transparent = true
@@ -850,6 +855,9 @@ func _setup_weapon_visual() -> void:
 func _get_weapon_visual_texture() -> Texture2D:
 	if weapon_id == "baseball_bat":
 		return BASEBALL_BAT_TEXTURE
+	var catalog_texture := WEAPON_VISUAL_CATALOG.get_weapon_texture(weapon_id)
+	if catalog_texture != null:
+		return catalog_texture
 	if weapon_texture_cache.has(weapon_id):
 		return weapon_texture_cache[weapon_id]
 	var image := Image.create(160, 80, false, Image.FORMAT_RGBA8)
@@ -899,7 +907,9 @@ func _update_weapon_visual() -> void:
 	var direction := facing_world_direction.normalized()
 	weapon_visual.position = direction * (0.34 if weapon_id == "baseball_bat" else 0.44) + Vector3(0, 0.48, 0)
 	var screen_direction := Vector2(direction.x - direction.z, direction.x + direction.z).normalized()
-	weapon_visual.rotation.z = atan2(screen_direction.y, screen_direction.x)
+	weapon_visual.flip_h = weapon_id != "baseball_bat" and screen_direction.x < -0.01
+	var source_angle := PI if weapon_visual.flip_h else 0.0
+	weapon_visual.rotation.z = wrapf(screen_direction.angle() - source_angle, -PI, PI)
 	weapon_visual.scale = Vector3.ONE * (0.62 if weapon_id == "baseball_bat" else 1.0)
 	weapon_visual.visible = not dying
 
