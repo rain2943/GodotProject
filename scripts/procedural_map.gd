@@ -17,7 +17,7 @@ const TARGET_PLAYGROUND_COUNT := 2
 const TARGET_SUBWAY_COUNT := 2
 const APARTMENT_HIGH_RISE_BUFFER_CELLS := 2
 const FAR_DEPTH_OPEN_CELL := Vector2i(GRID_SIZE - 1, GRID_SIZE - 1)
-const ROAD_SETBACK_MODULES := 2
+const ROAD_SETBACK_MODULES := 4
 const INTERIOR_SETBACK_MODULES := 1
 const ROAD_VEHICLE_CHANCE := 0.34
 const ROAD_COVER_OBSTACLE_CHANCE := 0.24
@@ -26,27 +26,31 @@ const DISTRICT_MIN_SEPARATION_CELLS := 6
 const ROAD_COVER_DEFINITIONS := {
 	"concrete_barricade_axis_a": {
 		"texture_path": "res://assets/props/road_cover/concrete_barricade_axis_a_v1.png",
-		"collision_size": Vector3(4.8, 1.35, 0.95),
-		"pixel_size": 0.0048,
-		"sprite_height": 1.45,
+		"collision_size": Vector3(3.65, 1.2, 0.82),
+		"pixel_size": 0.00375,
+		"sprite_height": 1.22,
+		"sprite_offset": Vector2(-20.5, -3.0),
 	},
 	"concrete_barricade_axis_b": {
 		"texture_path": "res://assets/props/road_cover/concrete_barricade_axis_b_v1.png",
-		"collision_size": Vector3(0.95, 1.35, 4.8),
-		"pixel_size": 0.0048,
-		"sprite_height": 1.45,
+		"collision_size": Vector3(0.82, 1.2, 3.65),
+		"pixel_size": 0.00375,
+		"sprite_height": 1.22,
+		"sprite_offset": Vector2(12.5, 1.0),
 	},
 	"rubble_wall_axis_a": {
 		"texture_path": "res://assets/props/road_cover/rubble_wall_axis_a_v1.png",
-		"collision_size": Vector3(5.6, 1.65, 1.45),
-		"pixel_size": 0.0046,
-		"sprite_height": 1.75,
+		"collision_size": Vector3(4.25, 1.45, 1.12),
+		"pixel_size": 0.00355,
+		"sprite_height": 1.45,
+		"sprite_offset": Vector2(14.0, 16.0),
 	},
 	"rubble_wall_axis_b": {
 		"texture_path": "res://assets/props/road_cover/rubble_wall_axis_b_v1.png",
-		"collision_size": Vector3(1.45, 1.65, 5.6),
-		"pixel_size": 0.0046,
-		"sprite_height": 1.75,
+		"collision_size": Vector3(1.12, 1.45, 4.25),
+		"pixel_size": 0.00355,
+		"sprite_height": 1.45,
+		"sprite_offset": Vector2(2.5, 13.0),
 	},
 }
 const MARKET_HANDCART_TEXTURE_PATH := "res://assets/props/market_handcart_v1.png"
@@ -444,27 +448,29 @@ func _build_outer_city_backdrop() -> void:
 
 
 func _build_perimeter_fences() -> void:
-	if not ResourceLoader.exists(PERIMETER_FENCE_STRIP_A_PATH) or not ResourceLoader.exists(PERIMETER_FENCE_STRIP_B_PATH):
-		return
-	var strip_a := load(PERIMETER_FENCE_STRIP_A_PATH) as Texture2D
-	var strip_b := load(PERIMETER_FENCE_STRIP_B_PATH) as Texture2D
-	var corner := load(PERIMETER_FENCE_CORNER_PATH) as Texture2D if ResourceLoader.exists(PERIMETER_FENCE_CORNER_PATH) else null
-	if strip_a == null or strip_b == null:
-		return
-	var edge := MAP_SIZE * 0.5 + PERIMETER_FENCE_VISUAL_OUTSET
-	var step := MAP_SIZE / float(PERIMETER_FENCE_SEGMENTS_PER_EDGE)
-	var first := -MAP_SIZE * 0.5 + step * 0.5
-	for index in range(PERIMETER_FENCE_SEGMENTS_PER_EDGE):
-		var offset := first + step * index
-		_spawn_perimeter_fence_sprite("FenceNorth_%d" % index, strip_a, Vector3(offset, 4.8, -edge), 0.0, false, false)
-		_spawn_perimeter_fence_sprite("FenceSouth_%d" % index, strip_a, Vector3(offset, 4.8, edge), PI, true, false)
-		_spawn_perimeter_fence_sprite("FenceWest_%d" % index, strip_b, Vector3(-edge, 4.8, offset), -PI * 0.5, false, false)
-		_spawn_perimeter_fence_sprite("FenceEast_%d" % index, strip_b, Vector3(edge, 4.8, offset), PI * 0.5, true, false)
-	if corner:
-		_spawn_perimeter_fence_sprite("FenceCornerNW", corner, Vector3(-edge, 4.8, -edge), -PI * 0.25, false, false, 0.78)
-		_spawn_perimeter_fence_sprite("FenceCornerNE", corner, Vector3(edge, 4.8, -edge), PI * 0.25, true, false, 0.78)
-		_spawn_perimeter_fence_sprite("FenceCornerSW", corner, Vector3(-edge, 4.8, edge), -PI * 0.75, false, true, 0.78)
-		_spawn_perimeter_fence_sprite("FenceCornerSE", corner, Vector3(edge, 4.8, edge), PI * 0.75, true, true, 0.78)
+	var fence_root := Node3D.new()
+	fence_root.name = "OuterPerimeterFence"
+	fence_root.add_to_group("outer_perimeter_fence")
+	add_child(fence_root)
+
+	var edge := MAP_SIZE * 0.5 + 1.55
+	var length := MAP_SIZE + 3.1
+	var rail_material := bridge_rail_material if bridge_rail_material != null else curb_material
+	for rail_height in [0.62, 1.08]:
+		_add_box_to(fence_root, "FenceRailNorth_%s" % rail_height, Vector3(0.0, rail_height, -edge), Vector3(length, 0.12, 0.14), rail_material)
+		_add_box_to(fence_root, "FenceRailSouth_%s" % rail_height, Vector3(0.0, rail_height, edge), Vector3(length, 0.12, 0.14), rail_material)
+		_add_box_to(fence_root, "FenceRailWest_%s" % rail_height, Vector3(-edge, rail_height, 0.0), Vector3(0.14, 0.12, length), rail_material)
+		_add_box_to(fence_root, "FenceRailEast_%s" % rail_height, Vector3(edge, rail_height, 0.0), Vector3(0.14, 0.12, length), rail_material)
+
+	var post_step := 18.0
+	var post_count := int(ceil(length / post_step)) + 1
+	var first := -length * 0.5
+	for index in range(post_count):
+		var offset := clampf(first + index * post_step, -length * 0.5, length * 0.5)
+		_add_box_to(fence_root, "FencePostNorth_%d" % index, Vector3(offset, 0.7, -edge), Vector3(0.28, 1.4, 0.28), rail_material)
+		_add_box_to(fence_root, "FencePostSouth_%d" % index, Vector3(offset, 0.7, edge), Vector3(0.28, 1.4, 0.28), rail_material)
+		_add_box_to(fence_root, "FencePostWest_%d" % index, Vector3(-edge, 0.7, offset), Vector3(0.28, 1.4, 0.28), rail_material)
+		_add_box_to(fence_root, "FencePostEast_%d" % index, Vector3(edge, 0.7, offset), Vector3(0.28, 1.4, 0.28), rail_material)
 	_add_perimeter_collision()
 
 
@@ -767,6 +773,7 @@ func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool)
 	sprite.name = "CoverSprite"
 	sprite.texture = texture
 	sprite.pixel_size = float(definition.get("pixel_size", 0.007))
+	sprite.offset = definition.get("sprite_offset", Vector2.ZERO)
 	sprite.position = Vector3(0.0, float(definition.get("sprite_height", 2.0)), 0.0)
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.transparent = true

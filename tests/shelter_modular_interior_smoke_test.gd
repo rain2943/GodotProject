@@ -70,14 +70,14 @@ func _run() -> void:
 	var workbench := get_nodes_in_group("shelter_workbench")[0] as Node
 	var workbench_sprite := workbench.get_node("WorkbenchSprite") as Sprite3D
 	assert(workbench_sprite.texture.resource_path == WORKBENCH_TEXTURE_PATH)
-	assert(workbench_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
-	assert(not workbench_sprite.no_depth_test)
+	assert(workbench_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
+	assert(workbench_sprite.no_depth_test)
 	assert(workbench.has_method("interact"))
 	var bank := get_nodes_in_group("scratcher_bank")[0] as Node
 	var bank_sprite := bank.get_node("BankSprite") as Sprite3D
 	assert(bank_sprite.texture.resource_path == SCRATCHER_BANK_TEXTURE_PATH)
-	assert(bank_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
-	assert(not bank_sprite.no_depth_test)
+	assert(bank_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
+	assert(bank_sprite.no_depth_test)
 	assert(bank.has_method("interact"))
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)

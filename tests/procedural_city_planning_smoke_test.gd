@@ -109,8 +109,8 @@ func _run() -> void:
 			assert(not (city.get("vertical_roads").has(cover_cell.x) and city.get("horizontal_roads").has(cover_cell.y)))
 			var cover_collision := cover.get_node("CoverCollision") as CollisionShape3D
 			var cover_shape := cover_collision.shape as BoxShape3D
-			assert(maxf(cover_shape.size.x, cover_shape.size.z) <= 5.7)
-			assert(minf(cover_shape.size.x, cover_shape.size.z) <= 1.5)
+			assert(maxf(cover_shape.size.x, cover_shape.size.z) <= 4.3)
+			assert(minf(cover_shape.size.x, cover_shape.size.z) <= 1.2)
 			assert(cover.get_node("CoverSprite") is Sprite3D)
 			var debug_mesh := cover.get_node("CoverCollisionDebug") as MeshInstance3D
 			var debug_plane := debug_mesh.mesh as PlaneMesh

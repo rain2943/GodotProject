@@ -28,16 +28,14 @@ func _run() -> void:
 	var skylines := get_nodes_in_group("distant_city_backdrop")
 	assert(skylines.is_empty())
 	var fences := get_nodes_in_group("outer_perimeter_fence")
-	assert(fences.size() == 20)
-	for fence in fences:
-		var fence_sprite := fence as Sprite3D
-		assert(fence_sprite != null)
-		assert(not fence_sprite.no_depth_test)
-		assert(fence_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
-		assert(
-			absf(fence_sprite.global_position.x) >= 228.0
-			or absf(fence_sprite.global_position.z) >= 228.0
-		)
+	assert(fences.size() == 1)
+	var fence_root := fences[0] as Node3D
+	assert(fence_root != null)
+	assert(fence_root.get_child_count() >= 48)
+	assert(fence_root.get_node("FenceRailNorth_0.62") is MeshInstance3D)
+	assert(fence_root.get_node("FenceRailSouth_1.08") is MeshInstance3D)
+	assert(fence_root.get_node("FenceRailWest_0.62") is MeshInstance3D)
+	assert(fence_root.get_node("FenceRailEast_1.08") is MeshInstance3D)
 	for child in city.get_children():
 		assert(not str(child.name).begins_with("ApocalypseSeoulSkyline"))
 
@@ -64,5 +62,5 @@ func _run() -> void:
 	assert(camera.far >= 1200.0)
 	main_instance.free()
 
-	print("DISTANT_SEOUL_BACKDROP_OK ground=1040 skyline_afterimages=0 fences=20")
+	print("DISTANT_SEOUL_BACKDROP_OK ground=1040 skyline_afterimages=0 fence_root=1")
 	quit(0)
