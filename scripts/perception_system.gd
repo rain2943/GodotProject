@@ -4,8 +4,6 @@ extends CanvasLayer
 const MAX_OCCLUDERS := 24
 const FOV_HALF_ANGLE_DEGREES := 58.0
 const VISION_WORLD_RANGE := 11.5
-const SOUND_HEARING_RANGE := 48.0
-const SOUND_WAVE_SCRIPT := preload("res://scripts/sound_wave.gd")
 
 var player: CharacterBody3D
 var camera: Camera3D
@@ -14,10 +12,6 @@ var fog_material: ShaderMaterial
 var aim_world_direction := Vector3(1, 0, 1).normalized()
 var vision_world_range := VISION_WORLD_RANGE
 var aim_expanded := false
-var sound_timers := {}
-var sound_waves: Array[Control] = []
-var last_player_combat_sound_msec := -10000
-var enemy_gunshot_timers := {}
 
 
 func setup(player_body: CharacterBody3D, active_camera: Camera3D) -> void:
@@ -29,13 +23,6 @@ func _ready() -> void:
 	name = "PerceptionSystem"
 	layer = 2
 	add_to_group("perception_system")
-
-
-func _process(delta: float) -> void:
-	if not is_instance_valid(player) or not is_instance_valid(camera):
-		return
-	# Enemy sounds remain simulation-only. Only player gunfire gets a visible wave.
-	_update_sound_waves()
 
 
 func set_aim_direction(world_direction: Vector3) -> void:
@@ -50,59 +37,6 @@ func set_vision_range(world_range: float) -> void:
 
 func set_aim_expanded(value: bool) -> void:
 	aim_expanded = value
-
-
-func report_sound(world_position: Vector3, sound_kind: String, strength: float = 1.0) -> void:
-	if not is_instance_valid(player) or not is_instance_valid(camera):
-		return
-	if player.global_position.distance_to(world_position) > SOUND_HEARING_RANGE:
-		return
-	if _position_is_visible(world_position):
-		return
-	_spawn_sound_wave(world_position, sound_kind, strength)
-
-
-func emit_player_gunshot(world_position: Vector3, hearing_radius: float = 52.0) -> void:
-	var now := Time.get_ticks_msec()
-	# Keep one readable pulse on screen at a time while automatic fire continues.
-	if now - last_player_combat_sound_msec < 1850:
-		return
-	last_player_combat_sound_msec = now
-	_spawn_sound_wave(world_position, "player_gunshot", 1.0)
-	_propagate_sound_to_enemies(world_position, hearing_radius)
-
-
-func emit_enemy_gunshot(enemy: Node3D) -> void:
-	pass
-
-
-func _propagate_sound_to_enemies(world_position: Vector3, hearing_radius: float) -> void:
-	for node in get_tree().get_nodes_in_group("sound_source"):
-		if not (node is CharacterBody3D) or not node.has_method("hear_sound"):
-			continue
-		var enemy := node as CharacterBody3D
-		var distance := enemy.global_position.distance_to(world_position)
-		if distance > hearing_radius:
-			continue
-		var effective_radius := hearing_radius
-		var query := PhysicsRayQueryParameters3D.create(
-			world_position + Vector3(0, 0.35, 0),
-			enemy.global_position + Vector3(0, 0.35, 0),
-			1
-		)
-		if is_instance_valid(player):
-			query.exclude = [player.get_rid()]
-		if not player.get_world_3d().direct_space_state.intersect_ray(query).is_empty():
-			effective_radius *= 0.68
-		if distance > effective_radius:
-			continue
-		var loudness := clampf(1.0 - distance / maxf(effective_radius, 0.1), 0.25, 1.0)
-		var travel_delay := distance / 38.0
-		var hearing_enemy := enemy
-		get_tree().create_timer(travel_delay).timeout.connect(func() -> void:
-			if is_instance_valid(hearing_enemy):
-				hearing_enemy.call("hear_sound", world_position, loudness)
-		)
 
 
 func _build_fog() -> void:
@@ -248,26 +182,6 @@ func _find_box_collision(body: Node3D) -> CollisionShape3D:
 	return null
 
 
-func _update_sound_sources(delta: float) -> void:
-	for node in get_tree().get_nodes_in_group("sound_source"):
-		if not (node is CharacterBody3D):
-			continue
-		var source := node as CharacterBody3D
-		var source_id := source.get_instance_id()
-		var timer := float(sound_timers.get(source_id, 0.15)) - delta
-		var moving := source.velocity.length_squared() > 0.3
-		var distance := player.global_position.distance_to(source.global_position)
-		if moving and distance <= SOUND_HEARING_RANGE and not _position_is_visible(source.global_position):
-			if timer <= 0.0:
-				var kind := str(source.get("enemy_kind"))
-				var heavy := kind == "melee"
-				_spawn_sound_wave(source.global_position, "heavy_step" if heavy else "light_step", 1.0 if heavy else 0.72)
-				timer = 0.46 if heavy else 0.72
-		else:
-			timer = minf(timer, 0.18)
-		sound_timers[source_id] = timer
-
-
 func _position_is_visible(world_position: Vector3) -> bool:
 	var offset := world_position - player.global_position
 	offset.y = 0.0
@@ -281,46 +195,3 @@ func _position_is_visible(world_position: Vector3) -> bool:
 	var query := PhysicsRayQueryParameters3D.create(from, to, 1)
 	query.exclude = [player.get_rid()]
 	return player.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
-
-
-func _spawn_sound_wave(world_position: Vector3, sound_kind: String, strength: float) -> void:
-	if sound_kind != "player_gunshot":
-		return
-	_prune_sound_waves()
-	if not sound_waves.is_empty():
-		var active_wave := sound_waves[0]
-		if sound_kind != "player_gunshot" or active_wave.get_meta("sound_kind", "") == "player_gunshot":
-			return
-		for existing_wave in sound_waves:
-			if is_instance_valid(existing_wave):
-				existing_wave.queue_free()
-		sound_waves.clear()
-	var wave := SOUND_WAVE_SCRIPT.new() as Control
-	wave.call("configure", sound_kind, strength)
-	wave.set_meta("sound_world_position", world_position)
-	wave.set_meta("sound_kind", sound_kind)
-	add_child(wave)
-	sound_waves.append(wave)
-	_position_wave(wave)
-
-
-func _update_sound_waves() -> void:
-	_prune_sound_waves()
-	for wave in sound_waves:
-		_position_wave(wave)
-
-
-func _prune_sound_waves() -> void:
-	for index in range(sound_waves.size() - 1, -1, -1):
-		var wave := sound_waves[index]
-		if not is_instance_valid(wave):
-			sound_waves.remove_at(index)
-
-
-func _position_wave(wave: Control) -> void:
-	var viewport_size := get_viewport().get_visible_rect().size
-	var world_position: Vector3 = wave.get_meta("sound_world_position", player.global_position)
-	var screen_position := camera.unproject_position(world_position + Vector3(0, 0.25, 0))
-	screen_position.x = clampf(screen_position.x, 46.0, viewport_size.x - 46.0)
-	screen_position.y = clampf(screen_position.y, 46.0, viewport_size.y - 46.0)
-	wave.position = screen_position - wave.size * 0.5

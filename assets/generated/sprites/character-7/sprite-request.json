@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-request",
+  "engine": "component-row",
+  "character": {
+    "id": "character-7",
+    "description": "고양이 상인",
+    "base_image": "base-source.png"
+  },
+  "cell": {
+    "shape": "square",
+    "width": 256,
+    "height": 256,
+    "safe_margin_x": 24,
+    "safe_margin_y": 24,
+    "size": 256,
+    "safe_margin": 24
+  },
+  "chroma_key": {
+    "name": "magenta",
+    "hex": "#FF00FF",
+    "rgb": [
+      255,
+      0,
+      255
+    ],
+    "selection": "manual"
+  },
+  "states": {
+    "custom_idle": {
+      "frames": 4,
+      "fps": 8,
+      "loop": false,
+      "action": "down left 방향을 바라보며 대기중인 idle 애니메이션 프레임 생성 필요",
+      "custom_animation": {
+        "id": "4f3af5fd6c7745f8873757b1f0cfce05",
+        "name": "idle",
+        "prompt": "down left 방향을 바라보며 대기중인 idle 애니메이션 프레임 생성 필요"
+      }
+    }
+  },
+  "style": "match the supplied base character exactly: preserve its proportions, face, clothing, accessories, palette, outline weight, and rendering style; do not redesign it",
+  "motion_phase_guides": false,
+  "layout": "taxonomy/v1",
+  "chroma": {
+    "mode": "rgb",
+    "unmix_reach": 4,
+    "spill_max_fraction": 0.005
+  },
+  "studio_skeleton": {
+    "mode": "none"
+  }
+}

@@ -1,0 +1,16 @@
+Create a production-ready 2D game sprite strip from the supplied base character.
+
+Identity lock: preserve the exact character design, proportions, face, clothing, backpack, tail, palette, outline weight, and pixel-art rendering from the base reference. Do not redesign or beautify the character.
+Direction: up_right — three-quarter back view, facing the upper-right corner of the image (screen-right / viewer's right); the face, chest, hips, and feet point toward the right edge, never the left edge. The head, torso, hips, legs, and feet must all face this same direction. Keep a fixed root and ground line unless the requested action explicitly needs a lunge or displacement.
+Screen-axis lock: RIGHT means the right-hand edge of the output image from the viewer's perspective, not the character's anatomical right. Never mirror the pose to face screen-left.
+Action: 무언가 휘두르는 방향별 모션.
+Motion contract, left to right, exactly 4 panels:
+1. Frame 1: clear anticipation or starting pose for '무언가 휘두르는 방향별 모션'
+2. Frame 2: distinct in-between pose at about 33% of the action for '무언가 휘두르는 방향별 모션'
+3. Frame 3: distinct in-between pose at about 67% of the action for '무언가 휘두르는 방향별 모션'
+4. Frame 4: clear finish or recovery pose for '무언가 휘두르는 방향별 모션'
+Make the requested action unmistakable as a readable game animation. Every frame must be a distinct chronological pose with consistent handedness, limb continuity, scale, ground line, and facing. Do not duplicate poses or add unrelated locomotion.
+
+
+Output contract: one horizontal strip containing exactly 4 isolated full-body sprites, in the specified order, evenly spaced, equal scale and ground line. Use a perfectly flat solid #FF00FF background. No text, labels, arrows, borders, grid, scenery, cast shadow, extra character, or extra panel. Keep generous magenta separation between panels. Do not add motion trails, slash arcs, glow, particles, or speed lines unless the user explicitly requested them. Outside colors already locked by the identity reference, never use pink, purple, fuchsia, magenta, or any color close to #FF00FF on the character, weapon, outline, highlight, shadow, or effect; those colors are reserved exclusively for the removable background.
+Style contract: match the supplied base character exactly: preserve its proportions, face, clothing, accessories, palette, outline weight, and rendering style; do not redesign it

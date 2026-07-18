@@ -20,7 +20,8 @@ shape = SubResource("BoxShape_scraper")
 [node name="ScraperSprite" type="Sprite3D" parent="."]
 position = Vector3(0, 1.1, 0.03)
 texture = ExtResource("2_texture")
-pixel_size = 0.00335
+pixel_size = 0.0046
+offset = Vector2(0, -112)
 billboard = 1
 shaded = false
 transparent = true

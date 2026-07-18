@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "491b6890e8a241acb773e1a07f1c384a",
+      "kind": "base_generated",
+      "state": "__base__",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "generated": false
+      },
+      "createdAt": "2026-07-18T14:15:59+0900",
+      "read": false
+    },
+    {
+      "id": "c9d865bf22f3472da1a3997b5637a17a",
+      "kind": "auto_completed",
+      "state": "down_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": "8방향 이동",
+        "total": 16
+      },
+      "createdAt": "2026-07-18T14:35:49+0900",
+      "read": false
+    },
+    {
+      "id": "c236030d2bfa4c02b296000d161c797d",
+      "kind": "state_generated",
+      "state": "up_right_walk",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260718-161208-3d77af",
+        "frameCount": 4
+      },
+      "createdAt": "2026-07-18T16:13:38+0900",
+      "read": false
+    },
+    {
+      "id": "7e7ab750430942a89505ab19c4945fcd",
+      "kind": "phase_generated",
+      "state": "down_idle",
+      "phase": 3,
+      "success": true,
+      "detail": {
+        "take": "studio-20260718-161251-ab704a",
+        "frameCount": 4
+      },
+      "createdAt": "2026-07-18T16:14:28+0900",
+      "read": false
+    },
+    {
+      "id": "33f376ff3e424b0c93cbb288cf73e8c9",
+      "kind": "phase_generated",
+      "state": "down_walk",
+      "phase": 3,
+      "success": true,
+      "detail": {
+        "take": "studio-20260718-161754-e51830",
+        "frameCount": 4
+      },
+      "createdAt": "2026-07-18T16:19:32+0900",
+      "read": false
+    },
+    {
+      "id": "4689328f4f9049a68b0c5c55a3464fcb",
+      "kind": "state_generated",
+      "state": "up_right_walk",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260718-162132-be6c6f",
+        "frameCount": 4
+      },
+      "createdAt": "2026-07-18T16:23:30+0900",
+      "read": false
+    }
+  ]
+}

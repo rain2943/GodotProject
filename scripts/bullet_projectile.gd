@@ -2,8 +2,8 @@ extends Area3D
 
 const SPEED := 30.0
 const MAX_LIFETIME := 1.6
-const PROJECTILE_COLLISION_RADIUS := 0.16
-const DEFAULT_TARGET_HIT_RADIUS := 0.5
+const PROJECTILE_COLLISION_RADIUS := 0.26
+const DEFAULT_TARGET_HIT_RADIUS := 0.62
 
 var direction := Vector3.FORWARD
 var source_body: Node3D
@@ -142,7 +142,13 @@ func _find_swept_hit(from: Vector3, to: Vector3, exclusions: Array[RID]) -> Dict
 		side = Vector3.RIGHT
 	else:
 		side = side.normalized()
-	var offsets := [Vector3.ZERO, side * PROJECTILE_COLLISION_RADIUS, -side * PROJECTILE_COLLISION_RADIUS]
+	var offsets := [
+		Vector3.ZERO,
+		side * PROJECTILE_COLLISION_RADIUS * 0.5,
+		-side * PROJECTILE_COLLISION_RADIUS * 0.5,
+		side * PROJECTILE_COLLISION_RADIUS,
+		-side * PROJECTILE_COLLISION_RADIUS,
+	]
 	var closest_hit := {}
 	var closest_distance := INF
 	for offset in offsets:

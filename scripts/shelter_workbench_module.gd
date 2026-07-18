@@ -2,6 +2,12 @@ class_name ShelterWorkbenchModule
 extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
+const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
+const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
+const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
+const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
 
 const RECIPES := {
 	"parts": [
@@ -121,6 +127,14 @@ const CATEGORY_NAMES := {
 	"artisan": "장인 제작",
 	"enhance": "+99 강화",
 }
+const CATEGORY_ICONS := {
+	"parts": "parts",
+	"ammo": "ammo",
+	"weapons": "weapon",
+	"supplies": "repair",
+	"artisan": "craft",
+	"enhance": "upgrade",
+}
 
 @export var interaction_radius := 2.9
 
@@ -168,6 +182,7 @@ func _open_ui() -> void:
 	ui_layer = CanvasLayer.new()
 	ui_layer.name = "WorkbenchUILayer"
 	ui_layer.layer = 20
+	ui_layer.add_to_group("shelter_modal_ui")
 	var ui_parent := get_tree().current_scene if get_tree().current_scene != null else get_tree().root
 	ui_parent.add_child(ui_layer)
 	_rebuild_ui()
@@ -223,17 +238,17 @@ func _build_header() -> Control:
 	resource_label = _label(_resource_text(), 15, Color("#b7cfc3"))
 	title_box.add_child(resource_label)
 
-	var repair := _button("시간제 수리")
+	var repair := _button("시간제 수리", "time")
 	repair.custom_minimum_size = Vector2(116, 42)
 	repair.pressed.connect(_start_repair)
 	header.add_child(repair)
 
-	var upgrade := _button("업그레이드")
+	var upgrade := _button("업그레이드", "upgrade")
 	upgrade.custom_minimum_size = Vector2(116, 42)
 	upgrade.pressed.connect(_upgrade_workbench)
 	header.add_child(upgrade)
 
-	var close := _button("닫기")
+	var close := _button("닫기", "close")
 	close.custom_minimum_size = Vector2(82, 42)
 	close.pressed.connect(func() -> void:
 		if is_instance_valid(ui_layer):
@@ -247,7 +262,7 @@ func _build_tabs() -> Control:
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 8)
 	for category in ["parts", "ammo", "weapons", "supplies", "artisan", "enhance"]:
-		var tab := _button(str(CATEGORY_NAMES[category]))
+		var tab := _button(str(CATEGORY_NAMES[category]), str(CATEGORY_ICONS[category]))
 		tab.toggle_mode = true
 		tab.button_pressed = selected_category == category
 		tab.custom_minimum_size = Vector2(116, 40)
@@ -297,6 +312,9 @@ func _refresh_recipe_list() -> void:
 	for recipe_raw in recipes:
 		var recipe: Dictionary = recipe_raw
 		var button := _button("%s\n%s" % [str(recipe["name"]), _cost_short_text(recipe)])
+		button.icon = _recipe_icon(recipe)
+		button.expand_icon = true
+		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.custom_minimum_size = Vector2(330, 72)
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.toggle_mode = true
@@ -323,10 +341,13 @@ func _refresh_detail_panel() -> void:
 	var icon_card := PanelContainer.new()
 	icon_card.custom_minimum_size = Vector2(170, 118)
 	icon_card.add_theme_stylebox_override("panel", _panel_style(Color(0.07, 0.082, 0.088, 0.8), Color("#8ac2a7"), 1, 8))
-	var icon_label := _label(_result_icon_text(recipe), 38, Color("#f0d889"))
-	icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	icon_card.add_child(icon_label)
+	var icon_margin := _margin(12, 10, 12, 10)
+	icon_card.add_child(icon_margin)
+	var icon_texture := TextureRect.new()
+	icon_texture.texture = _recipe_icon(recipe)
+	icon_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon_margin.add_child(icon_texture)
 	detail_box.add_child(icon_card)
 
 	detail_box.add_child(_section("필요 재료"))
@@ -338,7 +359,7 @@ func _refresh_detail_panel() -> void:
 		var needed := int(effective_cost[key])
 		var owned := _owned_resource(str(key))
 		var color := Color("#bde5c9") if owned >= needed else Color("#e68576")
-		cost_box.add_child(_label("%s  %d / %d" % [_resource_name(str(key)), owned, needed], 17, color))
+		cost_box.add_child(_resource_row(str(key), owned, needed, color))
 	var required_tier := int(recipe.get("required_tier", 1))
 	if GameState.shelter_tier < required_tier:
 		cost_box.add_child(_label("쉘터 Tier %d에서 해금" % required_tier, 17, Color("#e68576")))
@@ -351,7 +372,7 @@ func _refresh_detail_panel() -> void:
 	var result_label := _label("결과: %s" % _result_text(recipe), 17, Color("#d9c579"))
 	detail_box.add_child(result_label)
 
-	var craft := _button("제작")
+	var craft := _button("제작", "craft")
 	craft.custom_minimum_size = Vector2(240, 48)
 	craft.disabled = not _can_craft(recipe)
 	craft.pressed.connect(func() -> void:
@@ -493,7 +514,7 @@ func _consume_resource(key: String, amount: int) -> void:
 
 
 func _resource_text() -> String:
-	return "고철 %d · 렌즈 %d · 고무 %d · 스프링 %d · 통조림 %d" % [
+	return "🔩 고철 %d · 렌즈 %d · 고무 %d · 스프링 %d · 🥫 통조림 %d" % [
 		GameState.scrap,
 		GameState.get_mod_component_count("scope_lens"),
 		GameState.get_mod_component_count("rubber_gasket"),
@@ -518,7 +539,7 @@ func _result_text(recipe: Dictionary) -> String:
 	if result.has("weapon"):
 		return "%s x%d" % [_resource_name(str(result["weapon"])), int(result.get("amount", 1))]
 	if result.has("canned_food"):
-		return "통조림 x%d" % int(result["canned_food"])
+		return "🥫 통조림 x%d" % int(result["canned_food"])
 	if result.has("repair"):
 		return "내구도 +%d%%" % int(result["repair"])
 	if result.has("artisan"):
@@ -531,31 +552,59 @@ func _result_text(recipe: Dictionary) -> String:
 	return "-"
 
 
-func _result_icon_text(recipe: Dictionary) -> String:
+func _recipe_icon(recipe: Dictionary) -> Texture2D:
 	var result: Dictionary = recipe.get("result", {})
 	if result.has("weapon"):
-		return "총"
+		var weapon_texture := WEAPON_VISUAL_CATALOG.get_weapon_texture(str(result["weapon"]))
+		return weapon_texture if weapon_texture != null else UI_ICONS.get_icon("weapon", 72, Color("#d5ddd8"))
 	if result.has("ammo"):
-		return "탄"
+		return AMMO_TEXTURE
 	if result.has("component"):
-		return "부"
+		return _resource_icon(str(result["component"]))
 	if result.has("canned_food"):
-		return "식"
+		return UI_ICONS.get_icon("food", 72, Color("#e6b65c"))
 	if result.has("repair"):
-		return "수"
+		return UI_ICONS.get_icon("repair", 72, Color("#82c7ba"))
 	if result.has("artisan"):
-		return "장"
+		return UI_ICONS.get_icon("craft", 72, Color("#e2c06b"))
 	if result.has("enhance"):
-		return "+"
+		return UI_ICONS.get_icon("upgrade", 72, Color("#e2c06b"))
 	if result.has("enhance_mod"):
-		return "+"
-	return "?"
+		return UI_ICONS.get_icon("mod", 72, Color("#e2a962"))
+	return UI_ICONS.get_icon("all", 72, Color("#8ca29a"))
+
+
+func _resource_icon(key: String) -> Texture2D:
+	match key:
+		"scope_lens": return SCOPE_LENS_TEXTURE
+		"rubber_gasket": return RUBBER_GASKET_TEXTURE
+		"magazine_spring": return MAGAZINE_SPRING_TEXTURE
+		"762_fmj", "9mm_fmj", "12g_buckshot": return AMMO_TEXTURE
+		"scrap": return UI_ICONS.get_icon("scrap", 48, Color("#b9c4c2"))
+		"canned_food": return UI_ICONS.get_icon("food", 48, Color("#e6b65c"))
+		"churu": return UI_ICONS.get_icon("churu", 48, Color("#e9a66e"))
+	return UI_ICONS.get_icon("resource", 48, Color("#9ab4aa"))
+
+
+func _resource_row(key: String, owned: int, needed: int, color: Color) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(32, 32)
+	icon.texture = _resource_icon(key)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	row.add_child(icon)
+	var label := _label("%s  %d / %d" % [_resource_name(key), owned, needed], 17, color)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(label)
+	return row
 
 
 func _resource_name(key: String) -> String:
 	match key:
 		"scrap":
-			return "고철"
+			return "🔩 고철"
 		"scope_lens":
 			return "스코프 렌즈"
 		"rubber_gasket":
@@ -577,13 +626,17 @@ func _resource_name(key: String) -> String:
 		"double_barrel":
 			return "더블배럴 참치 헌터"
 		"canned_food":
-			return "통조림"
+			return "🥫 통조림"
 	return key
 
 
-func _button(text: String) -> Button:
+func _button(text: String, icon_name := "") -> Button:
 	var button := Button.new()
 	button.text = text
+	if not icon_name.is_empty():
+		button.icon = UI_ICONS.get_icon(icon_name, 30, Color("#dce6df"))
+		button.expand_icon = true
+		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	button.add_theme_font_override("font", FONT)
 	button.add_theme_font_size_override("font_size", 15)

@@ -2,6 +2,7 @@ class_name ShelterResidentCat
 extends CharacterBody3D
 
 const ANIMATION_ROOT := "res://assets/characters/worker_cat"
+const KNEADING_ANIMATION_ROOT := "res://assets/characters/worker_cat"
 const DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const DIRECTION_STATES := {
 	"n": "up",
@@ -14,7 +15,12 @@ const DIRECTION_STATES := {
 	"nw": "up_left",
 }
 const FRAME_COUNT := 4
+const KNEADING_FRAME_COUNT := 6
 const WALK_SPEED := 3.8
+const WANDER_SPEED := 2.15
+const WANDER_MIN_WAIT := 1.0
+const WANDER_MAX_WAIT := 3.2
+const WANDER_RETARGET_TIME := 9.0
 
 var resident_id := ""
 var assigned_to_scratcher := false
@@ -26,12 +32,23 @@ var motion_state := "idle"
 var sprite: AnimatedSprite3D
 var work_indicator: Label3D
 var work_phase := 0.0
+var roam_bounds := Rect2(Vector2(-12.0, -4.0), Vector2(24.0, 12.0))
+var wander_wait := 0.0
+var wander_retarget_time := 0.0
+var wander_random := RandomNumberGenerator.new()
 
 
 func configure(next_resident_id: String, spawn_position: Vector3) -> void:
 	resident_id = next_resident_id
 	position = spawn_position
 	target_position = spawn_position
+	wander_random.seed = hash(resident_id)
+
+
+func set_roam_bounds(next_bounds: Rect2) -> void:
+	roam_bounds = next_bounds
+	if assignment_kind == "waiting" and not roam_bounds.has_point(Vector2(target_position.x, target_position.z)):
+		_choose_wander_target()
 
 
 func _ready() -> void:
@@ -79,6 +96,7 @@ func set_assignment(is_assigned: bool, next_target: Vector3, next_work_focus: Ve
 
 
 func set_work_assignment(next_kind: String, next_target: Vector3, next_work_focus: Vector3, snap := false) -> void:
+	var previous_kind := assignment_kind
 	assignment_kind = next_kind
 	assigned_to_scratcher = assignment_kind == "kneading"
 	target_position = next_target
@@ -89,15 +107,30 @@ func set_work_assignment(next_kind: String, next_target: Vector3, next_work_focu
 		work_indicator.text = "꾹꾹..." if assignment_kind == "kneading" else "사각사각..."
 	if snap:
 		position = target_position
+	if assignment_kind == "waiting":
+		wander_wait = wander_random.randf_range(WANDER_MIN_WAIT, WANDER_MAX_WAIT)
+		wander_retarget_time = WANDER_RETARGET_TIME
+		if snap or previous_kind != "waiting":
+			_choose_wander_target()
+	_play_animation()
 	_update_work_indicator()
 
 
 func _physics_process(delta: float) -> void:
+	if assignment_kind == "waiting":
+		wander_retarget_time -= delta
+		var wander_distance := Vector2(position.x - target_position.x, position.z - target_position.z).length()
+		if wander_distance <= 0.22:
+			wander_wait -= delta
+			if wander_wait <= 0.0:
+				_choose_wander_target()
+		elif wander_retarget_time <= 0.0:
+			_choose_wander_target()
 	var offset := target_position - position
 	offset.y = 0.0
 	if offset.length() > 0.18:
 		var direction := offset.normalized()
-		velocity = direction * WALK_SPEED
+		velocity = direction * (WANDER_SPEED if assignment_kind == "waiting" else WALK_SPEED)
 		_set_facing_from_world_direction(direction)
 		_set_motion_state("walk")
 		move_and_slide()
@@ -110,9 +143,24 @@ func _physics_process(delta: float) -> void:
 			_set_facing_from_world_direction(work_focus_position - position)
 	work_phase += delta
 	if sprite:
-		var work_bob := sin(work_phase * 7.0) * 0.025 if assignment_kind != "waiting" and offset.length() <= 0.18 else 0.0
+		var work_bob := sin(work_phase * 7.0) * 0.025 if assignment_kind == "catnip" and offset.length() <= 0.18 else 0.0
 		sprite.position.y = 0.3 + work_bob
 	_update_work_indicator()
+
+
+func _choose_wander_target() -> void:
+	var margin := 0.8
+	var minimum := roam_bounds.position + Vector2(margin, margin)
+	var maximum := roam_bounds.end - Vector2(margin, margin)
+	if maximum.x <= minimum.x or maximum.y <= minimum.y:
+		return
+	target_position = Vector3(
+		wander_random.randf_range(minimum.x, maximum.x),
+		position.y,
+		wander_random.randf_range(minimum.y, maximum.y)
+	)
+	wander_wait = wander_random.randf_range(WANDER_MIN_WAIT, WANDER_MAX_WAIT)
+	wander_retarget_time = WANDER_RETARGET_TIME
 
 
 func _update_work_indicator() -> void:
@@ -152,7 +200,11 @@ func _play_animation() -> void:
 	if sprite:
 		sprite.flip_h = false
 		sprite.rotation = Vector3.ZERO
-		sprite.play("%s_%s" % [motion_state, facing])
+		var arrived := position.distance_to(target_position) <= 0.28
+		if assignment_kind == "kneading" and motion_state == "idle" and arrived:
+			sprite.play("kneading_ne")
+		else:
+			sprite.play("%s_%s" % [motion_state, facing])
 
 
 func _create_sprite_frames() -> SpriteFrames:
@@ -177,4 +229,14 @@ func _create_sprite_frames() -> SpriteFrames:
 					frames.add_frame(animation_name, texture)
 				else:
 					push_error("Missing shelter resident frame: %s" % texture_path)
+	frames.add_animation("kneading_ne")
+	frames.set_animation_loop("kneading_ne", true)
+	frames.set_animation_speed("kneading_ne", 8.0)
+	for frame_index in KNEADING_FRAME_COUNT:
+		var texture_path := "%s/kneading_ne_%d.png" % [KNEADING_ANIMATION_ROOT, frame_index]
+		var texture := load(texture_path) as Texture2D
+		if texture:
+			frames.add_frame("kneading_ne", texture)
+		else:
+			push_error("Missing worker kneading frame: %s" % texture_path)
 	return frames

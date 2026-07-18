@@ -1,9 +1,12 @@
-extends Control
+﻿extends Control
 
 signal open_state_changed(is_open: bool)
 signal weapon_mods_changed
+signal weapon_equipped(weapon_id: String)
+signal equipment_changed
 
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
+const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 
 const SLOT_ORDER := ["sight", "muzzle", "stock", "magazine", "tactical", "special"]
 const MOD_COMPONENTS := {
@@ -13,6 +16,32 @@ const MOD_COMPONENTS := {
 	"quick_mag": {"component": "magazine_spring", "amount": 1, "scrap": 55},
 	"bell_bait": {"component": "magazine_spring", "amount": 1, "scrap": 20},
 	"ak_precision_receiver": {"component": "scope_lens", "amount": 2, "scrap": 160},
+}
+const BAG_FILTER_ORDER := ["all", "ammo", "resource", "weapon", "equipment", "mod"]
+
+const BAG_FILTER_MIN_WIDTH := {
+	"all": 52,
+	"ammo": 58,
+	"resource": 64,
+	"weapon": 58,
+	"equipment": 68,
+	"mod": 58,
+}
+const BAG_FILTER_TITLES := {
+	"all": "전체",
+	"ammo": "탄약",
+	"resource": "자원",
+	"weapon": "무기",
+	"equipment": "방어구",
+	"mod": "모듈",
+}
+const BAG_FILTER_ICON := {
+	"all": "",
+	"ammo": "",
+	"resource": "",
+	"weapon": "",
+	"equipment": "",
+	"mod": "",
 }
 
 var font_ref: Font
@@ -33,6 +62,9 @@ var inventory_panel: Control
 var weapon_panel: Control
 var equipped_grid: GridContainer
 var bag_grid: GridContainer
+var bag_scroll: ScrollContainer
+var scrap_label: Label
+var inventory_feedback: Label
 var weapon_title: Label
 var weapon_preview: TextureRect
 var weapon_stats: Label
@@ -42,6 +74,8 @@ var item_detail_icon: TextureRect
 var item_detail_title: Label
 var item_detail_description: Label
 var item_action_button: Button
+var item_detail_reason: Label
+var bag_empty_hint: Label
 
 var has_weapon_state := false
 var magazine_state := 0
@@ -55,6 +89,21 @@ var stored_weapons_state := 0
 var mod_components_state: Dictionary = {}
 var rescued_workers_state := 0
 var fatigue_state := 0.0
+var bag_filter_buttons: Dictionary = {}
+var bag_filter_button_tweens: Dictionary = {}
+var bag_filter_hover_states: Dictionary = {}
+var bag_filter_count_tweens: Dictionary = {}
+var bag_filter_count_badge_tweens: Dictionary = {}
+var bag_filter_button_counts: Dictionary = {}
+var bag_filter_count_labels: Dictionary = {}
+var bag_filter_count_badges: Dictionary = {}
+var bag_filter_selection_tweens: Dictionary = {}
+var bag_empty_hint_tween: Tween
+var bag_filter: String = "all"
+var feedback_tween: Tween
+var visible_bag_items := 0
+const BAG_WEIGHT_LIMIT := 49.0
+const BAG_WEIGHT_WARNING := 44.0
 
 
 func setup(
@@ -82,7 +131,7 @@ func setup(
 func set_weapon_texture(next_weapon_texture: Texture2D) -> void:
 	weapon_texture = next_weapon_texture
 	if weapon_preview:
-		weapon_preview.texture = weapon_texture
+		weapon_preview.texture = _weapon_preview_texture()
 
 
 func update_state(
@@ -141,13 +190,16 @@ func _build_open_button() -> void:
 	open_button = Button.new()
 	open_button.name = "InventoryButton"
 	open_button.text = "가방"
+	open_button.icon = UI_ICONS.get_icon("backpack", 40, Color("#dce9e1"))
+	open_button.expand_icon = true
+	open_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	open_button.tooltip_text = "가방 열기  [I / B]"
 	open_button.focus_mode = Control.FOCUS_NONE
 	open_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	open_button.z_as_relative = false
 	open_button.z_index = 4001
 	open_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	open_button.offset_left = -94
+	open_button.offset_left = -118
 	open_button.offset_top = 112
 	open_button.offset_right = -22
 	open_button.offset_bottom = 154
@@ -174,7 +226,7 @@ func _build_modal() -> void:
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	modal.add_child(dim)
 
-	var safe_margin := _margin(22, 22, 22, 22)
+	var safe_margin := _margin(16, 16, 16, 16)
 	safe_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	modal.add_child(safe_margin)
 	var center := CenterContainer.new()
@@ -184,7 +236,8 @@ func _build_modal() -> void:
 
 	shell = HBoxContainer.new()
 	shell.name = "InventoryShell"
-	shell.add_theme_constant_override("separation", 14)
+	shell.alignment = BoxContainer.ALIGNMENT_CENTER
+	shell.add_theme_constant_override("separation", 12)
 	center.add_child(shell)
 
 	inventory_panel = _build_inventory_panel()
@@ -197,12 +250,13 @@ func _build_modal() -> void:
 func _build_inventory_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "CompactInventoryPanel"
-	panel.custom_minimum_size = Vector2(548, 642)
+	panel.custom_minimum_size = Vector2(480, 620)
+	panel.clip_contents = true
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.035, 0.043, 0.049, 0.98), Color(0.66, 0.78, 0.73, 0.7), 8))
 	var margin := _margin(16, 14, 16, 14)
 	panel.add_child(margin)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
+	box.add_theme_constant_override("separation", 6)
 	margin.add_child(box)
 
 	var header := HBoxContainer.new()
@@ -211,10 +265,10 @@ func _build_inventory_panel() -> Control:
 	var title := _label("인벤토리", 23, Color("#f0e8d0"))
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
-	var scrap_label := _label("고철 %d" % game_state.scrap, 15, Color("#e4c96f"))
+	scrap_label = _label("쉘터 고철 %d" % (int(game_state.scrap) if game_state != null else 0), 15, Color("#e4c96f"))
 	scrap_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	header.add_child(scrap_label)
-	var close_button := _icon_text_button("닫기", "인벤토리 닫기 [Esc]")
+	var close_button := _icon_text_button("닫기", "인벤토리 닫기 [Esc]", "close")
 	close_button.custom_minimum_size = Vector2(62, 34)
 	close_button.pressed.connect(func() -> void: set_open(false))
 	header.add_child(close_button)
@@ -223,8 +277,8 @@ func _build_inventory_panel() -> Control:
 	equipped_grid = GridContainer.new()
 	equipped_grid.name = "EquipmentGrid"
 	equipped_grid.columns = 4
-	equipped_grid.add_theme_constant_override("h_separation", 8)
-	equipped_grid.add_theme_constant_override("v_separation", 8)
+	equipped_grid.add_theme_constant_override("h_separation", 6)
+	equipped_grid.add_theme_constant_override("v_separation", 6)
 	box.add_child(equipped_grid)
 
 	var bag_header := HBoxContainer.new()
@@ -232,27 +286,43 @@ func _build_inventory_panel() -> Control:
 	var bag_title := _section("가방")
 	bag_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bag_header.add_child(bag_title)
-	bag_header.add_child(_label("아이템을 눌러 상세 확인", 12, Color("#8fa59b")))
+	bag_header.add_child(_label("아이콘을 눌러 상세 정보와 장착 상태 확인", 12, Color("#8fa59b")))
 
-	var scroll := ScrollContainer.new()
-	scroll.name = "BagScroll"
-	scroll.custom_minimum_size = Vector2(0, 226)
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	box.add_child(scroll)
+	box.add_child(_build_bag_filter_bar())
+	inventory_feedback = _label("", 11, Color("#f2d27a"))
+	inventory_feedback.visible = false
+	inventory_feedback.add_theme_font_size_override("font_size", 11)
+	inventory_feedback.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	box.add_child(inventory_feedback)
+
+	bag_scroll = ScrollContainer.new()
+	bag_scroll.name = "BagScroll"
+	bag_scroll.custom_minimum_size = Vector2(0, 174)
+	bag_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	bag_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(bag_scroll)
 	bag_grid = GridContainer.new()
 	bag_grid.name = "BagGrid"
 	bag_grid.columns = 5
-	bag_grid.add_theme_constant_override("h_separation", 8)
-	bag_grid.add_theme_constant_override("v_separation", 8)
-	scroll.add_child(bag_grid)
+	bag_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bag_grid.add_theme_constant_override("h_separation", 6)
+	bag_grid.add_theme_constant_override("v_separation", 6)
+	bag_scroll.add_child(bag_grid)
+
+	bag_empty_hint = _label("현재 분류에 표시할 아이템이 없습니다.", 11, Color("#8ca5a0"))
+	bag_empty_hint.add_theme_font_size_override("font_size", 12)
+	bag_empty_hint.add_theme_color_override("font_color", Color("#8eb0a5"))
+	bag_empty_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bag_empty_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bag_empty_hint.visible = false
+	box.add_child(bag_empty_hint)
 
 	box.add_child(_build_item_detail_panel())
 
 	var weight_row := HBoxContainer.new()
 	weight_row.add_theme_constant_override("separation", 8)
 	box.add_child(weight_row)
-	weight_row.add_child(_label("소지 중량", 12, Color("#aebbb5")))
+	weight_row.add_child(_label("예상 중량", 12, Color("#aebbb5")))
 	weight_label = _label("0 / 49kg", 12, Color("#b7ef72"))
 	weight_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	weight_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -263,7 +333,8 @@ func _build_inventory_panel() -> Control:
 func _build_item_detail_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "SelectedItemDetail"
-	panel.custom_minimum_size = Vector2(0, 82)
+	panel.custom_minimum_size = Vector2(0, 72)
+	panel.clip_contents = true
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.025, 0.029, 0.96), Color(0.43, 0.58, 0.52, 0.58), 7))
 	var margin := _margin(10, 8, 10, 8)
 	panel.add_child(margin)
@@ -272,22 +343,35 @@ func _build_item_detail_panel() -> Control:
 	margin.add_child(row)
 
 	item_detail_icon = TextureRect.new()
-	item_detail_icon.custom_minimum_size = Vector2(60, 60)
+	item_detail_icon.custom_minimum_size = Vector2(52, 52)
 	item_detail_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	item_detail_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	row.add_child(item_detail_icon)
 	var text_box := VBoxContainer.new()
+	text_box.custom_minimum_size = Vector2(270, 52)
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	text_box.clip_contents = true
 	row.add_child(text_box)
 	item_detail_title = _label("아이템을 선택하세요", 14, Color("#e8e0c7"))
 	item_detail_title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	item_detail_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_title)
-	item_detail_description = _label("가방 슬롯에는 이미지와 수량만 표시됩니다.", 11, Color("#9aaba4"))
+	item_detail_description = _label("가방 슬롯에는 아이콘과 수량만 표시됩니다.", 11, Color("#9aaba4"))
+	item_detail_description.custom_minimum_size = Vector2(270, 0)
+	item_detail_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	item_detail_description.max_lines_visible = 2
+	item_detail_description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_description)
-	item_action_button = _icon_text_button("", "")
-	item_action_button.custom_minimum_size = Vector2(92, 48)
+	item_detail_reason = _label("", 10, Color("#ffc77f"))
+	item_detail_reason.custom_minimum_size = Vector2(270, 0)
+	item_detail_reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	item_detail_reason.max_lines_visible = 2
+	item_detail_reason.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	item_detail_reason.visible = false
+	text_box.add_child(item_detail_reason)
+	item_action_button = _icon_text_button("", "", "all")
+	item_action_button.custom_minimum_size = Vector2(82, 42)
 	item_action_button.visible = false
 	item_action_button.pressed.connect(_on_selected_item_action)
 	row.add_child(item_action_button)
@@ -297,7 +381,8 @@ func _build_item_detail_panel() -> Control:
 func _build_weapon_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "WeaponDetailPanel"
-	panel.custom_minimum_size = Vector2(520, 642)
+	panel.custom_minimum_size = Vector2(480, 620)
+	panel.clip_contents = true
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.028, 0.035, 0.04, 0.98), Color(0.69, 0.62, 0.4, 0.68), 8))
 	var margin := _margin(18, 14, 18, 16)
 	panel.add_child(margin)
@@ -310,13 +395,13 @@ func _build_weapon_panel() -> Control:
 	weapon_title = _label("총기 상세", 22, Color("#f0e8cf"))
 	weapon_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(weapon_title)
-	var detail_close := _icon_text_button("접기", "총기 상세 접기")
+	var detail_close := _icon_text_button("접기", "총기 상세 접기", "close")
 	detail_close.custom_minimum_size = Vector2(62, 34)
 	detail_close.pressed.connect(_hide_weapon_detail)
 	header.add_child(detail_close)
 
 	var preview_panel := PanelContainer.new()
-	preview_panel.custom_minimum_size = Vector2(0, 126)
+	preview_panel.custom_minimum_size = Vector2(0, 112)
 	preview_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.014, 0.019, 0.022, 0.9), Color(0.5, 0.55, 0.52, 0.35), 7))
 	box.add_child(preview_panel)
 	var preview_margin := _margin(12, 10, 12, 10)
@@ -325,8 +410,8 @@ func _build_weapon_panel() -> Control:
 	preview.add_theme_constant_override("separation", 14)
 	preview_margin.add_child(preview)
 	weapon_preview = TextureRect.new()
-	weapon_preview.custom_minimum_size = Vector2(166, 100)
-	weapon_preview.texture = weapon_texture
+	weapon_preview.custom_minimum_size = Vector2(150, 86)
+	weapon_preview.texture = _weapon_preview_texture()
 	weapon_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	weapon_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	preview.add_child(weapon_preview)
@@ -336,7 +421,7 @@ func _build_weapon_panel() -> Control:
 	preview.add_child(weapon_stats)
 
 	box.add_child(_section("부착 슬롯"))
-	var help := _label("장착된 부품을 누르면 해제됩니다. 새 부품은 왼쪽 가방에서 선택하세요.", 11, Color("#8fa59b"))
+	var help := _label("가방의 부품을 누르면 즉시 장착됩니다. 장착 슬롯을 누르면 해제됩니다.", 11, Color("#8fa59b"))
 	box.add_child(help)
 	mod_slot_grid = GridContainer.new()
 	mod_slot_grid.name = "AttachmentSlots"
@@ -345,11 +430,390 @@ func _build_weapon_panel() -> Control:
 	mod_slot_grid.add_theme_constant_override("v_separation", 10)
 	box.add_child(mod_slot_grid)
 
-	var footer := _label("개조 결과는 즉시 총기 스탯과 레이드 장비에 반영됩니다.", 11, Color("#c9b96e"))
+	var footer := _label("변경된 부품과 방어 수치는 즉시 전투 능력에 반영됩니다.", 11, Color("#c9b96e"))
 	footer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	footer.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	box.add_child(footer)
 	return panel
+
+
+func _build_bag_filter_bar() -> Control:
+	var row := HBoxContainer.new()
+	row.name = "BagFilterBar"
+	row.add_theme_constant_override("separation", 6)
+	for filter_id in BAG_FILTER_ORDER:
+		var button := _icon_text_button(_bag_filter_button_label(str(filter_id)), "", _filter_icon_name(filter_id))
+		button.name = "BagFilter_%s" % filter_id
+		button.toggle_mode = true
+		button.scale = Vector2.ONE
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		bag_filter_hover_states[button] = false
+		button.mouse_filter = Control.MOUSE_FILTER_STOP
+		button.button_pressed = filter_id == bag_filter
+		button.pressed.connect(_on_bag_filter_pressed.bind(filter_id))
+		button.button_down.connect(_on_bag_filter_button_down.bind(button))
+		button.button_up.connect(_on_bag_filter_button_up.bind(button))
+		button.mouse_entered.connect(_on_bag_filter_button_hover.bind(button, true))
+		button.mouse_exited.connect(_on_bag_filter_button_hover.bind(button, false))
+		var min_width := int(BAG_FILTER_MIN_WIDTH.get(filter_id, 84))
+		button.custom_minimum_size = Vector2(min_width, 30)
+		button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		button.size_flags_vertical = Control.SIZE_EXPAND
+		row.add_child(button)
+		bag_filter_buttons[filter_id] = button
+
+		var count_badge := PanelContainer.new()
+		count_badge.name = "BagFilterCountBadge_%s" % filter_id
+		count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		count_badge.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		count_badge.offset_left = -30
+		count_badge.offset_top = 3
+		count_badge.offset_right = -6
+		count_badge.offset_bottom = 19
+		count_badge.custom_minimum_size = Vector2(22, 14)
+		count_badge.visible = false
+		var badge_margin := MarginContainer.new()
+		badge_margin.add_theme_constant_override("margin_left", 3)
+		badge_margin.add_theme_constant_override("margin_top", 1)
+		badge_margin.add_theme_constant_override("margin_right", 3)
+		badge_margin.add_theme_constant_override("margin_bottom", 1)
+		count_badge.add_child(badge_margin)
+		var count_label := Label.new()
+		count_label.name = "BagFilterCount_%s" % filter_id
+		count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		count_label.add_theme_font_override("font", font_ref)
+		count_label.add_theme_font_size_override("font_size", 9)
+		count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		count_label.text = _format_bag_filter_count(0)
+		count_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_CHAR
+		badge_margin.add_child(count_label)
+		button.add_child(count_badge)
+		bag_filter_count_badges[filter_id] = count_badge
+		bag_filter_count_labels[filter_id] = count_label
+
+	return row
+
+
+func _on_bag_filter_pressed(filter_id: String) -> void:
+	if filter_id != bag_filter:
+		var previous_button: Variant = bag_filter_buttons.get(bag_filter, null)
+		bag_filter = filter_id
+		_refresh_contents()
+		if previous_button is Button:
+			_animate_bag_filter_selection_flash(previous_button as Button, false)
+		var current_button: Variant = bag_filter_buttons.get(bag_filter, null)
+		if current_button is Button:
+			_animate_bag_filter_selection_flash(current_button as Button, true)
+	else:
+		_refresh_bag_filter_buttons()
+
+
+func _on_bag_filter_button_hover(button: Button, hovered: bool) -> void:
+	if not is_instance_valid(button):
+		return
+	bag_filter_hover_states[button] = hovered
+	_animate_bag_filter_button_scale(button, Vector2(1.03, 1.03) if hovered else Vector2.ONE)
+
+
+func _on_bag_filter_button_down(button: Button) -> void:
+	if not is_instance_valid(button):
+		return
+	_animate_bag_filter_button_scale(button, Vector2(0.96, 0.96))
+
+
+func _on_bag_filter_button_up(button: Button) -> void:
+	if not is_instance_valid(button):
+		return
+	var is_hovered := bool(bag_filter_hover_states.get(button, false))
+	_animate_bag_filter_button_scale(button, Vector2(1.03, 1.03) if is_hovered else Vector2.ONE)
+
+
+func _animate_bag_filter_button_scale(button: Button, target_scale: Vector2) -> void:
+	var old_tween: Variant = bag_filter_button_tweens.get(button, null)
+	if old_tween is Tween and is_instance_valid(old_tween):
+		old_tween.kill()
+	var tween := create_tween()
+	tween.tween_property(button, "scale", target_scale, 0.09).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	bag_filter_button_tweens[button] = tween
+
+
+func _animate_bag_filter_selection_flash(button: Button, selected: bool) -> void:
+	if not is_instance_valid(button):
+		return
+	var old_tween: Variant = bag_filter_selection_tweens.get(button, null)
+	if old_tween is Tween and is_instance_valid(old_tween):
+		old_tween.kill()
+	var flash_target := Color(1.08, 1.08, 1.08, 1.0) if selected else Color(1.0, 1.0, 1.0, 1.0)
+	var settle := Color(1.0, 1.0, 1.0, 1.0) if selected else Color(0.94, 0.94, 0.94, 1.0)
+	var tween := create_tween()
+	button.self_modulate = Color(1.0, 1.0, 1.0, 1.0)
+	tween.tween_property(button, "self_modulate", flash_target, 0.08).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(button, "self_modulate", settle, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	bag_filter_selection_tweens[button] = tween
+func _get_filter_display_name(filter_id: String) -> String:
+	if not BAG_FILTER_TITLES.has(filter_id):
+		return "전체"
+	return str(BAG_FILTER_TITLES[filter_id])
+
+
+func _should_show_bag_item(item: Dictionary) -> bool:
+	return _bag_filter_matches_item(bag_filter, item.get("type", ""))
+
+
+func _bag_filter_matches_item(filter_id: String, item_type: String) -> bool:
+	if filter_id == "all":
+		return true
+	return str(item_type) == filter_id
+
+
+func _bag_filter_button_label(filter_id: String) -> String:
+	var title := _get_filter_display_name(filter_id)
+	var icon := str(BAG_FILTER_ICON.get(filter_id, ""))
+	var base := icon + " " + title if icon != "" else title
+	return base
+
+
+func _format_bag_filter_count(count: int) -> String:
+	if count <= 0:
+		return "0"
+	if count > 99:
+		return "99+"
+	return str(count)
+
+
+func _refresh_bag_filter_buttons() -> void:
+	for filter_id in BAG_FILTER_ORDER:
+		var button: Variant = bag_filter_buttons.get(filter_id, null)
+		if button is Button:
+			var count := _count_bag_items_for_filter(str(filter_id))
+			var prev_count := int(bag_filter_button_counts.get(filter_id, -1))
+			(button as Button).text = _bag_filter_button_label(str(filter_id))
+			var count_label: Variant = bag_filter_count_labels.get(filter_id, null)
+			var count_badge: Variant = bag_filter_count_badges.get(filter_id, null)
+			if count_label is Label:
+				count_label.text = _format_bag_filter_count(count)
+			if count_badge is Control:
+				var was_visible: bool = (count_badge as Control).visible
+				if count > 0:
+					if not was_visible:
+						_set_bag_filter_count_badge_visibility(button as Button, filter_id, true)
+					else:
+						var active_badge_tween: Variant = bag_filter_count_badge_tweens.get(button, null)
+						if active_badge_tween is Tween and is_instance_valid(active_badge_tween):
+							active_badge_tween.kill()
+						count_badge.scale = Vector2.ONE
+						count_badge.modulate.a = 1.0
+				else:
+					if was_visible:
+						_set_bag_filter_count_badge_visibility(button as Button, filter_id, false)
+			if prev_count != -1 and prev_count != count and count > 0:
+				_animate_bag_filter_count_update(button as Button, filter_id, prev_count, count)
+			bag_filter_button_counts[filter_id] = count
+			(button as Button).button_pressed = str(filter_id) == bag_filter
+			_refresh_bag_filter_button_style(button as Button, filter_id)
+
+
+func _set_bag_filter_count_badge_visibility(button: Button, filter_id: String, show: bool) -> void:
+	if not is_instance_valid(button):
+		return
+	var count_badge: Variant = bag_filter_count_badges.get(filter_id, null)
+	var count_label: Variant = bag_filter_count_labels.get(filter_id, null)
+	if not (count_badge is Control):
+		return
+	var old_tween: Variant = bag_filter_count_badge_tweens.get(button, null)
+	if old_tween is Tween and is_instance_valid(old_tween):
+		old_tween.kill()
+	var tween := create_tween()
+	if show:
+		count_badge.visible = true
+		count_badge.scale = Vector2.ZERO
+		count_badge.modulate.a = 0.0
+		if count_label is Label:
+			count_label.scale = Vector2.ONE
+		tween.tween_property(count_badge, "scale", Vector2(1.12, 1.12), 0.05).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		tween.parallel().tween_property(count_badge, "modulate:a", 1.0, 0.05).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		tween.tween_property(count_badge, "scale", Vector2.ONE, 0.09).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+		tween.parallel().tween_property(count_badge, "modulate:a", 1.0, 0.09).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	else:
+		tween.tween_property(count_badge, "scale", Vector2(0.35, 0.35), 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tween.parallel().tween_property(count_badge, "modulate:a", 0.0, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tween.tween_callback(Callable(count_badge, "set_visible").bind(false))
+		if count_label is Label:
+			count_label.scale = Vector2.ONE
+			tween.parallel().tween_property(count_label, "scale", Vector2(0.85, 0.85), 0.05).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+			tween.parallel().tween_property(count_label, "scale", Vector2.ONE, 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	bag_filter_count_badge_tweens[button] = tween
+
+
+func _animate_bag_filter_count_update(button: Button, filter_id: String, _old_count: int, _new_count: int) -> void:
+	if not is_instance_valid(button):
+		return
+	var old_tween: Variant = bag_filter_count_tweens.get(button, null)
+	if old_tween is Tween and is_instance_valid(old_tween):
+		old_tween.kill()
+	var count_label: Variant = bag_filter_count_labels.get(filter_id, null)
+	var count_badge: Variant = bag_filter_count_badges.get(filter_id, null)
+	var pulse_target := Vector2(1.03, 1.03)
+	var settled_scale := Vector2(1.03, 1.03) if bool(bag_filter_hover_states.get(button, false)) else Vector2.ONE
+	var tween := create_tween()
+	tween.tween_property(button, "scale", pulse_target, 0.05).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(button, "scale", settled_scale, 0.08).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	bag_filter_count_tweens[button] = tween
+	if count_badge is Control:
+		count_badge.scale = Vector2.ONE
+		var count_badge_tween := create_tween()
+		count_badge_tween.tween_property(count_badge, "scale", Vector2(1.2, 1.2), 0.04).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		count_badge_tween.parallel().tween_property(count_badge, "scale", Vector2.ONE, 0.08).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	if count_label is Label:
+		var count_tween := create_tween()
+		count_tween.tween_property(count_label, "scale", Vector2(1.12, 1.12), 0.04).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		count_tween.parallel().tween_property(count_label, "scale", Vector2.ONE, 0.08).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+
+func _refresh_bag_filter_button_style(button: Button, filter_id: Variant) -> void:
+	var current_filter := str(filter_id)
+	var is_active := str(current_filter) == bag_filter
+	var base_color := _bag_filter_base_color(current_filter)
+	var active_color := _bag_filter_active_color(current_filter)
+	if is_active:
+		button.add_theme_stylebox_override("normal", _panel_style(_lighten_color(active_color, 0.04), Color("#f5e3ae"), 6, 2))
+		button.add_theme_stylebox_override("hover", _panel_style(_lighten_color(active_color, 0.1), Color("#ffefbf"), 6, 2))
+		button.add_theme_stylebox_override("pressed", _panel_style(_darken_color(active_color, 0.1), Color("#e4c96f"), 6, 2))
+		button.add_theme_stylebox_override("focus", _panel_style(_lighten_color(active_color, 0.08), Color("#ffe6a8"), 6, 2))
+		button.add_theme_color_override("font_color", Color("#21170d"))
+	else:
+		button.add_theme_stylebox_override("normal", _panel_style(base_color, Color("#7e8e88"), 6, 2))
+		button.add_theme_stylebox_override("hover", _panel_style(_lighten_color(base_color, 0.08), Color("#c4bea4"), 6, 2))
+		button.add_theme_stylebox_override("pressed", _panel_style(_darken_color(base_color, 0.08), Color("#8a9586"), 6, 2))
+		button.add_theme_stylebox_override("focus", _panel_style(_lighten_color(base_color, 0.05), Color("#b1bcae"), 6, 2))
+		button.add_theme_color_override("font_color", Color("#dde7e1"))
+	_refresh_bag_filter_count_badge_style(current_filter, is_active)
+
+
+func _refresh_bag_filter_count_badge_style(filter_id: String, is_active: bool) -> void:
+	var badge: Variant = bag_filter_count_badges.get(filter_id, null)
+	var count_label: Variant = bag_filter_count_labels.get(filter_id, null)
+	if not (badge is PanelContainer):
+		return
+	var filter_color := _bag_filter_active_color(filter_id) if is_active else _bag_filter_base_color(filter_id)
+	var bg_color := _lighten_color(filter_color, 0.35) if is_active else _darken_color(filter_color, 0.02)
+	var border_color := Color(1, 1, 1, 0.95) if is_active else Color(1, 1, 1, 0.35)
+	var border_width := 2 if is_active else 1
+	var badge_style := StyleBoxFlat.new()
+	badge_style.bg_color = bg_color
+	badge_style.border_color = border_color
+	badge_style.set_border_width_all(border_width)
+	badge_style.set_corner_radius_all(999)
+	badge_style.content_margin_left = 3
+	badge_style.content_margin_right = 3
+	badge_style.content_margin_top = 1
+	badge_style.content_margin_bottom = 1
+	badge.add_theme_stylebox_override("panel", badge_style)
+	if count_label is Label:
+		count_label.add_theme_color_override("font_color", Color("#ffffff" if is_active else "#f0f4ff"))
+		count_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.52) if is_active else Color(0, 0, 0, 0.24))
+		count_label.add_theme_constant_override("outline_size", 2 if is_active else 1)
+		if is_active:
+			count_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		else:
+			count_label.modulate = Color(0.88, 0.94, 1.0, 0.95)
+
+
+func _bag_filter_base_color(filter_id: String) -> Color:
+	match filter_id:
+		"all":
+			return Color("#3a4751")
+		"ammo":
+			return Color("#2f4a60")
+		"resource":
+			return Color("#35584f")
+		"weapon":
+			return Color("#5a3f50")
+		"equipment":
+			return Color("#3f5b55")
+		"mod":
+			return Color("#4a4d69")
+		_:
+			return Color("#3e4955")
+
+
+func _bag_filter_active_color(filter_id: String) -> Color:
+	match filter_id:
+		"all":
+			return Color("#5a738a")
+		"ammo":
+			return Color("#4b7ba3")
+		"resource":
+			return Color("#4f8d70")
+		"weapon":
+			return Color("#7f5b72")
+		"equipment":
+			return Color("#5f8b7c")
+		"mod":
+			return Color("#68658a")
+		_:
+			return Color("#5d7080")
+
+
+func _lighten_color(color: Color, amount: float) -> Color:
+	return Color(
+		minf(color.r + amount, 1.0),
+		minf(color.g + amount, 1.0),
+		minf(color.b + amount, 1.0),
+		color.a
+	)
+
+
+func _darken_color(color: Color, amount: float) -> Color:
+	return Color(
+		maxf(color.r - amount, 0.0),
+		maxf(color.g - amount, 0.0),
+		maxf(color.b - amount, 0.0),
+		color.a
+	)
+
+
+func _count_bag_items_for_filter(filter_id: String) -> int:
+	if game_state == null:
+		return 0
+	var count := 0
+	if _bag_filter_matches_item(filter_id, "ammo"):
+		count += 1
+	if _bag_filter_matches_item(filter_id, "resource"):
+		count += 1
+	var weapon_ids: Array = game_state.weapon_inventory.keys()
+	weapon_ids.sort()
+	for weapon_id_variant in weapon_ids:
+		var weapon_id := str(weapon_id_variant)
+		var quantity: int = int(game_state.get_weapon_count(weapon_id))
+		if quantity <= 0:
+			continue
+		if _bag_filter_matches_item(filter_id, "weapon"):
+			count += 1
+	if _bag_filter_matches_item(filter_id, "equipment"):
+		for equipment_id in game_state.equipment_inventory:
+			if int(game_state.get_equipment_count(str(equipment_id))) > 0:
+				count += 1
+	if _bag_filter_matches_item(filter_id, "mod"):
+		count += MOD_COMPONENTS.size()
+	return count
+
+
+func _show_inventory_feedback(message: String, color: Color = Color("#f2d27a")) -> void:
+	if inventory_feedback == null:
+		return
+	inventory_feedback.visible = true
+	inventory_feedback.text = message
+	inventory_feedback.add_theme_color_override("font_color", color)
+	inventory_feedback.modulate.a = 1.0
+	if feedback_tween:
+		feedback_tween.kill()
+	feedback_tween = null
+	if get_tree():
+		feedback_tween = get_tree().create_tween()
+		feedback_tween.tween_property(inventory_feedback, "modulate:a", 0.0, 1.2)
 
 
 func _refresh_contents() -> void:
@@ -358,11 +822,25 @@ func _refresh_contents() -> void:
 	_clear(equipped_grid)
 	_clear(bag_grid)
 	_clear(mod_slot_grid)
+	visible_bag_items = 0
+	_refresh_bag_filter_buttons()
 
 	equipped_grid.add_child(_equipment_button("주무기", weapon_texture, has_weapon_state, _show_weapon_detail))
 	equipped_grid.add_child(_equipment_button("보조무기", null, false))
-	equipped_grid.add_child(_equipment_button("몸체", null, false))
-	equipped_grid.add_child(_equipment_button("머리", null, false))
+	var body_id := str(game_state.equipped_body_armor_id)
+	var head_id := str(game_state.equipped_head_armor_id)
+	equipped_grid.add_child(_equipment_button(
+		_equipped_equipment_label("body", "몸 방어구"),
+		UI_ICONS.get_icon("armor", 48, Color("#b8c8be")),
+		not body_id.is_empty(),
+		func() -> void: _select_equipped_equipment("body")
+	))
+	equipped_grid.add_child(_equipment_button(
+		_equipped_equipment_label("head", "머리 방어구"),
+		UI_ICONS.get_icon("helmet", 48, Color("#b8c8be")),
+		not head_id.is_empty(),
+		func() -> void: _select_equipped_equipment("head")
+	))
 	equipped_grid.add_child(_equipment_button("가방", null, true))
 	equipped_grid.add_child(_equipment_button("보안 슬롯", null, false))
 	equipped_grid.add_child(_equipment_button("장신구", null, false))
@@ -370,7 +848,7 @@ func _refresh_contents() -> void:
 	_add_bag_item({
 		"id": "762_fmj",
 		"type": "ammo",
-		"title": "7.62mm 보통탄",
+		"title": "7.62mm 탄환",
 		"description": "현재 장착 총기에 사용하는 예비 탄약입니다.",
 		"quantity": reserve_state,
 		"texture": ammo_texture,
@@ -379,9 +857,9 @@ func _refresh_contents() -> void:
 		"id": "canned_food",
 		"type": "resource",
 		"title": "통조림",
-		"description": "쉘터 주민의 노동과 시설 운영에 필요한 기본 재화입니다.",
+		"description": "레이드에서 확보하는 핵심 식량이자 쉘터 노동 자원입니다.",
 		"quantity": canned_food_state,
-		"texture": null,
+		"texture": UI_ICONS.get_icon("food", 64, Color("#e6b65c")),
 	})
 
 	var weapon_ids: Array = game_state.weapon_inventory.keys()
@@ -396,9 +874,27 @@ func _refresh_contents() -> void:
 			"id": weapon_id,
 			"type": "weapon",
 			"title": str(definition.get("display_name", weapon_id)),
-			"description": "장비 중" if weapon_id == game_state.equipped_weapon_id else "쉘터 가방에 보관 중인 총기",
+			"description": "현재 장착 중이면 가방에서 즉시 장착됨" if weapon_id == game_state.equipped_weapon_id else "클릭: 장착하려면 가방에서 선택하세요",
 			"quantity": count,
 			"texture": weapon_textures.get(weapon_id) as Texture2D,
+		})
+
+	var equipment_ids: Array = game_state.equipment_inventory.keys()
+	equipment_ids.sort()
+	for equipment_id_variant in equipment_ids:
+		var equipment_id := str(equipment_id_variant)
+		var equipment_count := int(game_state.get_equipment_count(equipment_id))
+		if equipment_count <= 0:
+			continue
+		var equipment_definition: Dictionary = game_state.get_equipment_definition(equipment_id)
+		var equipment_slot := str(equipment_definition.get("slot", "body"))
+		_add_bag_item({
+			"id": equipment_id,
+			"type": "equipment",
+			"title": str(equipment_definition.get("display_name", equipment_id)),
+			"description": str(equipment_definition.get("description", "")),
+			"quantity": equipment_count,
+			"texture": UI_ICONS.get_icon("helmet" if equipment_slot == "head" else "armor", 64, Color("#b8c8be")),
 		})
 
 	var mod_ids: Array = MOD_COMPONENTS.keys()
@@ -421,17 +917,76 @@ func _refresh_contents() -> void:
 	for index in range(remainder):
 		bag_grid.add_child(_empty_slot())
 
-	var load := 6.3 + float(reserve_state) * 0.015 + float(canned_food_state) * 0.35 + float(stored_weapons_state) * 3.2
+	var equipment_weight := 0.0
+	for equipment_id_variant in game_state.equipment_inventory:
+		var equipment_id := str(equipment_id_variant)
+		var definition: Dictionary = game_state.get_equipment_definition(equipment_id)
+		equipment_weight += float(definition.get("weight", 0.0)) * float(game_state.get_equipment_count(equipment_id))
+	for equipped_id in [str(game_state.equipped_body_armor_id), str(game_state.equipped_head_armor_id)]:
+		if not equipped_id.is_empty():
+			equipment_weight += float(game_state.get_equipment_definition(equipped_id).get("weight", 0.0))
+	var load := 6.3 + float(reserve_state) * 0.015 + float(canned_food_state) * 0.35 + float(stored_weapons_state) * 3.2 + equipment_weight
 	weight_label.text = "%.1f / 49kg" % load
+	var weight_color := Color("#b7ef72")
+	if load >= BAG_WEIGHT_LIMIT:
+		weight_color = Color("#ff9595")
+	elif load >= BAG_WEIGHT_WARNING:
+		weight_color = Color("#e7d57b")
+	weight_label.add_theme_color_override("font_color", weight_color)
+	if scrap_label:
+		scrap_label.text = "쉘터 고철 %d" % int(game_state.scrap if game_state else 0)
 	weapon_panel.visible = weapon_detail_open and has_weapon_state
 	if weapon_detail_open and has_weapon_state:
 		_refresh_weapon_detail()
 	_refresh_item_detail()
+	_update_bag_empty_hint()
 
 
 func _add_bag_item(item: Dictionary) -> void:
+	if not _should_show_bag_item(item):
+		return
 	bag_grid.add_child(_bag_item_button(item))
+	visible_bag_items += 1
 
+
+func _update_bag_empty_hint() -> void:
+	if bag_empty_hint == null:
+		return
+	var empty := visible_bag_items <= 0
+	if empty:
+		bag_empty_hint.text = "%s 분류에 표시할 아이템이 없습니다." % _get_filter_display_name(bag_filter)
+		if not bag_empty_hint.visible:
+			bag_empty_hint.modulate = Color(1, 1, 1, 0)
+			bag_empty_hint.scale = Vector2(0.98, 0.98)
+			bag_empty_hint.visible = true
+			var old_tween := bag_empty_hint_tween
+			if old_tween is Tween and is_instance_valid(old_tween):
+				old_tween.kill()
+			bag_empty_hint_tween = create_tween()
+			bag_empty_hint_tween.tween_property(bag_empty_hint, "modulate", Color(1, 1, 1, 1), 0.16).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+			bag_empty_hint_tween.parallel().tween_property(bag_empty_hint, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		else:
+			var old_tween := bag_empty_hint_tween
+			if old_tween is Tween and is_instance_valid(old_tween):
+				old_tween.kill()
+			bag_empty_hint_tween = null
+			bag_empty_hint.scale = Vector2.ONE
+	else:
+		if bag_empty_hint.visible:
+			var old_tween := bag_empty_hint_tween
+			if old_tween is Tween and is_instance_valid(old_tween):
+				old_tween.kill()
+			bag_empty_hint_tween = create_tween()
+			bag_empty_hint_tween.tween_property(bag_empty_hint, "modulate", Color(1, 1, 1, 0), 0.14).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+			bag_empty_hint_tween.parallel().tween_property(bag_empty_hint, "scale", Vector2(0.98, 0.98), 0.14).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+			bag_empty_hint_tween.finished.connect(func() -> void:
+				if is_instance_valid(bag_empty_hint):
+					bag_empty_hint.visible = false
+					bag_empty_hint.text = ""
+				)
+		else:
+			bag_empty_hint.text = ""
+			bag_empty_hint_tween = null
 
 func _show_weapon_detail() -> void:
 	if not has_weapon_state:
@@ -441,12 +996,37 @@ func _show_weapon_detail() -> void:
 		"id": game_state.equipped_weapon_id,
 		"type": "weapon",
 		"title": weapon_name_state,
-		"description": "현재 장착한 총기입니다. 우측에서 부착 상태를 확인할 수 있습니다.",
+		"description": "현재 장착 중인 총기입니다. 오른쪽에서 부착 상태를 확인할 수 있습니다.",
 		"quantity": 1,
 		"texture": weapon_texture,
 	}
 	weapon_panel.visible = true
 	_refresh_weapon_detail()
+	_refresh_item_detail()
+
+
+func _equipped_equipment_label(slot: String, fallback: String) -> String:
+	var equipment_id := str(game_state.get_equipped_equipment(slot))
+	if equipment_id.is_empty():
+		return fallback
+	var definition: Dictionary = game_state.get_equipment_definition(equipment_id)
+	return str(definition.get("display_name", fallback))
+
+
+func _select_equipped_equipment(slot: String) -> void:
+	var equipment_id := str(game_state.get_equipped_equipment(slot))
+	if equipment_id.is_empty():
+		return
+	var definition: Dictionary = game_state.get_equipment_definition(equipment_id)
+	selected_item = {
+		"id": equipment_id,
+		"type": "equipment",
+		"title": str(definition.get("display_name", equipment_id)),
+		"description": str(definition.get("description", "")),
+		"quantity": 1,
+		"equipped": true,
+		"texture": UI_ICONS.get_icon("helmet" if slot == "head" else "armor", 64, Color("#b8c8be")),
+	}
 	_refresh_item_detail()
 
 
@@ -466,7 +1046,7 @@ func _refresh_weapon_detail() -> void:
 		game_state.mod_enhancement_levels
 	)
 	weapon_title.text = "%s  +%d" % [weapon_name_state, game_state.get_weapon_enhancement_level(game_state.equipped_weapon_id)]
-	weapon_preview.texture = weapon_texture
+	weapon_preview.texture = _weapon_preview_texture()
 	weapon_stats.text = "탄창 %02d / %02d  ·  예비 %03d\n내구도 %.1f%%  ·  탄퍼짐 %.1f°\n피해 %d  ·  반동 %.2f  ·  장전 %.1fs" % [
 		magazine_state,
 		magazine_size_state,
@@ -487,45 +1067,92 @@ func _select_item(item: Dictionary) -> void:
 	_refresh_item_detail()
 
 
+func _on_bag_item_pressed(item: Dictionary) -> void:
+	_select_item(item)
+	if not weapon_detail_open or str(item.get("type", "")) != "mod":
+		return
+	var mod_id := str(item.get("id", ""))
+	if int(item.get("quantity", 0)) <= 0:
+		return
+	var definition := WEAPON_SYSTEM.get_mod(mod_id)
+	var installed := _get_mod_in_slot(str(definition.get("slot", "")))
+	if installed != mod_id:
+		_install_mod(mod_id)
+
+
 func _refresh_item_detail() -> void:
 	if item_detail_title == null:
 		return
 	item_action_button.visible = false
 	item_action_button.disabled = false
+	if item_detail_reason:
+		item_detail_reason.text = ""
+		item_detail_reason.visible = false
 	if selected_item.is_empty():
-		item_detail_icon.texture = null
+		item_detail_icon.texture = UI_ICONS.get_icon("backpack", 72, Color("#71877c"))
 		item_detail_title.text = "아이템을 선택하세요"
-		item_detail_description.text = "가방 슬롯에는 이미지와 수량만 표시됩니다."
+		item_detail_description.text = "가방의 아이콘을 누르면 상세 정보가 표시됩니다."
 		return
 
-	item_detail_icon.texture = selected_item.get("texture") as Texture2D
-	item_detail_title.text = str(selected_item.get("title", "아이템"))
+	item_detail_icon.texture = _item_texture(selected_item)
+	item_detail_title.text = str(selected_item.get("title", ""))
 	item_detail_description.text = str(selected_item.get("description", ""))
 	var item_type := str(selected_item.get("type", ""))
 	if item_type == "weapon":
 		var weapon_id := str(selected_item.get("id", ""))
 		if weapon_id == game_state.equipped_weapon_id:
 			item_action_button.text = "총기 상세"
+			item_action_button.icon = UI_ICONS.get_icon("weapon", 28, Color("#e4d09a"))
 			item_action_button.visible = true
 		else:
-			item_detail_description.text += "  ·  총기 교체는 쉘터 장비대에서 가능합니다."
+			item_detail_description.text += "  ·  장착하면 현재 주무기를 교체합니다."
+			item_action_button.text = "장착"
+			item_action_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#bce6ca"))
+			item_action_button.visible = true
 	elif item_type == "mod":
 		var mod_id := str(selected_item.get("id", ""))
 		var definition := WEAPON_SYSTEM.get_mod(mod_id)
 		var slot := str(definition.get("slot", ""))
 		var installed := _get_mod_in_slot(slot)
-		var cost: Dictionary = MOD_COMPONENTS[mod_id]
+		var has_quantity := int(selected_item.get("quantity", 0)) > 0
+		var cost: Dictionary = MOD_COMPONENTS.get(mod_id, {})
 		var component_id := str(cost["component"])
 		var available: int = int(game_state.get_mod_component_count(component_id))
-		item_detail_description.text = "%s  ·  %s 슬롯  ·  재료 %d / %d" % [
+		item_detail_description.text = "%s  ·  %s 슬롯  ·  보유 재료 %d / %d" % [
 			_mod_description(mod_id),
 			_slot_name(slot),
 			available,
 			int(cost["amount"]),
 		]
 		item_action_button.text = "해제" if installed == mod_id else ("교체" if not installed.is_empty() else "장착")
+		item_action_button.icon = UI_ICONS.get_icon("close" if installed == mod_id else "mod", 28, Color("#e1d39a"))
 		item_action_button.visible = true
-		item_action_button.disabled = installed != mod_id and not _can_install_mod(mod_id)
+		var check := _get_mod_install_check(mod_id)
+		var can_install := bool(check.get("can_install", false))
+		item_action_button.disabled = installed != mod_id and (not has_quantity or not can_install)
+		if item_action_button.disabled:
+			var reason_text := ""
+			if installed != mod_id and not has_quantity:
+				reason_text = "수량이 부족합니다."
+			else:
+				reason_text = str(check.get("reason", ""))
+			if not reason_text.is_empty() and item_detail_reason:
+				item_detail_reason.text = reason_text
+				item_detail_reason.visible = true
+	elif item_type == "equipment":
+		var equipment_id := str(selected_item.get("id", ""))
+		var equipment_definition: Dictionary = game_state.get_equipment_definition(equipment_id)
+		var equipment_slot := str(equipment_definition.get("slot", "body"))
+		var reduction_percent := roundi(float(equipment_definition.get("damage_reduction", 0.0)) * 100.0)
+		var equipped_id := str(game_state.get_equipped_equipment(equipment_slot))
+		item_detail_description.text = "%s  ·  피해 감소 %d%%  ·  무게 %.1fkg" % [
+			str(equipment_definition.get("description", "방어 장비")),
+			reduction_percent,
+			float(equipment_definition.get("weight", 0.0)),
+		]
+		item_action_button.text = "해제" if equipped_id == equipment_id else "장착"
+		item_action_button.icon = UI_ICONS.get_icon("close" if equipped_id == equipment_id else "armor", 28, Color("#bce6ca"))
+		item_action_button.visible = true
 
 
 func _on_selected_item_action() -> void:
@@ -533,8 +1160,14 @@ func _on_selected_item_action() -> void:
 		return
 	var item_type := str(selected_item.get("type", ""))
 	var item_id := str(selected_item.get("id", ""))
-	if item_type == "weapon" and item_id == game_state.equipped_weapon_id:
-		_show_weapon_detail()
+	if item_type == "weapon":
+		if item_id == game_state.equipped_weapon_id:
+			_show_weapon_detail()
+		else:
+			weapon_equipped.emit(item_id)
+			if game_state.equipped_weapon_id == item_id:
+				_show_inventory_feedback("%s 장착" % str(selected_item.get("title", item_id)), Color("#a3ff92"))
+				_show_weapon_detail()
 	elif item_type == "mod":
 		var definition := WEAPON_SYSTEM.get_mod(item_id)
 		var installed := _get_mod_in_slot(str(definition.get("slot", "")))
@@ -542,6 +1175,19 @@ func _on_selected_item_action() -> void:
 			_unequip_mod(item_id)
 		else:
 			_install_mod(item_id)
+	elif item_type == "equipment":
+		var definition: Dictionary = game_state.get_equipment_definition(item_id)
+		var slot := str(definition.get("slot", "body"))
+		if str(game_state.get_equipped_equipment(slot)) == item_id:
+			game_state.unequip_equipment(slot)
+			_show_inventory_feedback("%s 해제" % str(definition.get("display_name", item_id)), Color("#d9c579"))
+		else:
+			game_state.equip_equipment(item_id)
+			_show_inventory_feedback("%s 장착" % str(definition.get("display_name", item_id)), Color("#a3ff92"))
+		game_state.save_persistent_state()
+		equipment_changed.emit()
+		selected_item = {}
+		_refresh_contents()
 
 
 func _build_mod_slot_button(slot: String) -> Button:
@@ -551,8 +1197,8 @@ func _build_mod_slot_button(slot: String) -> Button:
 		text = "%s\n%s\n클릭: 해제" % [_slot_name(slot), _mod_name(installed)]
 	var button := _tile_button(text, not installed.is_empty())
 	button.name = "ModSlot_%s" % slot
-	button.custom_minimum_size = Vector2(232, 84)
-	button.icon = _slot_icon(slot)
+	button.custom_minimum_size = Vector2(216, 72)
+	button.icon = _mod_icon(installed) if not installed.is_empty() else _slot_icon(slot)
 	button.expand_icon = true
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	if not installed.is_empty():
@@ -561,47 +1207,73 @@ func _build_mod_slot_button(slot: String) -> Button:
 
 
 func _can_install_mod(mod_id: String) -> bool:
+	return bool(_get_mod_install_check(mod_id).get("can_install", false))
+
+
+func _get_mod_install_check(mod_id: String) -> Dictionary:
+	var result := {"can_install": false, "reason": ""}
 	if not MOD_COMPONENTS.has(mod_id):
-		return false
+		result["reason"] = "모듈 정보가 없습니다."
+		return result
 	var definition := WEAPON_SYSTEM.get_mod(mod_id)
 	if definition.is_empty():
-		return false
+		result["reason"] = "알 수 없는 모듈입니다."
+		return result
 	var slot := str(definition.get("slot", ""))
 	var cost: Dictionary = MOD_COMPONENTS[mod_id]
 	var component_id := str(cost["component"])
+	var available_components: int = int(game_state.get_mod_component_count(component_id))
 	var next_mods: Array[String] = []
 	next_mods.assign(game_state.equipped_weapon_mods)
 	var currently_installed := _get_mod_in_slot(slot)
 	if not currently_installed.is_empty():
 		next_mods.erase(currently_installed)
+		var installed_cost: Dictionary = MOD_COMPONENTS.get(currently_installed, {})
+		if str(installed_cost.get("component", "")) == component_id:
+			available_components += int(installed_cost.get("amount", 0))
 	next_mods.append(mod_id)
-	return (
-		WEAPON_SYSTEM.validate_mod_loadout(next_mods, game_state.equipped_weapon_id)
-		and not (slot == "special" and game_state.shelter_workbench_level < 5)
-		and game_state.get_mod_component_count(component_id) >= int(cost["amount"])
-	)
+	if slot == "special" and game_state.shelter_workbench_level < 5:
+		result["reason"] = "작업대 레벨 5가 필요합니다."
+		return result
+	if not WEAPON_SYSTEM.validate_mod_loadout(next_mods, game_state.equipped_weapon_id):
+		result["reason"] = "슬롯 충돌 또는 장착 불가 부품입니다."
+		return result
+	if available_components < int(cost["amount"]):
+		result["reason"] = "재료가 부족합니다."
+		return result
+	result["can_install"] = true
+	result["reason"] = "설치 가능"
+	return result
 
 
 func _install_mod(mod_id: String) -> void:
-	if not _can_install_mod(mod_id):
+	var check := _get_mod_install_check(mod_id)
+	if not bool(check.get("can_install", false)):
+		_show_inventory_feedback("장착 실패: %s" % str(check.get("reason", "")), Color("#ff9f9f"))
 		return
 	var definition := WEAPON_SYSTEM.get_mod(mod_id)
 	var slot := str(definition.get("slot", ""))
 	var currently_installed := _get_mod_in_slot(slot)
 	var cost: Dictionary = MOD_COMPONENTS[mod_id]
 	var component_id := str(cost["component"])
-	game_state.mod_component_inventory[component_id] = game_state.get_mod_component_count(component_id) - int(cost["amount"])
 	if not currently_installed.is_empty():
 		_return_mod_component(currently_installed)
 		game_state.equipped_weapon_mods.erase(currently_installed)
+	game_state.mod_component_inventory[component_id] = game_state.get_mod_component_count(component_id) - int(cost["amount"])
 	game_state.equipped_weapon_mods.append(mod_id)
+	game_state.save_equipped_weapon_loadout()
+	_show_inventory_feedback("%s 장착" % _mod_name(mod_id), Color("#a3ff92"))
 	weapon_mods_changed.emit()
 	_refresh_contents()
 
 
 func _unequip_mod(mod_id: String) -> void:
+	if not game_state.equipped_weapon_mods.has(mod_id):
+		return
 	_return_mod_component(mod_id)
 	game_state.equipped_weapon_mods.erase(mod_id)
+	game_state.save_equipped_weapon_loadout()
+	_show_inventory_feedback("%s 해제" % _mod_name(mod_id), Color("#f5c96a"))
 	weapon_mods_changed.emit()
 	_refresh_contents()
 
@@ -625,9 +1297,9 @@ func _get_mod_in_slot(slot: String) -> String:
 func _equipment_button(slot_name: String, texture: Texture2D, active: bool, callback: Callable = Callable()) -> Button:
 	var button := _tile_button(slot_name, active)
 	button.name = "Equipment_%s" % slot_name
-	button.custom_minimum_size = Vector2(120, 70)
-	button.icon = texture
-	button.expand_icon = texture != null
+	button.custom_minimum_size = Vector2(108, 62)
+	button.icon = texture if texture != null else UI_ICONS.get_icon(_equipment_icon_name(slot_name), 48, Color("#8fa49a"))
+	button.expand_icon = true
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if callback.is_valid():
 		button.pressed.connect(callback)
@@ -636,13 +1308,24 @@ func _equipment_button(slot_name: String, texture: Texture2D, active: bool, call
 
 func _bag_item_button(item: Dictionary) -> Button:
 	var quantity := int(item.get("quantity", 0))
-	var button := _tile_button("", quantity > 0)
+	var item_type := str(item.get("type", ""))
+	var item_id := str(item.get("id", ""))
+	var has_quantity := quantity > 0
+	var button := _tile_button("", has_quantity)
+	button.disabled = not has_quantity
 	button.name = "BagItem_%s" % str(item.get("id", "item"))
-	button.custom_minimum_size = Vector2(92, 82)
-	button.icon = item.get("texture") as Texture2D
-	button.expand_icon = button.icon != null
+	button.custom_minimum_size = Vector2(82, 74)
+	button.tooltip_text = "%s  x%d" % [str(item.get("title", "")), quantity]
+	if not has_quantity:
+		button.tooltip_text += " (보유하지 않음)"
+	elif item_type == "mod" and not _can_install_mod(item_id):
+		var check: Dictionary = _get_mod_install_check(item_id)
+		button.tooltip_text += " · %s" % str(check.get("reason", "장착 불가"))
+	button.icon = _item_texture(item)
+	button.expand_icon = true
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.pressed.connect(func() -> void: _select_item(item))
+	if has_quantity:
+		button.pressed.connect(func() -> void: _on_bag_item_pressed(item))
 	var badge := Label.new()
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	badge.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -665,7 +1348,7 @@ func _bag_item_button(item: Dictionary) -> Button:
 func _empty_slot() -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.name = "EmptyBagSlot"
-	panel.custom_minimum_size = Vector2(92, 82)
+	panel.custom_minimum_size = Vector2(82, 74)
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.025, 0.031, 0.036, 0.6), Color(0.46, 0.52, 0.5, 0.25), 7))
 	return panel
 
@@ -684,16 +1367,62 @@ func _tile_button(text: String, active: bool) -> Button:
 	return button
 
 
-func _icon_text_button(text: String, tooltip: String) -> Button:
+func _icon_text_button(text: String, tooltip: String, icon_name := "") -> Button:
 	var button := Button.new()
 	button.text = text
 	button.tooltip_text = tooltip
 	button.focus_mode = Control.FOCUS_NONE
+	if not icon_name.is_empty():
+		button.icon = UI_ICONS.get_icon(icon_name, 28, Color("#dce6df"))
+		button.expand_icon = true
+		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_apply_button_font(button, 12)
 	button.add_theme_stylebox_override("normal", _panel_style(Color(0.07, 0.08, 0.084, 0.94), Color(0.55, 0.64, 0.61, 0.55), 6))
 	button.add_theme_stylebox_override("hover", _panel_style(Color(0.13, 0.105, 0.06, 0.98), Color("#d9c579"), 6))
 	button.add_theme_stylebox_override("disabled", _panel_style(Color(0.035, 0.04, 0.044, 0.65), Color(0.38, 0.42, 0.4, 0.22), 6))
 	return button
+
+
+func _filter_icon_name(filter_id: String) -> String:
+	match filter_id:
+		"ammo": return "ammo"
+		"resource": return "food"
+		"weapon": return "weapon"
+		"equipment": return "armor"
+		"mod": return "mod"
+	return "all"
+
+
+func _equipment_icon_name(slot_name: String) -> String:
+	match slot_name:
+		"Weapon", "주무기", "보조무기": return "weapon"
+		"Armor", "몸 방어구": return "armor"
+		"Helmet", "머리 방어구": return "helmet"
+		"Backpack", "가방": return "backpack"
+		"Secure", "보안 슬롯": return "secure"
+		"Accessory", "장신구": return "accessory"
+	return "all"
+
+
+func _item_texture(item: Dictionary) -> Texture2D:
+	var texture := item.get("texture") as Texture2D
+	if texture != null:
+		return texture
+	match str(item.get("type", "")):
+		"ammo": return UI_ICONS.get_icon("ammo", 64, Color("#d9c16f"))
+		"resource": return UI_ICONS.get_icon("food", 64, Color("#e6b65c"))
+		"weapon": return UI_ICONS.get_icon("weapon", 64, Color("#c6d2cc"))
+		"equipment":
+			var definition: Dictionary = game_state.get_equipment_definition(str(item.get("id", "")))
+			return UI_ICONS.get_icon("helmet" if str(definition.get("slot", "body")) == "head" else "armor", 64, Color("#b8c8be"))
+		"mod": return UI_ICONS.get_icon("mod", 64, Color("#8fd3c4"))
+	return UI_ICONS.get_icon("all", 64, Color("#8fa49a"))
+
+
+func _weapon_preview_texture() -> Texture2D:
+	if weapon_texture != null:
+		return weapon_texture
+	return UI_ICONS.get_icon("weapon", 96, Color("#c9d5ce"))
 
 
 func _section(text: String) -> Label:
@@ -709,7 +1438,8 @@ func _label(text: String, size: int, color: Color) -> Label:
 	label.add_theme_font_override("font", font_ref)
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", color)
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	return label
 
 
@@ -740,13 +1470,13 @@ func _slot_name(slot: String) -> String:
 		"sight":
 			return "조준경"
 		"muzzle":
-			return "총구"
+			return "소염기"
 		"stock":
 			return "개머리판"
 		"magazine":
 			return "탄창"
 		"tactical":
-			return "보조공구"
+			return "전술"
 		"special":
 			return "특수 모듈"
 	return slot
@@ -765,22 +1495,22 @@ func _mod_name(mod_id: String) -> String:
 		"bell_bait":
 			return "딸랑이 방울"
 		"ak_precision_receiver":
-			return "AK 정밀 단발 리시버"
-	return str(WEAPON_SYSTEM.get_mod(mod_id).get("display_name", mod_id))
+			return "AK 정밀 수신부"
+	return mod_id
 
 
 func _mod_description(mod_id: String) -> String:
 	match mod_id:
 		"scope_2x":
-			return "조준 시 시야와 중거리 집탄을 개선합니다."
+			return "조준 시 시야와 중거리 집탄율을 개선합니다."
 		"muffled_sock":
-			return "총성을 줄여 주변 적의 소리 감지 범위를 낮춥니다."
+			return "총성을 줄이는 임시 소음기입니다."
 		"sponge_pad":
 			return "반동 회복과 거치 안정성을 높입니다."
 		"quick_mag":
-			return "재장전 시간을 단축하는 테이프 결합 탄창입니다."
+			return "재장전 시간을 줄이는 테이프 결합 탄창입니다."
 		"bell_bait":
-			return "총성 위치와 다른 곳으로 적의 주의를 유도합니다."
+			return "총기 하단에 다는 전술용 방울입니다."
 		"ak_precision_receiver":
 			return "AK 단발 명중률을 크게 높이는 특수 모듈입니다."
 	return "총기 성능을 변경하는 부착물입니다."
@@ -809,6 +1539,16 @@ func _slot_icon(slot: String) -> ImageTexture:
 			if distance < 14.0 and distance > 8.0:
 				image.set_pixel(x, y, color)
 	return ImageTexture.create_from_image(image)
+
+
+func _mod_icon(mod_id: String) -> Texture2D:
+	var cost: Dictionary = MOD_COMPONENTS.get(mod_id, {})
+	var component_id := str(cost.get("component", ""))
+	var texture := component_textures.get(component_id) as Texture2D
+	if texture != null:
+		return texture
+	var definition := WEAPON_SYSTEM.get_mod(mod_id)
+	return _slot_icon(str(definition.get("slot", "")))
 
 
 func _panel_style(background: Color, border: Color, radius: int, width: int = 1) -> StyleBoxFlat:

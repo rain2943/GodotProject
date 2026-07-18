@@ -1,7 +1,6 @@
 extends Node
 
 const SHELTER_SCENE := preload("res://scenes/shelter_interior.tscn")
-const MERCHANT_TEXTURE_PATH := "res://assets/characters/merchant_cat/merchant_down_left_idle.png"
 
 
 func _ready() -> void:
@@ -11,6 +10,7 @@ func _ready() -> void:
 func _run() -> void:
 	var tree_root := get_tree().root
 	var game_state := tree_root.get_node("GameState")
+	game_state.set("persistence_enabled", false)
 	game_state.call("reset_run")
 	game_state.call("register_shelter_return")
 	assert(bool(game_state.call("roll_merchant_visit", 1.0)), "A forced merchant visit must enter the waiting state.")
@@ -25,20 +25,43 @@ func _run() -> void:
 	await get_tree().physics_frame
 	var waiting_marker := shelter.get_node_or_null("MerchantWaitingBubble") as Node3D
 	assert(waiting_marker != null, "A waiting merchant needs a sewer dialogue marker.")
-	var face := waiting_marker.get_node("MerchantFace") as Sprite3D
-	assert(face.texture is AtlasTexture)
-	assert((face.texture as AtlasTexture).atlas.resource_path == MERCHANT_TEXTURE_PATH)
-	assert((waiting_marker.get_node("MerchantKnockLine") as Label3D).text.contains("문 좀 열어"))
+	var workbench := shelter.get_node("StageOneModules/WeaponWorkbench") as Node3D
+	assert(workbench.position.x <= 1.5, "The workbench must stay clear of the merchant area on the left side of the upper wall.")
+	var arrival_notice := tree_root.find_child("MerchantArrivalNotice", true, false) as PanelContainer
+	assert(arrival_notice != null and arrival_notice.visible, "A waiting merchant needs a clean HUD arrival notice.")
+	assert(waiting_marker.get_node_or_null("MerchantFace") == null, "The sewer marker must not use a floating merchant portrait.")
+	var arrow := waiting_marker.get_node("MerchantArrow") as Label3D
+	assert(arrow.text == "▼")
+	assert(arrow.position.y <= 3.55 and arrow.position.y >= 2.3)
+	assert((waiting_marker.get_node("MerchantKnockLine") as Label3D).text.contains("기다리는 중"))
+	var shelter_player := shelter.get_node("ShelterPlayer") as CharacterBody3D
+	var pipe_position := shelter.call("_pipe_position") as Vector3
+	shelter_player.position = Vector3(pipe_position.x, 0.78, pipe_position.z)
+	shelter.call("_update_nearby_station")
+	assert(str(shelter.get("current_station")) == "merchant_waiting", "Merchant dialogue must replace sewer exploration while the visitor waits.")
+	assert((shelter.get("prompt_label") as Label).text.contains("누군가와 대화"))
+	assert((shelter.get("interact_button") as Button).text == "대화")
 
 	shelter.call("_open_merchant_arrival_dialog")
-	assert(tree_root.find_child("MerchantArrivalLayer", true, false) != null)
+	var arrival_layer := tree_root.find_child("MerchantArrivalLayer", true, false)
+	assert(arrival_layer != null)
+	var arrival_card := arrival_layer.find_child("MerchantArrivalCard", true, false) as PanelContainer
+	assert(arrival_card != null and arrival_card.custom_minimum_size == Vector2(580, 286))
 	shelter.call("_accept_merchant")
 	await get_tree().process_frame
 	assert(str(game_state.get("merchant_status")) == "inside")
+	assert(not arrival_notice.visible, "The arrival notice must clear after a decision.")
+	shelter.call("_update_nearby_station")
+	assert(str(shelter.get("current_station")) == "pipe_exit", "The sewer must become an exploration exit again after the decision.")
 	assert(get_tree().get_nodes_in_group("shelter_merchant").size() == 1)
 	var merchant := get_tree().get_nodes_in_group("shelter_merchant")[0] as Node3D
 	var sprite := merchant.get_node("MerchantSprite") as AnimatedSprite3D
 	assert(sprite.sprite_frames.get_frame_count("idle_down_left") == 4)
+	var residents_before := int(game_state.get("rescued_workers"))
+	assert(bool(shelter.call("_add_debug_resident")), "Debug key 3 must be able to add a resident while capacity remains.")
+	await get_tree().process_frame
+	assert(int(game_state.get("rescued_workers")) == residents_before + 1)
+	assert((shelter.get("shelter_residents") as Array).size() == residents_before + 1)
 
 	game_state.set("scrap", 500)
 	var ammo_before := int(game_state.call("get_ammo_count", "762_fmj"))
@@ -56,10 +79,12 @@ func _run() -> void:
 	await get_tree().process_frame
 	shop_list = shelter.get("merchant_shop_list") as VBoxContainer
 	var ammo_sell_button := shop_list.get_node("MerchantGood_762_fmj") as Button
+	var canned_food_before := int(game_state.get("canned_food"))
 	ammo_sell_button.pressed.emit()
 	await get_tree().process_frame
 	assert(int(game_state.call("get_ammo_count", "762_fmj")) == ammo_before)
-	assert(int(game_state.get("scrap")) == 474)
+	assert(int(game_state.get("scrap")) == 458, "Merchant sales must never create shelter scrap.")
+	assert(int(game_state.get("canned_food")) == canned_food_before + 2)
 
 	print("SHELTER_MERCHANT_OK waiting=true accepted=true idle_frames=4 trade=true")
 	get_tree().quit(0)

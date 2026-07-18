@@ -1,0 +1,201 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-curation",
+  "states": {
+    "down_action": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "77c685f1c3dd"
+      ]
+    },
+    "down_right_action": {
+      "selected": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "4c2bda659fe3",
+        "d04bf4fe5e0c"
+      ]
+    },
+    "right_action": {
+      "selected": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "revision": [
+        "d44f1721d1ab"
+      ]
+    },
+    "up_right_action": {
+      "selected": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "c5cb15d24c07",
+        "0c9fac2b5dd3"
+      ]
+    },
+    "up_action": {
+      "selected": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        1,
+        2,
+        3,
+        0
+      ],
+      "revision": [
+        "3910d3f41296",
+        "e190813a3f96"
+      ]
+    },
+    "up_left_action": {
+      "selected": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "01e381128819",
+        "5bab7c51ca78"
+      ]
+    },
+    "left_action": {
+      "selected": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "c5ebcfbe1fc7",
+        "a6da2d29727e"
+      ]
+    },
+    "down_left_action": {
+      "selected": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "order": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "transforms": {},
+      "skeleton_included": true,
+      "deleted": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "revision": [
+        "cca367943d29",
+        "80cd07308778"
+      ]
+    }
+  },
+  "run_revision": "6f05f139cce4768b"
+}

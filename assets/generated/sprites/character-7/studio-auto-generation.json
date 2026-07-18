@@ -1,0 +1,24 @@
+{
+  "id": "d9e4f24dda8c431ab6aca76549c3197e",
+  "status": "completed",
+  "total": 1,
+  "completed": 1,
+  "currentState": null,
+  "currentIndex": null,
+  "states": [
+    "custom_idle"
+  ],
+  "results": [
+    {
+      "state": "custom_idle",
+      "poseTemplateUsed": false,
+      "recovered": false
+    }
+  ],
+  "skeletonProfileId": null,
+  "kind": "custom_animation",
+  "label": "idle",
+  "startedAt": "2026-07-18T12:46:57+0900",
+  "regenerateExisting": false,
+  "finishedAt": "2026-07-18T12:48:02+0900"
+}

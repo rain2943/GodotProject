@@ -8,6 +8,7 @@ const PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
 const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_wall_aligned_v1.png"
 const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_wall_aligned_v1.png"
 const CATNIP_SCRAPER_TEXTURE_PATH := "res://assets/interiors/modules/catnip_scraper_wall_aligned_v1.png"
+const TRAINING_TEXTURE_PATH := "res://assets/interiors/modules/shelter_training_wall_aligned_v1.png"
 
 
 func _initialize() -> void:
@@ -22,6 +23,7 @@ func _run() -> void:
 	assert(ResourceLoader.exists(WORKBENCH_TEXTURE_PATH))
 	assert(ResourceLoader.exists(SCRATCHER_BANK_TEXTURE_PATH))
 	assert(ResourceLoader.exists(CATNIP_SCRAPER_TEXTURE_PATH))
+	assert(ResourceLoader.exists(TRAINING_TEXTURE_PATH))
 	var shelter := load(SHELTER_SCENE_PATH).instantiate() as Node3D
 	root.add_child(shelter)
 	await process_frame
@@ -30,7 +32,7 @@ func _run() -> void:
 	var room_art := shelter.get_node("ShelterInteriorArt") as MeshInstance3D
 	assert(room_art != null)
 	var room_mesh := room_art.mesh as PlaneMesh
-	assert(room_mesh.size == Vector2(44.0, 25.0))
+	assert(room_mesh.size == Vector2(48.0, 28.0))
 	var room_material := room_mesh.material as StandardMaterial3D
 	assert(room_material.albedo_texture.resource_path == FLOOR_TEXTURE_PATH)
 	assert(room_material.texture_repeat)
@@ -53,11 +55,12 @@ func _run() -> void:
 	assert(int(module_root.get_meta("stage")) == 1)
 	assert(int(module_root.get_meta("cat_capacity")) == 5)
 	assert(module_root.get_meta("module_grid_size") == Vector2(2.65, 3.45))
-	assert(get_nodes_in_group("shelter_module_slot").size() == 5)
-	assert(get_nodes_in_group("shelter_bed").size() == 5)
+	assert(get_nodes_in_group("shelter_module_slot").size() == 1)
+	assert(get_nodes_in_group("shelter_bed").size() == 1)
 	assert(get_nodes_in_group("shelter_workbench").size() == 1)
 	assert(get_nodes_in_group("scratcher_bank").size() == 1)
 	assert(get_nodes_in_group("catnip_scraper").size() == 1)
+	assert(get_nodes_in_group("training_facility").size() == 1)
 	for slot in get_nodes_in_group("shelter_module_slot"):
 		assert(bool(slot.get_meta("replaceable")))
 		assert(str(slot.get_meta("module_kind")) == "bed")
@@ -86,6 +89,10 @@ func _run() -> void:
 	var catnip_sprite := catnip_scraper.get_node("ScraperSprite") as Sprite3D
 	assert(catnip_sprite.texture.resource_path == CATNIP_SCRAPER_TEXTURE_PATH)
 	assert(catnip_scraper.has_method("interact"))
+	var training := get_nodes_in_group("training_facility")[0] as Node
+	var training_sprite := training.get_node("TrainingSprite") as Sprite3D
+	assert(training_sprite.texture.resource_path == TRAINING_TEXTURE_PATH)
+	assert(training.has_method("interact"))
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)
 	for wall_name in [
@@ -102,5 +109,5 @@ func _run() -> void:
 	key_event.pressed = true
 	assert(bool(shortcut.call("is_shelter_shortcut", key_event)))
 
-	print("SHELTER_MODULAR_OK beds=5 catnip_scraper=true pipe_exit=true black_outside=true room=44x25")
+	print("SHELTER_MODULAR_OK beds=1 catnip_scraper=true training=true pipe_exit=true room=48x28")
 	quit(0)

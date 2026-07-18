@@ -1,0 +1,18 @@
+Create a production-ready 2D game sprite strip from the supplied base character.
+
+Identity lock: preserve the exact character design, proportions, face, clothing, backpack, tail, palette, outline weight, and pixel-art rendering from the base reference. Do not redesign or beautify the character.
+Direction: custom — the same canonical facing direction as the supplied base character. The head, torso, hips, legs, and feet must all face this same direction. Keep a fixed root and ground line unless the requested action explicitly needs a lunge or displacement.
+Action: up-right 방향으로 신나게 덩실덩실 꾹꾹이를 하는 애니메이션 스프라이트.
+Motion contract, left to right, exactly 6 panels:
+1. Frame 1: clear anticipation or starting pose for 'up-right 방향으로 신나게 덩실덩실 꾹꾹이를 하는 애니메이션 스프라이트'
+2. Frame 2: distinct in-between pose at about 20% of the action for 'up-right 방향으로 신나게 덩실덩실 꾹꾹이를 하는 애니메이션 스프라이트'
+3. Frame 3: distinct in-between pose at about 40% of the action for 'up-right 방향으로 신나게 덩실덩실 꾹꾹이를 하는 애니메이션 스프라이트'
+4. Frame 4: distinct in-between pose at about 60% of the action for 'up-right 방향으로 신나게 덩실덩실 꾹꾹이를 하는 애니메이션 스프라이트'
+5. Frame 5: distinct in-between pose at about 80% of the action for 'up-right 방향으로 신나게 덩실덩실 꾹꾹이를 하는 애니메이션 스프라이트'
+6. Frame 6: clear finish or recovery pose for 'up-right 방향으로 신나게 덩실덩실 꾹꾹이를 하는 애니메이션 스프라이트'
+Make the requested action unmistakable as a readable game animation. Every frame must be a distinct chronological pose with consistent handedness, limb continuity, scale, ground line, and facing. Do not duplicate poses or add unrelated locomotion.
+User correction: up-right 방향을 바라보면서 진짜 고양이처럼 꾹꾹이하는 동작
+
+
+Output contract: one horizontal strip containing exactly 6 isolated full-body sprites, in the specified order, evenly spaced, equal scale and ground line. Use a perfectly flat solid #FF00FF background. No text, labels, arrows, borders, grid, scenery, cast shadow, extra character, or extra panel. Keep generous magenta separation between panels.
+Style contract: match the supplied base character exactly: preserve its proportions, face, clothing, accessories, palette, outline weight, and rendering style; do not redesign it

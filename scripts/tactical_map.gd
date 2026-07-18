@@ -4,12 +4,25 @@ const UI_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 var world: Node3D
 var player: Node3D
 var extraction_positions: Array[Vector3] = []
+var discovered_extraction_indices: Dictionary = {}
 
 
 func setup(world_node: Node3D, player_node: Node3D, extraction_world_positions: Array[Vector3]) -> void:
 	world = world_node
 	player = player_node
 	extraction_positions.assign(extraction_world_positions)
+	discovered_extraction_indices.clear()
+
+
+func discover_extraction(index: int) -> void:
+	if index < 0 or index >= extraction_positions.size():
+		return
+	discovered_extraction_indices[index] = true
+	queue_redraw()
+
+
+func is_extraction_discovered(index: int) -> bool:
+	return bool(discovered_extraction_indices.get(index, false))
 
 
 func _ready() -> void:
@@ -88,7 +101,10 @@ func _draw() -> void:
 		player_center = _world_position_to_map_point(player.global_position, map_rect, map_size)
 	var nearest_extraction := Vector2.ZERO
 	var nearest_distance := INF
-	for extraction_position in extraction_positions:
+	for extraction_index in extraction_positions.size():
+		if not is_extraction_discovered(extraction_index):
+			continue
+		var extraction_position := extraction_positions[extraction_index]
 		var extraction_center := _world_position_to_map_point(extraction_position, map_rect, map_size)
 		if is_instance_valid(player):
 			var distance := player.global_position.distance_to(extraction_position)
@@ -120,7 +136,16 @@ func _draw() -> void:
 		var sector := str(world.call("get_sector_label", player.global_position))
 		var label_position := player_center + Vector2(outer_radius + 7.0, -outer_radius * 0.45)
 		draw_string(UI_FONT, label_position, "내 위치  %s" % sector, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
-		draw_string(UI_FONT, panel_rect.position + Vector2(28, panel_rect.size.y - 22), "현재 %s   ·   가장 가까운 탈출구 %.0fm   ·   TAB 닫기" % [sector, nearest_distance], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#d7d4b9"))
+		var footer := "현재 %s   ·   발견한 탈출구 %d / %d   ·   TAB 닫기" % [
+			sector,
+			discovered_extraction_indices.size(),
+			extraction_positions.size(),
+		]
+		if nearest_distance < INF:
+			footer = "현재 %s   ·   가장 가까운 발견 탈출구 %.0fm   ·   TAB 닫기" % [sector, nearest_distance]
+		draw_string(UI_FONT, panel_rect.position + Vector2(28, panel_rect.size.y - 22), footer, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#d7d4b9"))
+	if discovered_extraction_indices.is_empty():
+		draw_string(UI_FONT, map_rect.get_center() + Vector2(-170, 6), "탈출구 미발견 · 직접 시야로 찾아야 합니다", HORIZONTAL_ALIGNMENT_CENTER, 340, 17, Color("#d9c579"))
 
 	draw_polyline(_closed_polygon(map_boundary), Color("#7c8982"), 2.0)
 

@@ -209,6 +209,61 @@ class GenerationConcurrencyTests(unittest.TestCase):
         self.assertTrue(result["publishedAsPrimary"])
         self.assertEqual(observed, [{"primary": True, "takes": []}])
 
+    def test_run_snapshot_waits_for_request_and_manifest_commit(self) -> None:
+        entered_snapshot = threading.Event()
+        finished_snapshot = threading.Event()
+        result = []
+
+        def fake_build(_run_dir):
+            entered_snapshot.set()
+            return {"ok": True}
+
+        def read_snapshot():
+            result.append(server.build_run_state(self.run_dir))
+            finished_snapshot.set()
+
+        with mock.patch.object(server, "_build_run_state_impl", side_effect=fake_build):
+            with server._generation_commit_lock:
+                thread = threading.Thread(target=read_snapshot)
+                thread.start()
+                time.sleep(0.05)
+                self.assertFalse(entered_snapshot.is_set())
+                self.assertFalse(finished_snapshot.is_set())
+            thread.join(1)
+
+        self.assertTrue(entered_snapshot.is_set())
+        self.assertTrue(finished_snapshot.is_set())
+        self.assertEqual(result, [{"ok": True}])
+
+    def test_run_snapshot_retries_transient_candidate_count_mismatch(self) -> None:
+        mismatch = SystemExit(
+            "corrupt frames manifest run: row 'custom_animation' has 12 frame(s), "
+            "request expects 18"
+        )
+        with (
+            mock.patch.object(
+                server, "_build_run_state_impl", side_effect=[mismatch, {"ok": True}]
+            ) as build,
+            mock.patch.object(server, "_transient_generation_mismatch", return_value=True),
+            mock.patch.object(server.time, "sleep"),
+        ):
+            result = server.build_run_state(self.run_dir)
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(build.call_count, 2)
+
+    def test_run_snapshot_does_not_hide_permanent_manifest_corruption(self) -> None:
+        mismatch = SystemExit(
+            "corrupt frames manifest run: row 'custom_animation' has 12 frame(s), "
+            "request expects 18"
+        )
+        with (
+            mock.patch.object(server, "_build_run_state_impl", side_effect=mismatch),
+            mock.patch.object(server, "_transient_generation_mismatch", return_value=False),
+        ):
+            with self.assertRaises(SystemExit):
+                server.build_run_state(self.run_dir)
+
     def test_diagonal_direction_uses_the_longest_matching_prefix(self) -> None:
         request = json.loads((self.run_dir / "sprite-request.json").read_text(encoding="utf-8"))
         request["directions"]["match_longest"] = True
@@ -330,6 +385,40 @@ class GenerationConcurrencyTests(unittest.TestCase):
         self.assertEqual(saved["status"], "completed")
         self.assertEqual(saved["completed"], 2)
 
+    def test_auto_generation_retries_chroma_contaminated_take_once(self) -> None:
+        request_path = self.run_dir / "sprite-request.json"
+        request = json.loads(request_path.read_text(encoding="utf-8"))
+        request["states"] = {"down_idle": request["states"]["down_idle"]}
+        request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
+        calls = []
+
+        def fake_state_generation(_run_dir, payload):
+            calls.append(payload)
+            if len(calls) == 1:
+                raise RuntimeError("down_idle: frame 02 has 271 chroma-adjacent pixels")
+            return {"ok": True, "poseTemplateUsed": False}
+
+        skeleton = (self.run_dir, {
+            "profileId": "saved-skeleton",
+            "states": {"down_idle": {}},
+        })
+        with (
+            mock.patch.object(server, "_active_skeleton_profile", return_value=skeleton),
+            mock.patch.object(server, "generate_state_take", side_effect=fake_state_generation),
+        ):
+            server.start_auto_generation(self.run_dir, {})
+            deadline = time.monotonic() + 2
+            status = server.auto_generation_status(self.run_dir)
+            while status["status"] in ("queued", "running") and time.monotonic() < deadline:
+                time.sleep(0.01)
+                status = server.auto_generation_status(self.run_dir)
+
+        self.assertEqual(status["status"], "completed")
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn("extraPrompt", calls[0])
+        self.assertIn("foreground pixels blended", calls[1]["extraPrompt"])
+        self.assertTrue(status["results"][0]["qualityRetry"])
+
     def test_base_character_can_regenerate_from_saved_upload(self) -> None:
         uploaded = base64.b64encode((self.run_dir / "base-source.png").read_bytes()).decode("ascii")
         prompts = []
@@ -384,6 +473,26 @@ class GenerationConcurrencyTests(unittest.TestCase):
         ):
             result = server.generate_state_take(self.run_dir, {"state": state})
         self.assertEqual(len(result["generatedIndices"]), 6)
+
+    def test_directional_custom_animation_uses_requested_screen_direction(self) -> None:
+        request = json.loads((self.run_dir / "sprite-request.json").read_text(encoding="utf-8"))
+        request["states"]["up_right_action"] = {
+            "frames": 4,
+            "fps": 8,
+            "loop": True,
+            "action": "swing a sword",
+            "custom_animation": {
+                "name": "swing",
+                "prompt": "swing a sword",
+                "directional_skeleton": True,
+            },
+        }
+        prompt = server._generation_prompt(request, "up_right_action", "", None)
+
+        self.assertIn("facing the upper-right corner of the image", prompt)
+        self.assertNotIn("same canonical facing direction", prompt)
+        self.assertIn("Do not add motion trails, slash arcs", prompt)
+        self.assertIn("colors are reserved exclusively for the removable background", prompt)
 
     def test_notifications_are_persistent_and_readable(self) -> None:
         first = server._add_notification(self.run_dir, "state_generated", state="down_idle")

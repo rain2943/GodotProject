@@ -1,0 +1,53 @@
+{
+  "id": "6887735e93c14f8e968a5ab853b7be0a",
+  "status": "completed",
+  "total": 5,
+  "completed": 5,
+  "currentState": null,
+  "currentIndex": null,
+  "states": [
+    "up_right_action",
+    "up_action",
+    "up_left_action",
+    "left_action",
+    "down_left_action"
+  ],
+  "results": [
+    {
+      "state": "up_right_action",
+      "poseTemplateUsed": false,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "up_action",
+      "poseTemplateUsed": false,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "up_left_action",
+      "poseTemplateUsed": false,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "left_action",
+      "poseTemplateUsed": false,
+      "recovered": false,
+      "qualityRetry": false
+    },
+    {
+      "state": "down_left_action",
+      "poseTemplateUsed": false,
+      "recovered": false,
+      "qualityRetry": false
+    }
+  ],
+  "skeletonProfileId": null,
+  "kind": "skeleton_generation",
+  "label": "????",
+  "startedAt": "2026-07-18T19:03:28+0900",
+  "regenerateExisting": false,
+  "finishedAt": "2026-07-18T19:09:22+0900"
+}

@@ -1,9 +1,18 @@
 extends Node3D
 
+const SALVAGE_TEXTURE := preload("res://assets/interiors/office_dungeon/modules/office_salvage_loot_v1.png")
+const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
+const COMPONENT_TEXTURES := [
+	preload("res://assets/items/mod_components/rubber_gasket.png"),
+	preload("res://assets/items/mod_components/scope_lens.png"),
+	preload("res://assets/items/mod_components/magazine_spring.png"),
+]
+const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+
 signal collected(loot_key: String, description: String)
 
 var loot_key := ""
-var loot_type := "scrap"
+var loot_type := "canned_food"
 var amount := 1
 var floor_number := 1
 @onready var BuildingRunState: Node = get_node("/root/BuildingRunState")
@@ -38,21 +47,34 @@ func interact() -> String:
 		return "이미 비어 있습니다."
 	var description := ""
 	match loot_type:
-		"scrap":
-			GameState.scrap += amount
-			description = "고철 %d 획득" % amount
 		"ammo":
-			GameState.reserve_ammo += amount
+			GameState.set_ammo_count(
+				GameState.equipped_ammo_id,
+				GameState.get_ammo_count(GameState.equipped_ammo_id) + amount
+			)
 			description = "탄약 %d발 획득" % amount
+		"canned_food":
+			GameState.canned_food += amount
+			description = "통조림 %d개 획득" % amount
 		"component":
-			var component_ids := ["rubber_gasket", "scope_lens", "magazine_spring"]
-			var component_id: String = component_ids[absi(loot_key.hash()) % component_ids.size()]
-			GameState.mod_component_inventory[component_id] = int(GameState.mod_component_inventory.get(component_id, 0)) + amount
-			description = "제작 부품 %d개 획득" % amount
+			var component_id := _resolved_component_id()
+			GameState.add_mod_component(component_id, amount)
+			description = "%s %d개 획득" % [_component_display_name(component_id), amount]
+		"weapon":
+			var weapon_id := _resolved_weapon_id()
+			GameState.add_weapon(weapon_id, amount)
+			description = "%s 획득 · 가방에서 장착" % _weapon_display_name(weapon_id)
+		"equipment":
+			var equipment_id := _resolved_equipment_id()
+			GameState.add_equipment(equipment_id, amount)
+			var definition: Dictionary = GameState.get_equipment_definition(equipment_id)
+			description = "%s 획득 · 가방에서 장착" % str(definition.get("display_name", "방어구"))
 		_:
-			GameState.scrap += amount
-			description = "물자 %d 획득" % amount
+			# Legacy/unknown field loot is converted to food. Scrap is shelter-produced only.
+			GameState.canned_food += maxi(1, amount)
+			description = "통조림 %d개 획득" % maxi(1, amount)
 	BuildingRunState.mark_loot_collected(floor_number, loot_key)
+	GameState.save_persistent_state()
 	collected.emit(loot_key, description)
 	queue_free()
 	return description
@@ -61,16 +83,44 @@ func interact() -> String:
 func _display_name() -> String:
 	match loot_type:
 		"ammo": return "탄약 상자"
+		"canned_food": return "비상 식량"
 		"component": return "부품 보관함"
-	return "사무실 잔해"
+		"weapon": return "버려진 총기"
+		"equipment": return "방어 장비"
+	return "보급품"
 
 
 func _build_visual() -> void:
-	var color := Color("#71583e")
-	if loot_type == "ammo": color = Color("#556348")
-	elif loot_type == "component": color = Color("#465c68")
-	_add_box("LootCrate", Vector3(0, 0.32, 0), Vector3(0.95, 0.64, 0.78), color)
-	_add_box("LootLid", Vector3(0, 0.68, 0), Vector3(1.02, 0.11, 0.84), color.lightened(0.12))
+	var texture: Texture2D = SALVAGE_TEXTURE
+	var pixel_size := 0.00075
+	match loot_type:
+		"ammo":
+			texture = AMMO_TEXTURE
+			pixel_size = 0.0032
+		"canned_food":
+			texture = UI_ICONS.get_icon("food", 96, Color("#d9b85f"))
+			pixel_size = 0.007
+		"component":
+			texture = COMPONENT_TEXTURES[absi(loot_key.hash()) % COMPONENT_TEXTURES.size()]
+			pixel_size = 0.00075
+		"weapon":
+			texture = UI_ICONS.get_icon("weapon", 96, Color("#c4d0ca"))
+			pixel_size = 0.007
+		"equipment":
+			var equipment: Dictionary = GameState.get_equipment_definition(_resolved_equipment_id())
+			var icon_name := "helmet" if str(equipment.get("slot", "body")) == "head" else "armor"
+			texture = UI_ICONS.get_icon(icon_name, 96, Color("#a9c8b8"))
+			pixel_size = 0.007
+	var sprite := Sprite3D.new()
+	sprite.name = "GeneratedLootVisual"
+	sprite.texture = texture
+	sprite.pixel_size = pixel_size
+	sprite.position = Vector3(0, float(texture.get_height()) * pixel_size * 0.5, 0)
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.shaded = false
+	sprite.transparent = true
+	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	add_child(sprite)
 	var marker := Label3D.new()
 	marker.name = "LootMarker"
 	marker.position = Vector3(0, 1.25, 0)
@@ -82,15 +132,32 @@ func _build_visual() -> void:
 	add_child(marker)
 
 
-func _add_box(node_name: String, local_position: Vector3, size: Vector3, color: Color) -> void:
-	var instance := MeshInstance3D.new()
-	instance.name = node_name
-	instance.position = local_position
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = 0.86
-	mesh.material = material
-	instance.mesh = mesh
-	add_child(instance)
+func _resolved_component_id() -> String:
+	var component_ids: Array[String] = ["rubber_gasket", "scope_lens", "magazine_spring"]
+	return component_ids[absi(loot_key.hash()) % component_ids.size()]
+
+
+func _resolved_weapon_id() -> String:
+	var weapon_ids: Array[String] = ["m1911", "mp5", "double_barrel"]
+	return weapon_ids[absi(loot_key.hash()) % weapon_ids.size()]
+
+
+func _resolved_equipment_id() -> String:
+	var equipment_ids: Array[String] = ["scav_vest", "patched_helmet", "riot_vest", "tactical_helmet"]
+	return equipment_ids[absi(loot_key.hash()) % equipment_ids.size()]
+
+
+func _component_display_name(component_id: String) -> String:
+	match component_id:
+		"rubber_gasket": return "고무 패킹"
+		"scope_lens": return "스코프 렌즈"
+		"magazine_spring": return "탄창 스프링"
+	return "총기 부품"
+
+
+func _weapon_display_name(weapon_id: String) -> String:
+	match weapon_id:
+		"m1911": return "M1911"
+		"mp5": return "MP5"
+		"double_barrel": return "더블배럴 산탄총"
+	return "총기"

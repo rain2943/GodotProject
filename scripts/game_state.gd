@@ -1,8 +1,28 @@
 extends Node
 
+const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
+
 var map_seed: int = 47291
 var raid_serial: int = 0
 var player_health: int = 82
+var player_level: int = 1
+var player_xp: int = 0
+var pending_level_choices: int = 0
+var player_stat_levels: Dictionary = {
+	"max_health": 0,
+	"max_stamina": 0,
+	"move_speed": 0,
+	"recovery": 0,
+	"toughness": 0,
+	"fatigue_resistance": 0,
+}
+var training_levels: Dictionary = {
+	"vitality": 0,
+	"endurance": 0,
+	"agility": 0,
+	"recovery": 0,
+	"fieldcraft": 0,
+}
 var magazine_ammo: int = 30
 var reserve_ammo: int = 90
 var has_ak: bool = true
@@ -24,11 +44,20 @@ var mod_component_inventory: Dictionary = {
 	"magazine_spring": 0,
 }
 var weapon_inventory: Dictionary = {"ak47": 1}
+var equipment_inventory: Dictionary = {
+	"scav_vest": 0,
+	"riot_vest": 0,
+	"patched_helmet": 0,
+	"tactical_helmet": 0,
+}
+var equipped_body_armor_id: String = ""
+var equipped_head_armor_id: String = ""
 var returning_from_shelter: bool = false
 var world_time_hours: float = 9.0
 var equipped_weapon_id: String = "ak47"
 var weapon_durability: float = 100.0
 var equipped_weapon_mods: Array[String] = []
+var weapon_mod_loadouts: Dictionary = {"ak47": []}
 var equipped_magazine_id: String = "ak_30rnd"
 var equipped_ammo_id: String = "762_fmj"
 var ammo_inventory: Dictionary = {
@@ -43,6 +72,8 @@ var shelter_workbench_level: int = 1
 var shelter_tier: int = 1
 var scratcher_bank_level: int = 1
 var scratcher_multiplier: float = 1.0
+var catnip_scraper_level: int = 1
+var catnip_scraper_multiplier: float = 1.0
 var catnip_boost_end_time: int = 0
 var shelter_last_progress_time: int = 0
 var workbench_repair_active: bool = false
@@ -68,6 +99,54 @@ var persistence_path: String = SAVE_PATH
 const SAVE_PATH := "user://shelter_progress_v2.json"
 const MAX_WEAPON_ENHANCEMENT := 99
 const ARTISAN_PITY_LIMIT := 10
+const EQUIPMENT_DEFINITIONS := {
+	"scav_vest": {
+		"display_name": "누더기 방탄 조끼", "slot": "body", "damage_reduction": 0.12,
+		"weight": 3.8, "icon": "armor", "description": "얇은 철판을 덧댄 경량 조끼. 받는 피해를 12% 줄입니다.",
+	},
+	"riot_vest": {
+		"display_name": "진압대 방탄 조끼", "slot": "body", "damage_reduction": 0.22,
+		"weight": 6.2, "icon": "armor", "description": "무겁지만 튼튼한 진압 장비. 받는 피해를 22% 줄입니다.",
+	},
+	"patched_helmet": {
+		"display_name": "기워 붙인 헬멧", "slot": "head", "damage_reduction": 0.08,
+		"weight": 1.4, "icon": "helmet", "description": "금이 간 안전모를 보강했습니다. 받는 피해를 8% 줄입니다.",
+	},
+	"tactical_helmet": {
+		"display_name": "전술 방탄 헬멧", "slot": "head", "damage_reduction": 0.15,
+		"weight": 2.1, "icon": "helmet", "description": "군용 내피가 남아 있는 헬멧. 받는 피해를 15% 줄입니다.",
+	},
+}
+const PLAYER_LEVEL_REWARDS := {
+	"max_health": {"title": "생존 체질", "description": "최대 체력 +8", "icon": "health"},
+	"max_stamina": {"title": "지구력", "description": "최대 스태미나 +10", "icon": "stamina"},
+	"move_speed": {"title": "민첩한 발", "description": "이동 속도 +2.5%", "icon": "speed"},
+	"recovery": {"title": "호흡 조절", "description": "스태미나 회복 +7%", "icon": "recovery"},
+	"toughness": {"title": "충격 적응", "description": "받는 피해 -2%", "icon": "armor"},
+	"fatigue_resistance": {"title": "현장 적응", "description": "피로 획득 -5%", "icon": "fitness"},
+}
+const TRAINING_NODE_DEFS := {
+	"vitality": {
+		"title": "중량 훈련", "description": "랭크마다 최대 체력 +10", "icon": "health",
+		"max_rank": 5, "base_cost": 2, "cost_step": 2, "requires": {},
+	},
+	"endurance": {
+		"title": "유산소 훈련", "description": "랭크마다 최대 스태미나 +12", "icon": "stamina",
+		"max_rank": 5, "base_cost": 2, "cost_step": 2, "requires": {},
+	},
+	"recovery": {
+		"title": "회복 루틴", "description": "랭크마다 스태미나 회복 +8%", "icon": "recovery",
+		"max_rank": 4, "base_cost": 4, "cost_step": 3, "requires": {"vitality": 2},
+	},
+	"agility": {
+		"title": "풋워크", "description": "랭크마다 이동 속도 +2%", "icon": "speed",
+		"max_rank": 4, "base_cost": 4, "cost_step": 3, "requires": {"endurance": 2},
+	},
+	"fieldcraft": {
+		"title": "현장 체력", "description": "랭크마다 피로 획득 -7%", "icon": "fitness",
+		"max_rank": 3, "base_cost": 8, "cost_step": 5, "requires": {"recovery": 2, "agility": 2},
+	},
+}
 const RAID_ZONES := {
 	"jongno_outskirts": {
 		"name": "종로 외곽",
@@ -76,7 +155,7 @@ const RAID_ZONES := {
 		"threat": 0.15,
 		"enemy_multiplier": 1.0,
 		"boss": false,
-		"reward": "통조림 · 기초 부품",
+		"reward": "🥫 통조림 · 기초 부품",
 	},
 	"namdaemun_market": {
 		"name": "남대문 폐시장",
@@ -85,7 +164,7 @@ const RAID_ZONES := {
 		"threat": 0.35,
 		"enemy_multiplier": 1.25,
 		"boss": true,
-		"reward": "츄르 · 총기 부품",
+		"reward": "🍗 츄르 · 총기 부품",
 	},
 	"euljiro_depths": {
 		"name": "을지로 지하구역",
@@ -94,7 +173,7 @@ const RAID_ZONES := {
 		"threat": 0.55,
 		"enemy_multiplier": 1.55,
 		"boss": true,
-		"reward": "고급 부품 · 츄르",
+		"reward": "고급 부품 · 🍗 츄르",
 	},
 	"yongsan_blockade": {
 		"name": "용산 봉쇄선",
@@ -103,7 +182,7 @@ const RAID_ZONES := {
 		"threat": 0.78,
 		"enemy_multiplier": 1.9,
 		"boss": true,
-		"reward": "특수 모듈 · 츄르",
+		"reward": "특수 모듈 · 🍗 츄르",
 	},
 	"namsan_core": {
 		"name": "남산 오염 핵심부",
@@ -112,12 +191,13 @@ const RAID_ZONES := {
 		"threat": 1.0,
 		"enemy_multiplier": 2.3,
 		"boss": true,
-		"reward": "최상급 부품 · 대량 츄르",
+		"reward": "최상급 부품 · 🍗 대량 츄르",
 	},
 }
 
 const WORKBENCH_UPGRADE_COSTS := {2: 180, 3: 420, 4: 900, 5: 1800}
 const SCRATCHER_UPGRADE_COSTS := {2: 120, 3: 320, 4: 850, 5: 1600}
+const CATNIP_SCRAPER_UPGRADE_COSTS := {2: 160, 3: 420, 4: 1050, 5: 2200}
 const SHELTER_CAPACITY_BY_TIER := {1: 5, 2: 10, 3: 20, 4: 35, 5: 50}
 const KNEADING_SLOTS_BY_TIER := {1: 3, 2: 6, 3: 10, 4: 15, 5: 20}
 const CATNIP_SLOTS_BY_TIER := {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
@@ -167,6 +247,7 @@ func start_new_raid() -> void:
 	process_shelter_progress()
 	randomize_map()
 	world_time_hours = 9.0
+	fatigue = 0.0
 	save_persistent_state()
 
 
@@ -253,6 +334,92 @@ func set_ammo_count(ammo_id: String, amount: int) -> void:
 
 func add_weapon(weapon_id: String, amount: int = 1) -> void:
 	weapon_inventory[weapon_id] = maxi(0, int(weapon_inventory.get(weapon_id, 0)) + amount)
+	if not weapon_mod_loadouts.has(weapon_id):
+		weapon_mod_loadouts[weapon_id] = []
+
+
+func get_equipment_definition(equipment_id: String) -> Dictionary:
+	return (EQUIPMENT_DEFINITIONS.get(equipment_id, {}) as Dictionary).duplicate(true)
+
+
+func get_equipment_count(equipment_id: String) -> int:
+	return int(equipment_inventory.get(equipment_id, 0))
+
+
+func add_equipment(equipment_id: String, amount: int = 1) -> bool:
+	if not EQUIPMENT_DEFINITIONS.has(equipment_id) or amount <= 0:
+		return false
+	equipment_inventory[equipment_id] = get_equipment_count(equipment_id) + amount
+	return true
+
+
+func get_equipped_equipment(slot: String) -> String:
+	return equipped_head_armor_id if slot == "head" else equipped_body_armor_id
+
+
+func equip_equipment(equipment_id: String) -> bool:
+	var definition := get_equipment_definition(equipment_id)
+	if definition.is_empty() or get_equipment_count(equipment_id) <= 0:
+		return false
+	var slot := str(definition.get("slot", ""))
+	if not ["body", "head"].has(slot):
+		return false
+	var previous := get_equipped_equipment(slot)
+	if previous == equipment_id:
+		return true
+	equipment_inventory[equipment_id] = get_equipment_count(equipment_id) - 1
+	if not previous.is_empty():
+		equipment_inventory[previous] = get_equipment_count(previous) + 1
+	if slot == "head":
+		equipped_head_armor_id = equipment_id
+	else:
+		equipped_body_armor_id = equipment_id
+	return true
+
+
+func unequip_equipment(slot: String) -> bool:
+	var equipped_id := get_equipped_equipment(slot)
+	if equipped_id.is_empty():
+		return false
+	equipment_inventory[equipped_id] = get_equipment_count(equipped_id) + 1
+	if slot == "head":
+		equipped_head_armor_id = ""
+	else:
+		equipped_body_armor_id = ""
+	return true
+
+
+func get_equipment_damage_multiplier() -> float:
+	var reduction := 0.0
+	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id]:
+		if equipment_id.is_empty():
+			continue
+		var definition := get_equipment_definition(equipment_id)
+		reduction += float(definition.get("damage_reduction", 0.0))
+	return clampf(1.0 - reduction, 0.5, 1.0)
+
+
+func save_equipped_weapon_loadout() -> void:
+	if equipped_weapon_id.is_empty():
+		return
+	weapon_mod_loadouts[equipped_weapon_id] = equipped_weapon_mods.duplicate()
+
+
+func equip_weapon(weapon_id: String) -> bool:
+	if get_weapon_count(weapon_id) <= 0:
+		return false
+	if weapon_id == equipped_weapon_id:
+		return true
+	save_equipped_weapon_loadout()
+	equipped_weapon_id = weapon_id
+	equipped_weapon_mods = _to_string_array(weapon_mod_loadouts.get(weapon_id, []))
+	var definition := WEAPON_SYSTEM.get_weapon(weapon_id)
+	equipped_magazine_id = str(definition.get("magazine_id", ""))
+	equipped_ammo_id = str(definition.get("default_ammo_id", ""))
+	magazine_ammo = 0
+	reserve_ammo = get_ammo_count(equipped_ammo_id)
+	has_ak = true
+	return true
 
 
 func add_mod_component(component_id: String, amount: int = 1) -> void:
@@ -387,7 +554,7 @@ func get_scrap_per_second() -> float:
 func get_catnip_per_hour() -> float:
 	if get_active_catnip_workers() > 0 and canned_food <= 0:
 		return 0.0
-	return get_catnip_efficiency_total() * BASE_CATNIP_PER_WORKER_HOUR
+	return get_catnip_efficiency_total() * BASE_CATNIP_PER_WORKER_HOUR * catnip_scraper_multiplier
 
 
 func get_catnip_per_second() -> float:
@@ -628,6 +795,19 @@ func try_upgrade_scratcher_bank() -> bool:
 	return true
 
 
+func try_upgrade_catnip_scraper() -> bool:
+	var next_level := catnip_scraper_level + 1
+	if next_level > 5:
+		return false
+	var cost := int(CATNIP_SCRAPER_UPGRADE_COSTS.get(next_level, 0))
+	if scrap < cost:
+		return false
+	scrap -= cost
+	catnip_scraper_level = next_level
+	catnip_scraper_multiplier = pow(1.8, float(catnip_scraper_level - 1))
+	return true
+
+
 func get_weapon_count(weapon_id: String) -> int:
 	return int(weapon_inventory.get(weapon_id, 0))
 
@@ -726,14 +906,160 @@ func roll_artisan_weapon() -> Dictionary:
 	return result
 
 
+func get_xp_required(level: int = player_level) -> int:
+	var level_index := maxi(0, level - 1)
+	return 100 + level_index * 55 + roundi(pow(float(level_index), 1.28) * 18.0)
+
+
+func get_raid_experience_reward(kills: int, boss_kills: int = 0) -> int:
+	return 35 + maxi(0, kills) * 22 + maxi(0, boss_kills) * 120
+
+
+func add_raid_experience(amount: int) -> Dictionary:
+	var gained := maxi(0, amount)
+	var old_level := player_level
+	var old_xp := player_xp
+	var old_required := get_xp_required(player_level)
+	player_xp += gained
+	var levels_gained := 0
+	while player_xp >= get_xp_required(player_level):
+		player_xp -= get_xp_required(player_level)
+		player_level += 1
+		levels_gained += 1
+	pending_level_choices += levels_gained
+	save_persistent_state()
+	return {
+		"gained": gained,
+		"old_level": old_level,
+		"old_xp": old_xp,
+		"old_required": old_required,
+		"new_level": player_level,
+		"new_xp": player_xp,
+		"new_required": get_xp_required(player_level),
+		"levels_gained": levels_gained,
+	}
+
+
+func get_level_reward_choices(seed_value: int) -> Array[String]:
+	var options: Array[String] = []
+	for stat_id in PLAYER_LEVEL_REWARDS.keys():
+		options.append(str(stat_id))
+	var random := RandomNumberGenerator.new()
+	random.seed = seed_value + player_level * 7919 + pending_level_choices * 101
+	for index in range(options.size() - 1, 0, -1):
+		var swap_index := random.randi_range(0, index)
+		var temporary := options[index]
+		options[index] = options[swap_index]
+		options[swap_index] = temporary
+	var choices: Array[String] = []
+	for index in mini(3, options.size()):
+		choices.append(options[index])
+	return choices
+
+
+func get_level_reward_definition(stat_id: String) -> Dictionary:
+	return (PLAYER_LEVEL_REWARDS.get(stat_id, {}) as Dictionary).duplicate(true)
+
+
+func apply_level_reward(stat_id: String) -> bool:
+	if pending_level_choices <= 0 or not PLAYER_LEVEL_REWARDS.has(stat_id):
+		return false
+	player_stat_levels[stat_id] = int(player_stat_levels.get(stat_id, 0)) + 1
+	pending_level_choices -= 1
+	if stat_id == "max_health":
+		player_health = mini(get_max_health(), player_health + 8)
+	save_persistent_state()
+	return true
+
+
+func get_max_health() -> int:
+	return 100 + int(player_stat_levels.get("max_health", 0)) * 8 + int(training_levels.get("vitality", 0)) * 10
+
+
+func get_max_stamina() -> float:
+	return 100.0 + float(player_stat_levels.get("max_stamina", 0)) * 10.0 + float(training_levels.get("endurance", 0)) * 12.0
+
+
+func get_move_speed_multiplier() -> float:
+	return 1.0 + float(player_stat_levels.get("move_speed", 0)) * 0.025 + float(training_levels.get("agility", 0)) * 0.02
+
+
+func get_stamina_recovery_multiplier() -> float:
+	return 1.0 + float(player_stat_levels.get("recovery", 0)) * 0.07 + float(training_levels.get("recovery", 0)) * 0.08
+
+
+func get_damage_taken_multiplier() -> float:
+	var toughness_multiplier := maxf(0.68, 1.0 - float(player_stat_levels.get("toughness", 0)) * 0.02)
+	return toughness_multiplier * get_equipment_damage_multiplier()
+
+
+func get_fatigue_gain_multiplier() -> float:
+	var reduction := float(player_stat_levels.get("fatigue_resistance", 0)) * 0.05
+	reduction += float(training_levels.get("fieldcraft", 0)) * 0.07
+	return maxf(0.45, 1.0 - reduction)
+
+
+func get_training_definition(node_id: String) -> Dictionary:
+	return (TRAINING_NODE_DEFS.get(node_id, {}) as Dictionary).duplicate(true)
+
+
+func get_training_rank(node_id: String) -> int:
+	return int(training_levels.get(node_id, 0))
+
+
+func get_training_cost(node_id: String) -> int:
+	var definition := get_training_definition(node_id)
+	if definition.is_empty():
+		return 0
+	var rank := get_training_rank(node_id)
+	return int(definition.get("base_cost", 1)) + rank * int(definition.get("cost_step", 1))
+
+
+func get_training_requirements_met(node_id: String) -> bool:
+	var definition := get_training_definition(node_id)
+	if definition.is_empty():
+		return false
+	var requirements := definition.get("requires", {}) as Dictionary
+	for required_id in requirements.keys():
+		if get_training_rank(str(required_id)) < int(requirements[required_id]):
+			return false
+	return true
+
+
+func try_upgrade_training(node_id: String) -> Dictionary:
+	var definition := get_training_definition(node_id)
+	if definition.is_empty():
+		return {"ok": false, "reason": "unknown"}
+	var rank := get_training_rank(node_id)
+	if rank >= int(definition.get("max_rank", 1)):
+		return {"ok": false, "reason": "max_rank"}
+	if not get_training_requirements_met(node_id):
+		return {"ok": false, "reason": "prerequisite"}
+	var cost := get_training_cost(node_id)
+	if canned_food < cost:
+		return {"ok": false, "reason": "canned_food", "cost": cost}
+	canned_food -= cost
+	training_levels[node_id] = rank + 1
+	if node_id == "vitality":
+		player_health = mini(get_max_health(), player_health + 10)
+	save_persistent_state()
+	return {"ok": true, "rank": rank + 1, "cost": cost}
+
+
 func save_persistent_state() -> bool:
 	if not persistence_enabled:
 		return false
+	save_equipped_weapon_loadout()
 	var data := {
-		"version": 2,
+		"version": 3,
 		"map_seed": map_seed,
 		"raid_serial": raid_serial,
 		"player_health": player_health,
+		"player_level": player_level,
+		"player_xp": player_xp,
+		"pending_level_choices": pending_level_choices,
+		"player_stat_levels": player_stat_levels,
+		"training_levels": training_levels,
 		"magazine_ammo": magazine_ammo,
 		"scrap": scrap,
 		"medkits": medkits,
@@ -748,11 +1074,15 @@ func save_persistent_state() -> bool:
 		"resident_traits": resident_traits,
 		"mod_component_inventory": mod_component_inventory,
 		"weapon_inventory": weapon_inventory,
+		"equipment_inventory": equipment_inventory,
+		"equipped_body_armor_id": equipped_body_armor_id,
+		"equipped_head_armor_id": equipped_head_armor_id,
 		"weapon_enhancement_levels": weapon_enhancement_levels,
 		"mod_enhancement_levels": mod_enhancement_levels,
 		"equipped_weapon_id": equipped_weapon_id,
 		"weapon_durability": weapon_durability,
 		"equipped_weapon_mods": equipped_weapon_mods,
+		"weapon_mod_loadouts": weapon_mod_loadouts,
 		"equipped_magazine_id": equipped_magazine_id,
 		"equipped_ammo_id": equipped_ammo_id,
 		"ammo_inventory": ammo_inventory,
@@ -760,6 +1090,8 @@ func save_persistent_state() -> bool:
 		"shelter_tier": shelter_tier,
 		"scratcher_bank_level": scratcher_bank_level,
 		"scratcher_multiplier": scratcher_multiplier,
+		"catnip_scraper_level": catnip_scraper_level,
+		"catnip_scraper_multiplier": catnip_scraper_multiplier,
 		"catnip_boost_end_time": catnip_boost_end_time,
 		"shelter_last_progress_time": shelter_last_progress_time,
 		"workbench_repair_active": workbench_repair_active,
@@ -797,6 +1129,21 @@ func load_persistent_state() -> bool:
 	map_seed = int(data.get("map_seed", map_seed))
 	raid_serial = int(data.get("raid_serial", raid_serial))
 	player_health = int(data.get("player_health", player_health))
+	player_level = maxi(1, int(data.get("player_level", player_level)))
+	player_xp = maxi(0, int(data.get("player_xp", player_xp)))
+	pending_level_choices = maxi(0, int(data.get("pending_level_choices", pending_level_choices)))
+	player_stat_levels = (data.get("player_stat_levels", player_stat_levels) as Dictionary).duplicate(true)
+	training_levels = (data.get("training_levels", training_levels) as Dictionary).duplicate(true)
+	for stat_id in PLAYER_LEVEL_REWARDS.keys():
+		if not player_stat_levels.has(stat_id):
+			player_stat_levels[stat_id] = 0
+		else:
+			player_stat_levels[stat_id] = int(player_stat_levels[stat_id])
+	for training_id in TRAINING_NODE_DEFS.keys():
+		if not training_levels.has(training_id):
+			training_levels[training_id] = 0
+		else:
+			training_levels[training_id] = int(training_levels[training_id])
 	magazine_ammo = int(data.get("magazine_ammo", magazine_ammo))
 	scrap = int(data.get("scrap", scrap))
 	medkits = int(data.get("medkits", medkits))
@@ -811,11 +1158,20 @@ func load_persistent_state() -> bool:
 	resident_traits = (data.get("resident_traits", {}) as Dictionary).duplicate(true)
 	mod_component_inventory = (data.get("mod_component_inventory", mod_component_inventory) as Dictionary).duplicate(true)
 	weapon_inventory = (data.get("weapon_inventory", weapon_inventory) as Dictionary).duplicate(true)
+	equipment_inventory = (data.get("equipment_inventory", equipment_inventory) as Dictionary).duplicate(true)
+	for equipment_id in EQUIPMENT_DEFINITIONS:
+		if not equipment_inventory.has(equipment_id):
+			equipment_inventory[equipment_id] = 0
+	equipped_body_armor_id = str(data.get("equipped_body_armor_id", equipped_body_armor_id))
+	equipped_head_armor_id = str(data.get("equipped_head_armor_id", equipped_head_armor_id))
 	weapon_enhancement_levels = (data.get("weapon_enhancement_levels", weapon_enhancement_levels) as Dictionary).duplicate(true)
 	mod_enhancement_levels = (data.get("mod_enhancement_levels", mod_enhancement_levels) as Dictionary).duplicate(true)
 	equipped_weapon_id = str(data.get("equipped_weapon_id", equipped_weapon_id))
 	weapon_durability = float(data.get("weapon_durability", weapon_durability))
 	equipped_weapon_mods = _to_string_array(data.get("equipped_weapon_mods", []))
+	weapon_mod_loadouts = (data.get("weapon_mod_loadouts", {}) as Dictionary).duplicate(true)
+	if not weapon_mod_loadouts.has(equipped_weapon_id):
+		weapon_mod_loadouts[equipped_weapon_id] = equipped_weapon_mods.duplicate()
 	equipped_magazine_id = str(data.get("equipped_magazine_id", equipped_magazine_id))
 	equipped_ammo_id = str(data.get("equipped_ammo_id", equipped_ammo_id))
 	ammo_inventory = (data.get("ammo_inventory", ammo_inventory) as Dictionary).duplicate(true)
@@ -823,6 +1179,8 @@ func load_persistent_state() -> bool:
 	shelter_tier = clampi(int(data.get("shelter_tier", shelter_tier)), 1, 5)
 	scratcher_bank_level = clampi(int(data.get("scratcher_bank_level", scratcher_bank_level)), 1, 5)
 	scratcher_multiplier = float(data.get("scratcher_multiplier", scratcher_multiplier))
+	catnip_scraper_level = clampi(int(data.get("catnip_scraper_level", catnip_scraper_level)), 1, 5)
+	catnip_scraper_multiplier = float(data.get("catnip_scraper_multiplier", pow(1.8, float(catnip_scraper_level - 1))))
 	catnip_boost_end_time = int(data.get("catnip_boost_end_time", catnip_boost_end_time))
 	shelter_last_progress_time = int(data.get("shelter_last_progress_time", shelter_last_progress_time))
 	workbench_repair_active = bool(data.get("workbench_repair_active", workbench_repair_active))
@@ -840,6 +1198,7 @@ func load_persistent_state() -> bool:
 	if not RAID_ZONES.has(selected_raid_zone) or not is_raid_zone_unlocked(selected_raid_zone):
 		selected_raid_zone = "jongno_outskirts"
 	_ensure_resident_records()
+	player_health = clampi(player_health, 0, get_max_health())
 	reserve_ammo = get_ammo_count(equipped_ammo_id)
 	return true
 
@@ -859,6 +1218,24 @@ func _notification(what: int) -> void:
 
 func reset_run() -> void:
 	player_health = 82
+	player_level = 1
+	player_xp = 0
+	pending_level_choices = 0
+	player_stat_levels = {
+		"max_health": 0,
+		"max_stamina": 0,
+		"move_speed": 0,
+		"recovery": 0,
+		"toughness": 0,
+		"fatigue_resistance": 0,
+	}
+	training_levels = {
+		"vitality": 0,
+		"endurance": 0,
+		"agility": 0,
+		"recovery": 0,
+		"fieldcraft": 0,
+	}
 	raid_serial = 0
 	magazine_ammo = 30
 	reserve_ammo = 90
@@ -881,11 +1258,20 @@ func reset_run() -> void:
 		"magazine_spring": 0,
 	}
 	weapon_inventory = {"ak47": 1}
+	equipment_inventory = {
+		"scav_vest": 0,
+		"riot_vest": 0,
+		"patched_helmet": 0,
+		"tactical_helmet": 0,
+	}
+	equipped_body_armor_id = ""
+	equipped_head_armor_id = ""
 	returning_from_shelter = false
 	world_time_hours = 9.0
 	equipped_weapon_id = "ak47"
 	weapon_durability = 100.0
 	equipped_weapon_mods.clear()
+	weapon_mod_loadouts = {"ak47": []}
 	equipped_magazine_id = "ak_30rnd"
 	equipped_ammo_id = "762_fmj"
 	ammo_inventory = {
@@ -900,6 +1286,8 @@ func reset_run() -> void:
 	shelter_tier = 1
 	scratcher_bank_level = 1
 	scratcher_multiplier = 1.0
+	catnip_scraper_level = 1
+	catnip_scraper_multiplier = 1.0
 	catnip_boost_end_time = 0
 	shelter_last_progress_time = 0
 	workbench_repair_active = false

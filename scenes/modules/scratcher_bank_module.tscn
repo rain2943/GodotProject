@@ -31,7 +31,8 @@ shape = SubResource("BoxShape_bank")
 [node name="BankSprite" type="Sprite3D" parent="."]
 position = Vector3(0, 1.08, 0.02)
 texture = ExtResource("2_texture")
-pixel_size = 0.00335
+pixel_size = 0.0046
+offset = Vector2(0, -137)
 billboard = 1
 shaded = false
 transparent = true

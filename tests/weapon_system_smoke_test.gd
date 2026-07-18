@@ -50,7 +50,11 @@ func _run() -> void:
 	assert((main_scene.get("laser_glow_layers") as Array).size() == 3)
 	assert(main_scene.get("laser_endpoint") != null)
 	var equipped_weapon_sprite := main_scene.get("weapon_sprite") as AnimatedSprite3D
-	assert(is_equal_approx(equipped_weapon_sprite.pixel_size, 0.0094))
+	var visual_catalog: Script = load("res://scripts/weapon_visual_catalog.gd")
+	assert(is_equal_approx(
+		equipped_weapon_sprite.pixel_size,
+		visual_catalog.get_world_pixel_size("ak47")
+	))
 	main_scene.call("_set_facing", "w")
 	main_scene.call("_update_weapon_pose")
 	main_scene.call("_update_building_overlays")
@@ -90,6 +94,7 @@ func _run() -> void:
 	main_scene.call("_input", left_press)
 	assert(float(main_scene.get("melee_attack_cooldown")) > 0.0)
 	assert(not bool(main_scene.get("mouse_fire_held")))
+	main_scene.call("_finish_melee_attack")
 	main_scene.set("laser_aim_held", true)
 	main_scene.set("magazine_ammo", 30)
 	main_scene.set("fire_cooldown", 0.0)
@@ -110,6 +115,12 @@ func _run() -> void:
 	var bat_overlay := main_scene.get("melee_bat_overlay") as Sprite2D
 	assert(bat_overlay.visible)
 	assert(bat_overlay.scale.x < 0.05)
+	var melee_fan := main_scene.get("melee_fan_indicator") as MeshInstance3D
+	assert(melee_fan != null)
+	assert(melee_fan.visible)
+	assert(melee_fan.mesh.get_surface_count() == 2)
+	assert((main_scene.get("survivor") as AnimatedSprite3D).animation.begins_with("melee_"))
+	main_scene.call("_finish_melee_attack")
 	main_scene.set("laser_aim_held", true)
 	main_scene.set("locked_aim_direction", Vector3.RIGHT)
 	main_scene.call("_update_scope_camera", 0.5)

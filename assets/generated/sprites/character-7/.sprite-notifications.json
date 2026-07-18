@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "f75b57322e4140ec838c9b7e9a254328",
+      "kind": "base_generated",
+      "state": "__base__",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "generated": false
+      },
+      "createdAt": "2026-07-18T12:37:51+0900",
+      "read": true
+    },
+    {
+      "id": "549beabcf74a405aaa8c40f6b716ab4c",
+      "kind": "animation_added",
+      "state": "custom_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": "idle",
+        "frames": 4,
+        "stateCount": 1
+      },
+      "createdAt": "2026-07-18T12:46:57+0900",
+      "read": true
+    },
+    {
+      "id": "cd090a94989d47dc85d9574fb892312b",
+      "kind": "custom_animation_generated",
+      "state": "custom_idle",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": "idle",
+        "total": 1
+      },
+      "createdAt": "2026-07-18T12:48:02+0900",
+      "read": false
+    }
+  ]
+}

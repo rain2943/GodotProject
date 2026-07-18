@@ -9,7 +9,9 @@ func _run() -> void:
 	var game_state := root.get_node("GameState")
 	game_state.call("reset_run")
 	game_state.set("map_seed", 47291)
+	game_state.set("fatigue", 100.0)
 	game_state.call("start_new_raid")
+	assert(is_zero_approx(float(game_state.get("fatigue"))), "A shelter departure must begin with recovered fatigue.")
 	var first_seed := int(game_state.get("map_seed"))
 	game_state.call("start_new_raid")
 	var second_seed := int(game_state.get("map_seed"))
@@ -34,6 +36,14 @@ func _run() -> void:
 	assert(str(second_city.call("get_sector_label", Vector3.ZERO)).contains("-"))
 
 	var tactical_map := load("res://scripts/tactical_map.gd").new() as Control
+	var map_player := Node3D.new()
+	root.add_child(map_player)
+	var extraction_positions: Array[Vector3] = [Vector3(30, 0, 30), Vector3(-30, 0, 20)]
+	tactical_map.call("setup", second_city, map_player, extraction_positions)
+	assert(not bool(tactical_map.call("is_extraction_discovered", 0)))
+	tactical_map.call("discover_extraction", 0)
+	assert(bool(tactical_map.call("is_extraction_discovered", 0)))
+	assert(not bool(tactical_map.call("is_extraction_discovered", 1)))
 	var map_rect := Rect2(Vector2(100, 80), Vector2(800, 480))
 	var map_size := float(second_city.call("get_map_snapshot_data")["map_size"])
 	var center := tactical_map.call("_world_position_to_map_point", Vector3.ZERO, map_rect, map_size) as Vector2
@@ -45,6 +55,7 @@ func _run() -> void:
 
 	print("RAID_MAP_NAVIGATION_SMOKE: PASS seeds=%d/%d" % [first_seed, second_seed])
 	tactical_map.free()
+	map_player.queue_free()
 	second_city.queue_free()
 	await process_frame
 	quit(0)

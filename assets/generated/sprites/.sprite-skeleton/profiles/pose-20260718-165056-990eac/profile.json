@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "profileId": "pose-20260718-165056-990eac",
+  "savedAt": "2026-07-18T16:50:56+0900",
+  "name": "8방향 꾹꾹이",
+  "sourceCharacterId": "character-8",
+  "cell": {
+    "shape": "square",
+    "width": 256,
+    "height": 256,
+    "safe_margin_x": 24,
+    "safe_margin_y": 24,
+    "size": 256,
+    "safe_margin": 24
+  },
+  "actionPrompt": "up-right 방향으로 신나게 덩실덩실 꾹꾹이를 하는 애니메이션 스프라이트",
+  "frameCount": 6,
+  "directions": [
+    "down",
+    "down_right",
+    "right",
+    "up_right",
+    "up",
+    "up_left",
+    "left",
+    "down_left"
+  ],
+  "states": {
+    "custom_animation": {
+      "strip": "states/custom_animation.png",
+      "phases": [
+        "phases/custom_animation/frame-1.png",
+        "phases/custom_animation/frame-2.png",
+        "phases/custom_animation/frame-3.png",
+        "phases/custom_animation/frame-4.png",
+        "phases/custom_animation/frame-5.png",
+        "phases/custom_animation/frame-6.png"
+      ],
+      "frames": 6
+    }
+  },
+  "stateSpecs": {
+    "custom_animation": {
+      "frames": 6,
+      "fps": 12,
+      "loop": false,
+      "action": "up-right 방향으로 신나게 덩실덩실 꾹꾹이를 하는 애니메이션 스프라이트",
+      "custom_animation": {
+        "id": "d80aa16e61444fd59e2f6f07c8c5285f",
+        "name": "꾹꾹이",
+        "prompt": "up-right 방향으로 신나게 덩실덩실 꾹꾹이를 하는 애니메이션 스프라이트"
+      }
+    }
+  }
+}

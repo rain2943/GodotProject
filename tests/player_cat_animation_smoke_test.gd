@@ -8,7 +8,7 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 
-func _assert_cat_frames(sprite: AnimatedSprite3D) -> void:
+func _assert_cat_frames(sprite: AnimatedSprite3D, include_melee: bool = false) -> void:
 	assert(sprite != null)
 	assert(is_equal_approx(sprite.pixel_size, 0.0098))
 	for direction in DIRECTIONS:
@@ -18,6 +18,12 @@ func _assert_cat_frames(sprite: AnimatedSprite3D) -> void:
 			assert(sprite.sprite_frames.get_frame_count(animation) == 4)
 			var expected_fps := 4.0 if state == "idle" else 8.0
 			assert(is_equal_approx(sprite.sprite_frames.get_animation_speed(animation), expected_fps))
+		if include_melee:
+			var melee_animation := "melee_%s" % direction
+			assert(sprite.sprite_frames.has_animation(melee_animation))
+			assert(sprite.sprite_frames.get_frame_count(melee_animation) == 4)
+			assert(not sprite.sprite_frames.get_animation_loop(melee_animation))
+			assert(is_equal_approx(sprite.sprite_frames.get_animation_speed(melee_animation), 8.0))
 
 
 func _run() -> void:
@@ -25,7 +31,7 @@ func _run() -> void:
 	root.add_child(main_scene)
 	await process_frame
 	var field_sprite := main_scene.get_node("Player/Survivor") as AnimatedSprite3D
-	_assert_cat_frames(field_sprite)
+	_assert_cat_frames(field_sprite, true)
 	for direction in DIRECTIONS:
 		main_scene.call("_set_facing", direction)
 		assert(field_sprite.animation == "idle_%s" % direction)
@@ -58,6 +64,22 @@ func _run() -> void:
 	main_scene.set("roll_active", false)
 	main_scene.call("_physics_process", 1.0)
 	assert(float(main_scene.get("roll_stamina")) > 55.0)
+	main_scene.set("melee_attack_cooldown", 0.0)
+	main_scene.call("_set_facing", "s")
+	main_scene.call("_try_melee_attack")
+	assert(bool(main_scene.get("melee_attack_active")))
+	assert(field_sprite.animation == "melee_%s" % str(main_scene.get("facing")))
+	var melee_fan := main_scene.get("melee_fan_indicator") as MeshInstance3D
+	assert(melee_fan != null)
+	assert(melee_fan.visible)
+	assert(melee_fan.mesh.get_surface_count() == 2)
+	var attack_direction := main_scene.get("melee_attack_direction") as Vector3
+	assert(is_equal_approx(melee_fan.rotation.y, atan2(attack_direction.x, attack_direction.z)))
+	main_scene.call("_update_melee_attack", 0.2)
+	assert(bool(main_scene.get("melee_hit_resolved")))
+	main_scene.call("_update_melee_attack", 0.4)
+	assert(not bool(main_scene.get("melee_attack_active")))
+	assert(field_sprite.animation == "idle_%s" % str(main_scene.get("facing")))
 	main_scene.queue_free()
 	await process_frame
 
@@ -86,5 +108,5 @@ func _run() -> void:
 	shelter_scene.call("_physics_process", 1.0)
 	assert(float(shelter_scene.get("roll_stamina")) > 55.0)
 
-	print("PLAYER_CAT_ANIMATION_OK base_animations=16 roll_animations=8 roll_frames=32 scenes=2")
+	print("PLAYER_CAT_ANIMATION_OK base_animations=16 melee_animations=8 melee_frames=32 roll_animations=8 roll_frames=32 scenes=2")
 	quit(0)

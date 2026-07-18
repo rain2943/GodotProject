@@ -2,8 +2,9 @@ class_name CatnipScraperModule
 extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
+const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
 
-@export var interaction_radius := 2.35
+@export var interaction_radius := 3.15
 
 @onready var sprite: Sprite3D = $ScraperSprite
 
@@ -41,20 +42,40 @@ func _open_ui() -> void:
 		ui_layer.queue_free()
 	ui_layer = CanvasLayer.new()
 	ui_layer.name = "CatnipScraperUILayer"
-	ui_layer.layer = 20
+	ui_layer.layer = 80
+	ui_layer.add_to_group("shelter_modal_ui")
 	var ui_parent := get_tree().current_scene if get_tree().current_scene != null else get_tree().root
 	ui_parent.add_child(ui_layer)
+	var modal := Control.new()
+	modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	modal.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_layer.add_child(modal)
+	var dim := ColorRect.new()
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.004, 0.007, 0.006, 0.78)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	modal.add_child(dim)
+	var safe_margin := MarginContainer.new()
+	safe_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	safe_margin.add_theme_constant_override("margin_left", 22)
+	safe_margin.add_theme_constant_override("margin_top", 22)
+	safe_margin.add_theme_constant_override("margin_right", 22)
+	safe_margin.add_theme_constant_override("margin_bottom", 22)
+	modal.add_child(safe_margin)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	safe_margin.add_child(center)
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-420, -280)
-	panel.size = Vector2(840, 560)
+	panel.custom_minimum_size = Vector2(860, 480)
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.015, 0.025, 0.019, 0.97), Color("#6fa66d")))
-	ui_layer.add_child(panel)
+	center.add_child(panel)
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 20)
-	margin.add_theme_constant_override("margin_top", 18)
-	margin.add_theme_constant_override("margin_right", 20)
-	margin.add_theme_constant_override("margin_bottom", 18)
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_top", 20)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_bottom", 22)
 	panel.add_child(margin)
 	content = VBoxContainer.new()
 	content.add_theme_constant_override("separation", 12)
@@ -67,26 +88,51 @@ func _rebuild_ui() -> void:
 	for child in content.get_children():
 		child.queue_free()
 	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 12)
 	content.add_child(header)
-	var title := _label("스크래핑 캣닢 생산기", 24, Color("#d9efb0"))
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title)
-	var close := _button("닫기")
+	var title_box := VBoxContainer.new()
+	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title_box)
+	title_box.add_child(_label("스크래핑 캣닢 생산기  Lv.%d" % GameState.catnip_scraper_level, 26, Color("#d9efb0")))
+	title_box.add_child(_label("캣닢 특화 주민을 배치해 부스터 자원을 생산합니다.", 13, Color("#94aa98")))
+	var close := _button("닫기", "close")
+	close.custom_minimum_size = Vector2(76, 38)
 	close.pressed.connect(func(): ui_layer.queue_free())
 	header.add_child(close)
-	content.add_child(_label("쉘터 Tier %d  ·  배치 %d / %d  ·  시간당 캣닢 %.2f" % [
-		GameState.shelter_tier,
-		GameState.get_active_catnip_workers(),
-		GameState.get_catnip_worker_slots(),
-		GameState.get_catnip_per_hour(),
-	], 17, Color("#d3ded4")))
-	content.add_child(_label("캣닢 효율이 높은 주민을 배치하면 부스터를 더 자주 사용할 수 있습니다.", 14, Color("#9fb8a0")))
+	var summary := HBoxContainer.new()
+	summary.add_theme_constant_override("separation", 10)
+	content.add_child(summary)
+	summary.add_child(_summary_card("시설", "Lv.%d · Tier %d" % [GameState.catnip_scraper_level, GameState.shelter_tier]))
+	summary.add_child(_summary_card("배치", "%d / %d명" % [GameState.get_active_catnip_workers(), GameState.get_catnip_worker_slots()]))
+	summary.add_child(_summary_card("시간당 생산", "🌿 %.2f" % GameState.get_catnip_per_hour()))
+	summary.add_child(_summary_card("보유 캣닢", "🌿 %.1f" % GameState.catnip))
+
+	var body := HBoxContainer.new()
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 16)
+	content.add_child(body)
+	var resident_panel := PanelContainer.new()
+	resident_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	resident_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	resident_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.024, 0.036, 0.027, 0.92), Color("#45614a")))
+	body.add_child(resident_panel)
+	var resident_margin := MarginContainer.new()
+	resident_margin.add_theme_constant_override("margin_left", 12)
+	resident_margin.add_theme_constant_override("margin_top", 10)
+	resident_margin.add_theme_constant_override("margin_right", 12)
+	resident_margin.add_theme_constant_override("margin_bottom", 10)
+	resident_panel.add_child(resident_margin)
+	var resident_box := VBoxContainer.new()
+	resident_box.add_theme_constant_override("separation", 8)
+	resident_margin.add_child(resident_box)
+	resident_box.add_child(_label("주민 배치", 16, Color("#dfe8dc")))
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 340)
+	scroll.custom_minimum_size = Vector2(0, 220)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	content.add_child(scroll)
+	resident_box.add_child(scroll)
 	var grid := GridContainer.new()
-	grid.columns = 3
+	grid.columns = 2
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", 9)
 	grid.add_theme_constant_override("v_separation", 9)
@@ -95,20 +141,49 @@ func _rebuild_ui() -> void:
 		grid.add_child(_resident_button(str(GameState.resident_cat_ids[resident_index])))
 	if GameState.resident_cat_ids.is_empty():
 		grid.add_child(_label("구출한 주민이 없습니다.", 15, Color("#7d887f")))
-	var footer := HBoxContainer.new()
-	footer.add_theme_constant_override("separation", 12)
-	content.add_child(footer)
-	var collect := _button("진행 정산")
+
+	var operations := PanelContainer.new()
+	operations.custom_minimum_size = Vector2(246, 0)
+	operations.add_theme_stylebox_override("panel", _panel_style(Color(0.028, 0.041, 0.03, 0.94), Color("#50664f")))
+	body.add_child(operations)
+	var operations_margin := MarginContainer.new()
+	operations_margin.add_theme_constant_override("margin_left", 14)
+	operations_margin.add_theme_constant_override("margin_top", 12)
+	operations_margin.add_theme_constant_override("margin_right", 14)
+	operations_margin.add_theme_constant_override("margin_bottom", 12)
+	operations.add_child(operations_margin)
+	var footer := VBoxContainer.new()
+	footer.add_theme_constant_override("separation", 10)
+	operations_margin.add_child(footer)
+	footer.add_child(_label("생산 현황", 16, Color("#d9efb0")))
+	footer.add_child(_label("주민 카드를 눌러 배치하거나 해제합니다. 캣닢 효율이 높은 주민을 우선 배치하세요.", 12, Color("#9fb8a0")))
+	var collect := _button("진행 정산", "collect")
+	collect.custom_minimum_size = Vector2(0, 38)
 	collect.pressed.connect(_collect_progress)
 	footer.add_child(collect)
+	var upgrade_cost := int(GameState.CATNIP_SCRAPER_UPGRADE_COSTS.get(GameState.catnip_scraper_level + 1, 0))
+	var upgrade := _button(
+		"최고 레벨"
+		if upgrade_cost == 0
+		else "Lv.%d 업그레이드  🔩 %d" % [GameState.catnip_scraper_level + 1, upgrade_cost],
+		"upgrade"
+	)
+	upgrade.custom_minimum_size = Vector2(0, 38)
+	upgrade.disabled = upgrade_cost == 0 or GameState.scrap < upgrade_cost
+	upgrade.pressed.connect(_upgrade)
+	footer.add_child(upgrade)
 	var remaining: int = GameState.get_catnip_boost_remaining()
-	var status := "부스터 대기" if remaining <= 0 else "고철 x10  %02d:%02d" % [remaining / 60, remaining % 60]
-	footer.add_child(_label("보유 캣닢 %.1f  ·  %s" % [GameState.catnip, status], 16, Color("#cde79e")))
+	var status := "부스터 대기" if remaining <= 0 else "🔩 고철 x10  %02d:%02d" % [remaining / 60, remaining % 60]
+	footer.add_child(_label(status, 15, Color("#cde79e")))
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	footer.add_child(spacer)
+	footer.add_child(_label("캣닢은 꾹꾹이 생산기의 10분 x10 부스터에 사용됩니다.", 12, Color("#83998a")))
 
 
 func _resident_button(resident_id: String) -> Button:
 	var button := Button.new()
-	button.custom_minimum_size = Vector2(250, 86)
+	button.custom_minimum_size = Vector2(260, 82)
 	var active := GameState.assigned_catnip_worker_ids.has(resident_id)
 	var available := active or GameState.assigned_catnip_worker_ids.size() < GameState.get_catnip_worker_slots()
 	var trait_data: Dictionary = GameState.get_resident_trait(resident_id)
@@ -117,8 +192,11 @@ func _resident_button(resident_id: String) -> Button:
 	button.add_theme_stylebox_override("hover", _panel_style(Color(0.05, 0.075, 0.052, 0.98), Color("#b8dc83")))
 	button.add_theme_font_override("font", FONT)
 	button.add_theme_font_size_override("font_size", 14)
+	button.icon = UI_ICONS.get_icon("resident", 42, Color("#b9dda8"))
+	button.expand_icon = true
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.disabled = not available
-	button.text = "%s · %s\n%s  ·  캣닢 x%.2f" % [
+	button.text = "%s · %s\n%s  ·  🌿 캣닢 x%.2f" % [
 		resident_id,
 		trait_data.get("name", "평범한 주민"),
 		"스크래핑 중" if active else "대기",
@@ -139,12 +217,63 @@ func _collect_progress() -> void:
 	_rebuild_ui()
 
 
-func _button(text: String) -> Button:
+func _upgrade() -> void:
+	if GameState.try_upgrade_catnip_scraper():
+		GameState.save_persistent_state()
+		_rebuild_ui()
+
+
+func _button(text: String, icon_name := "") -> Button:
 	var button := Button.new()
 	button.text = text
+	if not icon_name.is_empty():
+		button.icon = UI_ICONS.get_icon(icon_name, 28, Color("#dce8df"))
+		button.expand_icon = true
+		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.add_theme_font_override("font", FONT)
 	button.add_theme_font_size_override("font_size", 14)
+	button.add_theme_stylebox_override("normal", _panel_style(Color(0.05, 0.068, 0.052, 0.96), Color("#617565")))
+	button.add_theme_stylebox_override("hover", _panel_style(Color(0.08, 0.115, 0.075, 0.98), Color("#a7d683")))
+	button.add_theme_stylebox_override("pressed", _panel_style(Color(0.06, 0.095, 0.06, 0.98), Color("#cef08b")))
 	return button
+
+
+func _summary_card(title: String, value: String) -> Control:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(0, 58)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.028, 0.043, 0.032, 0.92), Color("#425a49")))
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 7)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 7)
+	panel.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	margin.add_child(row)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(32, 32)
+	icon.texture = UI_ICONS.get_icon(_summary_icon_name(title), 36, Color("#9ec99b"))
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	row.add_child(icon)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 1)
+	row.add_child(box)
+	box.add_child(_label(title, 11, Color("#87998c")))
+	box.add_child(_label(value, 15, Color("#e0e9df")))
+	return panel
+
+
+func _summary_icon_name(title: String) -> String:
+	if title.contains("배치"):
+		return "resident"
+	if title.contains("시간"):
+		return "time"
+	if title.contains("보유"):
+		return "catnip"
+	return "workbench"
 
 
 func _label(text: String, size: int, color: Color) -> Label:

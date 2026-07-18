@@ -35,6 +35,7 @@ class SkeletonProfileTests(unittest.TestCase):
         request["character"]["id"] = "source-character"
         (self.run_dir / "sprite-request.json").write_text(
             json.dumps(request, ensure_ascii=False), encoding="utf-8")
+        shutil.copy2(SAMPLE_RUN / "base-source.png", self.run_dir / "base-source.png")
 
         source_manifest = json.loads(
             (SAMPLE_RUN / "frames" / "frames-manifest.json").read_text(encoding="utf-8"))
@@ -95,6 +96,34 @@ class SkeletonProfileTests(unittest.TestCase):
         self.assertIn("second attached image is the exact target-frame pose guide", prompt)
         self.assertIn("third is the complete four-frame pose strip", prompt)
         self.assertIn("left/right foot crossing", prompt)
+
+    def test_direction_anchor_precedes_pose_guide(self) -> None:
+        request = json.loads((self.run_dir / "sprite-request.json").read_text(encoding="utf-8"))
+        anchor = server._accepted_direction_anchor_ref(
+            self.run_dir, request, "down_walk")
+        pose = self.run_dir / "pose-guide.png"
+        Image.new("RGBA", (32, 32), (120, 120, 120, 255)).save(pose)
+
+        self.assertIsNotNone(anchor)
+        refs = server._generation_refs(
+            self.run_dir, request, "down_walk", [pose], anchor)
+        self.assertEqual(refs[0], self.run_dir / "base-source.png")
+        self.assertEqual(refs[1], anchor)
+        self.assertEqual(refs[2], pose)
+
+    def test_up_right_prompt_locks_viewer_screen_axis(self) -> None:
+        request = json.loads((SAMPLE_RUN / "sprite-request.json").read_text(encoding="utf-8"))
+        prompt = server._generation_prompt(
+            request, "up_right_walk", "", 2,
+            pose_template=True, direction_anchor=True,
+        )
+
+        self.assertIn("upper-right corner of the image", prompt)
+        self.assertIn("RIGHT means the right-hand edge", prompt)
+        self.assertIn("Never mirror the pose to face screen-left", prompt)
+        self.assertIn("second attached image is an accepted sprite", prompt)
+        self.assertIn("third attached image is the exact target-frame pose guide", prompt)
+        self.assertIn("fourth is the complete four-frame pose strip", prompt)
 
     def test_unchecked_section_is_excluded_from_shared_skeleton(self) -> None:
         payload = {
@@ -173,6 +202,18 @@ class SkeletonProfileTests(unittest.TestCase):
         self.assertNotIn("directions", request)
         self.assertEqual(request["studio_skeleton"], {"mode": "none"})
         self.assertIsNone(server._active_skeleton_profile(run_dir))
+
+        Image.new("RGBA", (32, 32), (80, 60, 40, 255)).save(run_dir / "base-source.png")
+        animation = server.create_custom_animation(run_dir, {
+            "name": "blink",
+            "frames": 3,
+            "prompt": "blink once and return to the neutral pose",
+        })
+        request = json.loads((run_dir / "sprite-request.json").read_text(encoding="utf-8"))
+        self.assertEqual(animation["states"], ["custom_blink"])
+        self.assertEqual(set(request["states"]), {"custom_blink"})
+        self.assertEqual(request["states"]["custom_blink"]["frames"], 3)
+        self.assertNotIn("directions", request)
 
     def test_character_list_has_thumbnail_and_deletes_non_template_character(self) -> None:
         created = server.create_studio_character(

@@ -11,6 +11,7 @@ const ISOMETRIC_VERTICAL_PROJECTION := 0.816496580927726
 const BUILDING_CATALOG := preload("res://scripts/building_catalog.gd")
 const LANDMARK_CATALOG := preload("res://scripts/urban_landmark_catalog.gd")
 const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
+const BUILDING_ENTRANCE_SCENE := preload("res://scenes/modules/building_entrance_portal.tscn")
 const OPEN_SPACE_HIGH_RISE_BUFFER_CELLS := 2
 const OPEN_SPACE_MID_RISE_BUFFER_CELLS := 1
 const TARGET_PLAYGROUND_COUNT := 2
@@ -80,6 +81,7 @@ const PERIMETER_FENCE_SEGMENTS_PER_EDGE := 4
 const PERIMETER_FENCE_WORLD_LENGTH := 132.0
 const PERIMETER_FENCE_VISUAL_OUTSET := 8.0
 const FIELD_RETURN_CELL := Vector2i(2, 2)
+const MAX_ENTERABLE_BUILDINGS := 3
 
 @export var map_seed: int = 0
 
@@ -101,6 +103,7 @@ var cell_zones := {}
 var building_type_by_cell := {}
 var district_anchors := {}
 var district_signature_road_cells := {}
+var enterable_building_count := 0
 
 var asphalt_material: StandardMaterial3D
 var lot_material: StandardMaterial3D
@@ -1079,7 +1082,8 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	))
 	var planning_cell: Vector2i = body.get_meta("planning_cell")
 	body.set_meta("zoning_district", str(cell_zones.get(planning_cell, "street_mixed")))
-	body.set_meta("road_frontage", _get_road_frontage(planning_cell))
+	var road_frontage := _get_road_frontage(planning_cell)
+	body.set_meta("road_frontage", road_frontage)
 	add_child(body)
 	var sprite := Sprite3D.new()
 	sprite.name = "BuildingSprite"
@@ -1107,6 +1111,57 @@ func _spawn_building(building_id: String, definition: Dictionary, module_origin:
 	body.set_meta("collision_world_size", shape.size)
 	body.set_meta("occlusion_lateral_limit", (footprint_world.x + footprint_world.y) / (2.0 * sqrt(2.0)))
 	body.set_meta("occlusion_depth_limit", float(definition["occlusion_depth"]) * WORLD_SCALE)
+	_try_add_building_entrance(body, building_id, definition, footprint_world, road_frontage, module_origin)
+
+
+func _try_add_building_entrance(
+	body: StaticBody3D,
+	building_id: String,
+	definition: Dictionary,
+	footprint_world: Vector2,
+	road_frontage: PackedStringArray,
+	module_origin: Vector2i
+) -> void:
+	if enterable_building_count >= MAX_ENTERABLE_BUILDINGS or road_frontage.is_empty():
+		return
+	var height_class := str(definition.get("height_class", "low"))
+	if height_class == "low":
+		return
+	var frontage_index := absi(building_id.hash() ^ module_origin.x * 92821 ^ module_origin.y * 68917) % road_frontage.size()
+	var frontage := str(road_frontage[frontage_index])
+	var outward := Vector3.ZERO
+	var local_position := Vector3.ZERO
+	var rotation_y := 0.0
+	match frontage:
+		"west":
+			outward = Vector3.LEFT
+			local_position.x = -footprint_world.x * 0.5 - 1.25
+			rotation_y = -PI * 0.5
+		"east":
+			outward = Vector3.RIGHT
+			local_position.x = footprint_world.x * 0.5 + 1.25
+			rotation_y = PI * 0.5
+		"north":
+			outward = Vector3.FORWARD
+			local_position.z = -footprint_world.y * 0.5 - 1.25
+			rotation_y = PI
+		_:
+			outward = Vector3.BACK
+			local_position.z = footprint_world.y * 0.5 + 1.25
+	var portal := BUILDING_ENTRANCE_SCENE.instantiate() as Area3D
+	portal.name = "InteriorEntrance"
+	portal.position = local_position
+	portal.rotation.y = rotation_y
+	portal.set("building_id", "%s_%d_%d" % [building_id, module_origin.x, module_origin.y])
+	portal.set("seed_offset", module_origin.x * 92821 ^ module_origin.y * 68917)
+	portal.set("floor_count", clampi(roundi(float(definition.get("height_world", 8.0)) / 2.7), 3, 8))
+	portal.set("return_offset", Vector3(0.0, 0.0, 2.8))
+	portal.set_meta("frontage", frontage)
+	portal.set_meta("outward_direction", outward)
+	body.set_meta("interior_accessible", true)
+	body.set_meta("interior_entrance_frontage", frontage)
+	body.add_child(portal)
+	enterable_building_count += 1
 
 
 func _get_road_frontage(cell: Vector2i) -> PackedStringArray:

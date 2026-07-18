@@ -23,13 +23,35 @@ func _run() -> void:
 	root.add_child(shelter)
 	await process_frame
 	await physics_frame
+	var stats := shelter.get("stats_label") as Label
+	if stats == null:
+		_fail("shelter resource stats label is missing")
+	var inventory_button := shelter.find_child("InventoryButton", true, false) as Button
+	if inventory_button == null or inventory_button.icon == null:
+		_fail("shelter inventory button is missing or has no backpack icon")
+	for resource_icon in ["🔩", "🌿", "🥫", "🍗"]:
+		if not stats.text.contains(resource_icon):
+			_fail("shelter resource stats are missing icon %s" % resource_icon)
 	var resident_nodes := get_nodes_in_group("shelter_resident")
 	if resident_nodes.size() != 4:
 		_fail("rescued residents were not instantiated in the shelter")
+	if shelter.find_child("PlayerBed", true, false) == null:
+		_fail("the single player bed is missing")
+	if shelter.find_children("BedModule*", "Node3D", true, false).size() > 0:
+		_fail("obsolete resident beds are still present")
+	if shelter.find_children("ScratcherLineSlot*", "Node3D", true, false).size() != int(game_state.call("get_scratcher_worker_slots")):
+		_fail("scratcher production line does not match unlocked slots")
+	if shelter.find_children("CatnipLineSlot*", "Node3D", true, false).size() != int(game_state.call("get_catnip_worker_slots")):
+		_fail("catnip production line does not match unlocked slots")
 	var working_residents := 0
 	for resident in resident_nodes:
 		if bool(resident.get_meta("assigned_to_scratcher", false)):
 			working_residents += 1
+			var resident_sprite := resident.get_node_or_null("ResidentSprite") as AnimatedSprite3D
+			if resident_sprite == null or resident_sprite.animation != "kneading_ne":
+				_fail("assigned scratcher worker is not playing the kneading animation")
+			if resident_sprite.sprite_frames.get_frame_count("kneading_ne") != 6:
+				_fail("kneading animation does not contain all six supplied frames")
 	if working_residents != int(game_state.call("get_active_scratcher_workers")):
 		_fail("visible scratcher workers do not match assigned worker data")
 	var catnip_workers := 0
@@ -83,6 +105,15 @@ func _run() -> void:
 	var upgraded := bool(game_state.call("try_upgrade_scratcher_bank"))
 	if not upgraded or int(game_state.get("scratcher_bank_level")) != before_level + 1:
 		_fail("scratcher bank upgrade failed")
+	game_state.set("scrap", 1000)
+	var catnip_level_before := int(game_state.get("catnip_scraper_level"))
+	var catnip_rate_before := float(game_state.call("get_catnip_per_hour"))
+	if not bool(game_state.call("try_upgrade_catnip_scraper")):
+		_fail("catnip scraper upgrade failed")
+	if int(game_state.get("catnip_scraper_level")) != catnip_level_before + 1:
+		_fail("catnip scraper level did not increase")
+	if float(game_state.call("get_catnip_per_hour")) <= catnip_rate_before:
+		_fail("catnip scraper upgrade did not improve production")
 
 	game_state.set("catnip", 25.0)
 	if not bool(game_state.call("activate_catnip_boost")) or float(game_state.call("get_production_multiplier")) != 10.0:

@@ -11,6 +11,20 @@ func _run() -> void:
 	game_state.set("scrap", 2_000_000)
 	game_state.set("canned_food", 200)
 	game_state.set("churu", 99)
+	var base_health := int(game_state.call("get_max_health"))
+	var xp_result := game_state.call("add_raid_experience", game_state.call("get_raid_experience_reward", 4, 0)) as Dictionary
+	if int(xp_result.get("levels_gained", 0)) != 1 or int(game_state.get("pending_level_choices")) != 1:
+		_fail("raid experience did not create a level reward choice")
+	if not bool(game_state.call("apply_level_reward", "max_health")):
+		_fail("level reward could not be applied")
+	if int(game_state.call("get_max_health")) != base_health + 8:
+		_fail("maximum health level reward was not reflected")
+	if not bool((game_state.call("try_upgrade_training", "vitality") as Dictionary).get("ok", false)):
+		_fail("vitality training rank 1 could not be purchased")
+	if not bool((game_state.call("try_upgrade_training", "vitality") as Dictionary).get("ok", false)):
+		_fail("vitality training rank 2 could not be purchased")
+	if not bool((game_state.call("try_upgrade_training", "recovery") as Dictionary).get("ok", false)):
+		_fail("recovery training prerequisite did not unlock")
 
 	var initial_level := int(game_state.call("get_weapon_enhancement_level", "ak47"))
 	if not bool(game_state.call("try_enhance_weapon", "ak47")):
@@ -46,33 +60,41 @@ func _run() -> void:
 	var module_root := shelter.get_node_or_null("StageOneModules")
 	if module_root == null:
 		_fail("shelter module root is missing")
-	var rack_count := 0
+	if module_root.get_node_or_null("SurvivalTrainingFacility") == null:
+		_fail("shelter training facility module is missing")
+	var player_bed_count := 0
 	for child in module_root.get_children():
-		if child.name.begins_with("DormitoryRack"):
-			rack_count += 1
-	if rack_count != 9:
-		_fail("tier 5 shelter should show nine five-cat dormitory racks")
+		if child.name == "PlayerBed":
+			player_bed_count += 1
+	if player_bed_count != 1:
+		_fail("the shelter must keep exactly one player bed while residents roam freely")
 
 	var test_save_path := "res://.godot/shelter_progression_smoke.json"
 	game_state.set("persistence_enabled", true)
 	game_state.set("persistence_path", test_save_path)
 	game_state.set("scrap", 123456)
 	game_state.set("catnip", 77.5)
+	var saved_player_level := int(game_state.get("player_level"))
+	var saved_training_levels := (game_state.get("training_levels") as Dictionary).duplicate(true)
 	if not bool(game_state.call("save_persistent_state")):
 		_fail("persistent shelter save could not be written")
 	game_state.set("scrap", 1)
 	game_state.set("catnip", 0.0)
+	game_state.set("player_level", 1)
+	game_state.set("training_levels", {})
 	if not bool(game_state.call("load_persistent_state")):
 		_fail("persistent shelter save could not be loaded")
 	if int(game_state.get("scrap")) != 123456 or not is_equal_approx(float(game_state.get("catnip")), 77.5):
 		_fail("persistent shelter save did not restore resource values")
+	if int(game_state.get("player_level")) != saved_player_level or game_state.get("training_levels") != saved_training_levels:
+		_fail("persistent progression save did not restore player and training levels")
 	game_state.set("persistence_enabled", false)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(test_save_path))
 
-	print("SHELTER_PROGRESSION_OK level=%d zone=%s racks=%d" % [
+	print("SHELTER_PROGRESSION_OK level=%d zone=%s player_beds=%d" % [
 		game_state.call("get_weapon_enhancement_level", "ak47"),
 		game_state.get("selected_raid_zone"),
-		rack_count,
+		player_bed_count,
 	])
 	quit(0)
 

@@ -31,12 +31,17 @@ func _run() -> void:
 	await process_frame
 	await physics_frame
 	var boss_found := false
+	var raid_boss: CharacterBody3D
 	for enemy in (main.get("enemies") as Array):
 		if is_instance_valid(enemy) and bool(enemy.get_meta("raid_boss", false)):
 			boss_found = true
+			raid_boss = enemy
 			break
 	if not boss_found:
 		_fail("unlocked high-risk zone did not spawn its raid boss")
+		return
+	if not raid_boss.is_in_group("rocket_boss") or int(raid_boss.call("get_rocket_magazine_ammo")) != 4:
+		_fail("high-risk zone boss is not using the rocket boss controller")
 		return
 
 	var extraction_sites := main.get("extraction_sites") as Array
@@ -84,6 +89,27 @@ func _run() -> void:
 		_fail("structure behind the player incorrectly entered the forward reveal sector")
 		return
 	visibility_probe.queue_free()
+	var aim_probe := StaticBody3D.new()
+	aim_probe.name = "AimBuildingProbe"
+	aim_probe.collision_layer = 1
+	aim_probe.collision_mask = 0
+	aim_probe.add_to_group("camera_occluder")
+	var aim_shape := CollisionShape3D.new()
+	var aim_box := BoxShape3D.new()
+	aim_box.size = Vector3(1.5, 1.5, 1.5)
+	aim_shape.shape = aim_box
+	aim_probe.add_child(aim_shape)
+	main.add_child(aim_probe)
+	aim_probe.global_position = player.global_position + Vector3.RIGHT * 3.0 + Vector3.UP * 0.45
+	await physics_frame
+	main.set("laser_aim_held", true)
+	main.set("locked_aim_direction", Vector3.RIGHT)
+	var aimed_occluder := main.call("_get_aimed_camera_occluder") as Node3D
+	if aimed_occluder != aim_probe:
+		_fail("aim ray did not identify the building it touched (got %s)" % [aimed_occluder.name if aimed_occluder else "null"])
+		return
+	aim_probe.queue_free()
+	main.set("laser_aim_held", false)
 	var component_before := int(game_state.call("get_mod_component_count", "scope_lens"))
 	var component_drop: Node3D = main.call(
 		"_create_loot_pickup",
@@ -101,6 +127,14 @@ func _run() -> void:
 	if float(main.call("_get_fatigue_speed_multiplier")) >= 0.99:
 		_fail("maximum fatigue did not reduce movement speed")
 		return
+	main.set("fatigue", 0.0)
+	main.set("laser_aim_held", true)
+	main.set("has_ak", true)
+	main.call("_update_fatigue", 10.0, false)
+	if float(main.get("fatigue")) < 0.89:
+		_fail("holding aim did not accumulate fatigue")
+		return
+	main.set("laser_aim_held", false)
 	main.call("_add_rescued_follower", player.global_position + Vector3(1, 0, 1))
 	if (main.get("rescued_followers") as Array).size() != 1:
 		_fail("rescued follower was not added")

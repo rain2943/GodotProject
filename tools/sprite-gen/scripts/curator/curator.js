@@ -290,8 +290,8 @@ const STUDIO = {
     skeletonGeneratingAfterBase: "Base ready · starting all skeleton directions...",
     generateFrames: "Generate {count} frames",
     customPhase: "animation phase {index}",
-    addAnimationTitle: "Add animation",
-    addAnimationHelp: "Create one standalone animation section from this base character. Generation starts immediately after the section is added.",
+    addAnimationTitle: "Add section",
+    addAnimationHelp: "Create one non-directional animation section from this base character. Generation starts immediately after the section is added.",
     animationName: "Animation name",
     animationNamePlaceholder: "Example: Sword stab",
     animationFrames: "Frame count",
@@ -407,8 +407,8 @@ const STUDIO = {
     skeletonGeneratingAfterBase: "베이스 준비 완료 · 스켈레톤 전체 방향 생성을 시작합니다...",
     generateFrames: "{count}프레임 생성",
     customPhase: "동작 단계 {index}",
-    addAnimationTitle: "애니메이션 추가",
-    addAnimationHelp: "현재 베이스 캐릭터를 기준으로 독립적인 애니메이션 섹션 하나를 만들고 곧바로 생성을 시작합니다.",
+    addAnimationTitle: "섹션 추가",
+    addAnimationHelp: "현재 베이스 캐릭터를 기준으로 방향 구분이 없는 애니메이션 섹션 하나를 만들고 곧바로 생성을 시작합니다.",
     animationName: "애니메이션 이름",
     animationNamePlaceholder: "예: 칼 찌르기",
     animationFrames: "프레임 수",
@@ -3948,6 +3948,12 @@ async function boot() {
     for (const state of run.states) if (!rendered.has(state.name)) renderState(state);
   } else {
     for (const state of run.states) renderState(state);
+  }
+  // Characters created without directional generation start with no states.
+  // Once their base image exists, let the user append independent animation
+  // sections one at a time instead of leaving the workspace empty.
+  if (run.baseUrl && run.skeletonAssignment && run.skeletonAssignment.mode === "none") {
+    renderAddAnimationPanel();
   }
   syncPpControls();
   syncGridControls();

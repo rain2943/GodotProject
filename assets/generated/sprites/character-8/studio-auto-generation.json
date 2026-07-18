@@ -1,0 +1,24 @@
+{
+  "id": "ce5d45c3709d4513ad5619d1f3e3d002",
+  "status": "completed",
+  "total": 1,
+  "completed": 1,
+  "currentState": null,
+  "currentIndex": null,
+  "states": [
+    "custom_animation"
+  ],
+  "results": [
+    {
+      "state": "custom_animation",
+      "poseTemplateUsed": false,
+      "recovered": false
+    }
+  ],
+  "skeletonProfileId": null,
+  "kind": "custom_animation",
+  "label": "꾹꾹이",
+  "startedAt": "2026-07-18T13:12:22+0900",
+  "regenerateExisting": false,
+  "finishedAt": "2026-07-18T13:13:30+0900"
+}

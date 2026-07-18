@@ -27,15 +27,17 @@ func _run() -> void:
 	assert(initial_spawn_distances.min() < 45.0)
 	assert(initial_spawn_distances.max() > 100.0)
 	var visibility_material: ShaderMaterial = main_scene.get("visibility_material")
-	assert(float(visibility_material.get_shader_parameter("inner_radius")) < 150.0)
+	var night_aim_radius := float(visibility_material.get_shader_parameter("inner_radius"))
+	assert(night_aim_radius >= 150.0 and night_aim_radius < 220.0)
+	assert(float(visibility_material.get_shader_parameter("near_radius")) < 80.0)
 	main_scene.set("reinforcement_timer", 0.0)
 	main_scene.call("_update_enemy_pressure", 1.0)
 	await process_frame
 	enemies = main_scene.get("enemies")
 	assert(enemies.size() == 18)
 	var enemy: Node = enemies[0]
-	assert(enemy.get_node_or_null("VisionFan") is MeshInstance3D)
-	assert(float(enemy.call("_get_vision_range")) >= 9.5)
+	assert(enemy.get_node_or_null("VisionFan") == null)
+	assert(float(enemy.call("_get_vision_range")) >= 18.0)
 	enemy.set("facing_world_direction", Vector3.FORWARD)
 	assert(enemy.call(
 		"_is_position_inside_vision_fan",
@@ -64,9 +66,9 @@ func _run() -> void:
 	enemy.call("_pursue_last_known_position")
 	assert((enemy as CharacterBody3D).velocity.length() > 0.1)
 	enemy.call("_clear_alert")
-	enemy.call("hear_sound", (enemy as Node3D).global_position + Vector3(3.0, 0.0, 0.0), 1.0)
+	enemy.call("receive_reinforcement_order", (enemy as Node3D).global_position + Vector3(3.0, 0.0, 0.0))
 	assert(enemy.get("alerted"))
-	assert(enemy.get_node("ThreatMarker").text == "?")
+	assert(enemy.get_node("ThreatMarker").text == "!")
 
 	var pistol_enemy: Node
 	var ranged_weapon_ids: Array[String] = []
@@ -88,25 +90,27 @@ func _run() -> void:
 	assert(int(pistol_enemy.get("burst_shots_remaining")) == 8)
 	assert(int(pistol_enemy.call("_get_weapon_burst_size")) == 9)
 
-	var wave_script: Script = load("res://scripts/sound_wave.gd")
-	var gunshot_wave: Control = wave_script.new()
-	gunshot_wave.call("configure", "player_gunshot", 1.0)
-	root.add_child(gunshot_wave)
-	await process_frame
-	assert(float(gunshot_wave.get("max_radius")) >= 650.0)
-	assert(int(gunshot_wave.get("ring_count")) == 1)
 	var perception := main_scene.get("perception_system") as CanvasLayer
-	perception.process_mode = Node.PROCESS_MODE_DISABLED
-	for existing_wave in perception.get("sound_waves") as Array:
-		if is_instance_valid(existing_wave):
-			existing_wave.free()
-	perception.call("_prune_sound_waves")
-	perception.call("_spawn_sound_wave", Vector3.ZERO, "heavy_step", 1.0)
-	perception.call("_spawn_sound_wave", Vector3.ONE, "enemy_gunshot", 1.0)
-	assert((perception.get("sound_waves") as Array).is_empty())
-	perception.call("_spawn_sound_wave", Vector3.ONE * 2.0, "player_gunshot", 1.0)
-	assert((perception.get("sound_waves") as Array).size() == 1)
-	assert((perception.get("sound_waves") as Array)[0].get_meta("sound_kind") == "player_gunshot")
+	assert(perception != null)
+	assert(not perception.has_method("emit_player_gunshot"))
+	assert(not perception.has_method("emit_enemy_gunshot"))
+	assert(not enemy.has_method("hear_sound"))
+
+	var grenadier: Node
+	for candidate in enemies:
+		if str(candidate.get("enemy_kind")) == "grenadier":
+			grenadier = candidate
+			break
+	assert(grenadier != null)
+	grenadier.set("target", main_scene.get("player"))
+	grenadier.set("pending_attack_direction", Vector3.FORWARD)
+	grenadier.set("grenade_target_position", (main_scene.get("player") as Node3D).global_position)
+	var main_child_count_before_grenade := main_scene.get_child_count()
+	grenadier.call("_throw_grenade")
+	assert(main_scene.get_child_count() == main_child_count_before_grenade + 1)
+	var spawned_grenade := main_scene.get_child(main_scene.get_child_count() - 1)
+	assert(spawned_grenade.get_script() == load("res://scripts/enemy_grenade.gd"))
+	spawned_grenade.queue_free()
 	var bat_sprite: Sprite3D = main_scene.get("melee_bat_sprite")
 	assert(bat_sprite != null and bat_sprite.texture != null)
 	main_scene.call("_play_bat_swing", Vector3(1.0, 0.0, 0.0))
@@ -132,7 +136,7 @@ func _run() -> void:
 	enemy.call("take_melee_hit", 38, Vector3(1.0, 0.0, 0.0), true)
 	assert(enemy.get("backstab_stunned"))
 	assert(int(enemy.get("health")) == 0)
-	print("COMBAT_SOUND_SMOKE_OK threat=%.2f enemies=%d burst=%d" % [
+	print("COMBAT_ALERT_SMOKE_OK threat=%.2f enemies=%d burst=%d" % [
 		main_scene.get("night_intensity"),
 		enemies.size(),
 		pistol_enemy.get("burst_shots_remaining"),

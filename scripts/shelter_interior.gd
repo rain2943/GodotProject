@@ -8,7 +8,7 @@ const BED_MODULE_SCENE := preload("res://scenes/modules/shelter_bed_module.tscn"
 const WORKBENCH_MODULE_SCENE := preload("res://scenes/modules/shelter_workbench_module.tscn")
 const SCRATCHER_BANK_MODULE_SCENE := preload("res://scenes/modules/scratcher_bank_module.tscn")
 const CATNIP_SCRAPER_MODULE_SCENE := preload("res://scenes/modules/catnip_scraper_module.tscn")
-const DORMITORY_RACK_TEXTURE := preload("res://assets/interiors/modules/dormitory_rack_v1.png")
+const TRAINING_MODULE_SCENE := preload("res://scenes/modules/shelter_training_module.tscn")
 const SHELTER_RESIDENT_SCRIPT := preload("res://scripts/shelter_resident_cat.gd")
 const SHELTER_MERCHANT_SCRIPT := preload("res://scripts/shelter_merchant.gd")
 const MERCHANT_TEXTURE := preload("res://assets/characters/merchant_cat/merchant_down_left_idle.png")
@@ -16,6 +16,14 @@ const MOVE_SPEED := 4.6
 const CAT_ANIMATION_ROOT := "res://assets/characters/cat_8way"
 const CAT_ROLL_ANIMATION_ROOT := "res://assets/characters/cat_roll"
 const ROLL_COOLDOWN_INDICATOR_SCRIPT := preload("res://scripts/roll_cooldown_indicator.gd")
+const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
+const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
+const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
+const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const AMMO_TEXTURE := preload("res://assets/items/ammo_762.png")
+const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
+const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
+const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
 const CAT_DIRECTION_STATES := {
 	"n": "up",
 	"ne": "up_right",
@@ -35,87 +43,40 @@ const ROLL_STAMINA_RECOVERY_PER_SECOND := 30.0
 const ROLL_START_SPEED := 18.0
 const ROLL_END_SPEED := 4.2
 const ROLL_AFTERIMAGE_INTERVAL := 0.06
-const ROOM_ART_SIZE := Vector2(44.0, 25.0)
-const PLAYER_BOUNDS := Vector2(21.2, 11.7)
-const BED_MODULE_PLATE_SIZE := Vector2(2.65, 3.45)
-const STAGE_ONE_BED_POSITIONS := [
-	Vector3(-20.05, 0, -8.0),
-	Vector3(-20.05, 0, -4.35),
-	Vector3(-20.05, 0, -0.7),
-	Vector3(-20.05, 0, 2.95),
-	Vector3(-20.05, 0, 6.6),
-]
-const WORKBENCH_POSITION := Vector3(6.0, 0.0, -11.72)
-const SCRATCHER_BANK_POSITION := Vector3(13.1, 0.0, -11.74)
-const CATNIP_SCRAPER_POSITION := Vector3(-6.0, 0.0, -11.74)
-const DORMITORY_RACK_POSITIONS := [
-	Vector3(-18.0, 0.0, 10.85),
-	Vector3(-13.5, 0.0, 10.85),
-	Vector3(-9.0, 0.0, 10.85),
-	Vector3(-4.5, 0.0, 10.85),
-	Vector3(0.0, 0.0, 10.85),
-	Vector3(4.5, 0.0, 10.85),
-	Vector3(9.0, 0.0, 10.85),
-	Vector3(13.5, 0.0, 10.85),
-	Vector3(18.0, 0.0, 10.85),
-]
-const MERCHANT_POSITION := Vector3(14.35, 0.78, -8.85)
-const MERCHANT_WAIT_POSITION := Vector3(15.55, 0.0, -11.7)
-const RESIDENT_WAIT_POSITIONS := [
-	Vector3(-17.0, 0.78, -8.0),
-	Vector3(-17.0, 0.78, -4.35),
-	Vector3(-17.0, 0.78, -0.7),
-	Vector3(-17.0, 0.78, 2.95),
-	Vector3(-17.0, 0.78, 6.6),
-	Vector3(-14.9, 0.78, -5.9),
-	Vector3(-14.9, 0.78, -1.3),
-	Vector3(-14.9, 0.78, 3.3),
-]
-const SCRATCHER_WORK_POSITIONS := [
-	Vector3(10.55, 0.78, -9.55),
-	Vector3(11.8, 0.78, -9.55),
-	Vector3(13.05, 0.78, -9.55),
-	Vector3(14.3, 0.78, -9.55),
-	Vector3(10.9, 0.78, -8.2),
-	Vector3(12.15, 0.78, -8.2),
-	Vector3(13.4, 0.78, -8.2),
-	Vector3(14.65, 0.78, -8.2),
-]
-const CATNIP_WORK_POSITIONS := [
-	Vector3(-8.2, 0.78, -9.5),
-	Vector3(-6.9, 0.78, -9.5),
-	Vector3(-5.6, 0.78, -9.5),
-	Vector3(-4.3, 0.78, -9.5),
-	Vector3(-3.0, 0.78, -9.5),
-]
-const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
-const STATIONS := {
-	"pipe_exit": {"position": Vector2(16.0, -10.55), "label": "파이프를 타고 도시로 올라가기", "radius": 2.2},
+const ROOM_SIZE_BY_TIER := {
+	1: Vector2(48.0, 28.0),
+	2: Vector2(56.0, 32.0),
+	3: Vector2(64.0, 36.0),
+	4: Vector2(72.0, 40.0),
+	5: Vector2(80.0, 44.0),
 }
+const BED_MODULE_PLATE_SIZE := Vector2(2.65, 3.45)
+const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
+const PIPE_EXIT_LABEL := "파이프를 타고 도시로 올라가기"
 const MERCHANT_GOODS := [
 	{
 		"id": "762_fmj", "type": "ammo", "title": "7.62mm 보통탄 상자", "amount": 30,
-		"buy_price": 42, "sell_price": 16, "icon": "res://assets/items/ammo_762.png",
+		"buy_price": 42, "sell_cans": 2, "icon": "res://assets/items/ammo_762.png",
 		"description": "AK 계열 총기에 사용하는 보통탄 30발입니다.",
 	},
 	{
-		"id": "canned_food", "type": "food", "title": "밀봉 통조림", "amount": 1,
-		"buy_price": 64, "sell_price": 28, "icon": "",
+		"id": "canned_food", "type": "food", "title": "🥫 밀봉 통조림", "amount": 1,
+		"buy_price": 64, "sell_cans": 0, "icon": "",
 		"description": "주민 노동과 쉘터 시설 운영에 필요한 기본 재화입니다.",
 	},
 	{
 		"id": "scope_lens", "type": "component", "title": "스코프 렌즈", "amount": 1,
-		"buy_price": 90, "sell_price": 38, "icon": "res://assets/items/mod_components/scope_lens.png",
+		"buy_price": 90, "sell_cans": 5, "icon": "res://assets/items/mod_components/scope_lens.png",
 		"description": "조준경과 정밀 모듈 제작에 사용하는 온전한 렌즈입니다.",
 	},
 	{
 		"id": "rubber_gasket", "type": "component", "title": "고무 패킹", "amount": 1,
-		"buy_price": 58, "sell_price": 24, "icon": "res://assets/items/mod_components/rubber_gasket.png",
+		"buy_price": 58, "sell_cans": 3, "icon": "res://assets/items/mod_components/rubber_gasket.png",
 		"description": "소음기와 반동 완충 부품 제작에 사용하는 패킹입니다.",
 	},
 	{
 		"id": "magazine_spring", "type": "component", "title": "탄창 스프링", "amount": 1,
-		"buy_price": 72, "sell_price": 30, "icon": "res://assets/items/mod_components/magazine_spring.png",
+		"buy_price": 72, "sell_cans": 4, "icon": "res://assets/items/mod_components/magazine_spring.png",
 		"description": "탄창과 전술 부품 제작에 사용하는 복원력 높은 스프링입니다.",
 	},
 ]
@@ -150,6 +111,7 @@ var roll_audio_player: AudioStreamPlayer3D
 var shelter_residents: Array[CharacterBody3D] = []
 var merchant: Node3D
 var merchant_waiting_marker: Node3D
+var merchant_notice_panel: PanelContainer
 var merchant_ui_layer: CanvasLayer
 var merchant_shop_list: VBoxContainer
 var merchant_shop_scrap_label: Label
@@ -162,6 +124,69 @@ var shelter_stats_refresh_time := 0.0
 var shelter_save_time := 0.0
 var raid_zone_ui_layer: CanvasLayer
 var raid_zone_ui_open := false
+var inventory_ui: Control
+
+
+func _room_art_size() -> Vector2:
+	var room_size: Vector2 = ROOM_SIZE_BY_TIER.get(GameState.shelter_tier, ROOM_SIZE_BY_TIER[1])
+	return room_size
+
+
+func _room_half_extents() -> Vector2:
+	return _room_art_size() * 0.5
+
+
+func _player_bounds() -> Vector2:
+	return _room_half_extents() - Vector2(0.8, 0.8)
+
+
+func _north_module_z() -> float:
+	return -_room_half_extents().y + 0.76
+
+
+func _player_bed_position() -> Vector3:
+	return Vector3(-_room_half_extents().x + 1.95, 0.0, -5.4)
+
+
+func _workbench_position() -> Vector3:
+	return Vector3(-2.0, 0.0, _north_module_z())
+
+
+func _scratcher_bank_position() -> Vector3:
+	return Vector3(_room_half_extents().x - 11.0, 0.0, _north_module_z())
+
+
+func _catnip_scraper_position() -> Vector3:
+	return Vector3(-_room_half_extents().x + 8.0, 0.0, _north_module_z())
+
+
+func _training_position() -> Vector3:
+	return Vector3(5.2, 0.0, _north_module_z())
+
+
+func _pipe_position() -> Vector3:
+	return Vector3(_room_half_extents().x - 3.0, 0.0, _north_module_z() + 1.18)
+
+
+func _merchant_inside_position() -> Vector3:
+	var pipe := _pipe_position()
+	return Vector3(pipe.x - 1.65, 0.78, pipe.z + 1.7)
+
+
+func _pipe_exit_station() -> Dictionary:
+	var pipe := _pipe_position()
+	return {
+		"position": Vector2(pipe.x, pipe.z),
+		"label": PIPE_EXIT_LABEL,
+		"radius": 2.2,
+	}
+
+
+func _resident_roam_bounds() -> Rect2:
+	var half := _room_half_extents()
+	var minimum := Vector2(-half.x + 4.8, -half.y + 6.0)
+	var maximum := Vector2(half.x - 4.8, half.y - 3.0)
+	return Rect2(minimum, maximum - minimum)
 
 
 func _ready() -> void:
@@ -170,6 +195,7 @@ func _ready() -> void:
 	_build_room()
 	_build_stage_one_modules()
 	_build_player()
+	roll_stamina = GameState.get_max_stamina()
 	_build_shelter_residents()
 	_build_roll_audio()
 	_build_interface()
@@ -183,33 +209,34 @@ func _physics_process(delta: float) -> void:
 		return
 	if not roll_active:
 		roll_stamina = minf(
-			ROLL_STAMINA_MAX,
-			roll_stamina + ROLL_STAMINA_RECOVERY_PER_SECOND * delta
+			GameState.get_max_stamina(),
+			roll_stamina + ROLL_STAMINA_RECOVERY_PER_SECOND * GameState.get_stamina_recovery_multiplier() * delta
 		)
 	var input_vector := Vector2.ZERO
-	if not merchant_ui_open and not raid_zone_ui_open:
+	if not _ui_blocks_player():
 		input_vector = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 		if Input.is_key_pressed(KEY_A): input_vector.x -= 1.0
 		if Input.is_key_pressed(KEY_D): input_vector.x += 1.0
 		if Input.is_key_pressed(KEY_W): input_vector.y -= 1.0
 		if Input.is_key_pressed(KEY_S): input_vector.y += 1.0
 	input_vector = input_vector.limit_length(1.0)
-	if not merchant_ui_open and not raid_zone_ui_open and touch_vector.length_squared() > input_vector.length_squared():
+	if not _ui_blocks_player() and touch_vector.length_squared() > input_vector.length_squared():
 		input_vector = touch_vector
 	var world_direction := Vector3(input_vector.x + input_vector.y, 0, -input_vector.x + input_vector.y)
 	if roll_active:
 		_update_roll(delta)
 	elif world_direction.length_squared() > 0.01:
 		world_direction = world_direction.normalized()
-		player.velocity = world_direction * MOVE_SPEED
+		player.velocity = world_direction * MOVE_SPEED * GameState.get_move_speed_multiplier()
 		_update_facing(input_vector)
 		_set_motion_state("walk")
 	else:
 		player.velocity = Vector3.ZERO
 		_set_motion_state("idle")
 	player.move_and_slide()
-	player.position.x = clampf(player.position.x, -PLAYER_BOUNDS.x, PLAYER_BOUNDS.x)
-	player.position.z = clampf(player.position.z, -PLAYER_BOUNDS.y, PLAYER_BOUNDS.y)
+	var bounds := _player_bounds()
+	player.position.x = clampf(player.position.x, -bounds.x, bounds.x)
+	player.position.z = clampf(player.position.z, -bounds.y, bounds.y)
 	_update_camera(delta)
 	_update_nearby_station()
 	_update_roll_feedback()
@@ -220,6 +247,8 @@ func _physics_process(delta: float) -> void:
 
 
 func _build_room() -> void:
+	var room_size := _room_art_size()
+	var half := room_size * 0.5
 	RenderingServer.set_default_clear_color(Color.BLACK)
 	var environment := WorldEnvironment.new()
 	var environment_resource := Environment.new()
@@ -237,19 +266,19 @@ func _build_room() -> void:
 	if ResourceLoader.exists(FLOOR_TEXTURE_PATH):
 		floor_material = _texture_material(load(FLOOR_TEXTURE_PATH) as Texture2D)
 		floor_material.texture_repeat = true
-		floor_material.uv1_scale = Vector3(ROOM_ART_SIZE.x / 8.0, ROOM_ART_SIZE.y / 8.0, 1.0)
+		floor_material.uv1_scale = Vector3(room_size.x / 8.0, room_size.y / 8.0, 1.0)
 	else:
 		floor_material = _material(Color("#242c2a"))
-	_add_plane("ShelterInteriorArt", Vector3(0, 0, 0), ROOM_ART_SIZE, floor_material, self)
+	_add_plane("ShelterInteriorArt", Vector3(0, 0, 0), room_size, floor_material, self)
 	var wall_material := _material(Color("#202a31"))
 	if ResourceLoader.exists(WALL_TEXTURE_PATH):
 		wall_material = _texture_material(load(WALL_TEXTURE_PATH) as Texture2D)
 	_build_visible_walls(wall_material)
 	_build_escape_pipe()
-	_add_obstacle("NorthWallCollision", Vector3(0, 1.5, -12.5), Vector3(44.0, 3.0, 0.55))
-	_add_obstacle("SouthWallCollision", Vector3(0, 1.5, 12.5), Vector3(44.0, 3.0, 0.55))
-	_add_obstacle("WestWallCollision", Vector3(-22.0, 1.5, 0), Vector3(0.55, 3.0, 25.0))
-	_add_obstacle("EastWallCollision", Vector3(22.0, 1.5, 0), Vector3(0.55, 3.0, 25.0))
+	_add_obstacle("NorthWallCollision", Vector3(0, 1.5, -half.y), Vector3(room_size.x, 3.0, 0.55))
+	_add_obstacle("SouthWallCollision", Vector3(0, 1.5, half.y), Vector3(room_size.x, 3.0, 0.55))
+	_add_obstacle("WestWallCollision", Vector3(-half.x, 1.5, 0), Vector3(0.55, 3.0, room_size.y))
+	_add_obstacle("EastWallCollision", Vector3(half.x, 1.5, 0), Vector3(0.55, 3.0, room_size.y))
 	shelter_camera = Camera3D.new()
 	shelter_camera.name = "ShelterCamera"
 	add_child(shelter_camera)
@@ -265,13 +294,19 @@ func _build_room() -> void:
 
 
 func _build_visible_walls(wall_material: Material) -> void:
-	_add_segmented_wall("NorthWall", Vector3(0, 1.5, -12.5), Vector3(44.0, 3.0, 0.55), true, wall_material)
-	_add_segmented_wall("WestWall", Vector3(-22.0, 1.5, 0), Vector3(0.55, 3.0, 25.0), false, wall_material)
+	var room_size := _room_art_size()
+	var half := room_size * 0.5
+	_add_segmented_wall("NorthWall", Vector3(0, 1.5, -half.y), Vector3(room_size.x, 3.0, 0.55), true, wall_material)
+	_add_segmented_wall("WestWall", Vector3(-half.x, 1.5, 0), Vector3(0.55, 3.0, room_size.y), false, wall_material)
 	var light_material := _emissive_material(Color("#55dce9"), 2.5)
-	for x in [-18.0, -12.0, -6.0, 0.0, 6.0, 12.0, 18.0]:
-		_add_visual_box("NorthLight", Vector3(x, 1.35, -12.18), Vector3(1.45, 0.12, 0.08), light_material, self)
-	for z in [-9.0, -3.0, 3.0, 9.0]:
-		_add_visual_box("WestLight", Vector3(-21.68, 1.35, z), Vector3(0.08, 0.12, 1.45), light_material, self)
+	var north_light_count := maxi(3, floori((room_size.x - 4.0) / 6.0) + 1)
+	for index in north_light_count:
+		var x := lerpf(-half.x + 3.0, half.x - 3.0, float(index) / float(maxi(1, north_light_count - 1)))
+		_add_visual_box("NorthLight", Vector3(x, 1.35, -half.y + 0.32), Vector3(1.45, 0.12, 0.08), light_material, self)
+	var west_light_count := maxi(2, floori((room_size.y - 4.0) / 6.0) + 1)
+	for index in west_light_count:
+		var z := lerpf(-half.y + 3.0, half.y - 3.0, float(index) / float(maxi(1, west_light_count - 1)))
+		_add_visual_box("WestLight", Vector3(-half.x + 0.32, 1.35, z), Vector3(0.08, 0.12, 1.45), light_material, self)
 
 
 func _add_segmented_wall(prefix: String, position: Vector3, size: Vector3, along_x: bool, material: Material) -> void:
@@ -294,9 +329,11 @@ func _add_segmented_wall(prefix: String, position: Vector3, size: Vector3, along
 func _build_escape_pipe() -> void:
 	if not ResourceLoader.exists(ESCAPE_PIPE_TEXTURE_PATH):
 		return
+	var half := _room_half_extents()
+	var pipe_station := _pipe_position()
 	var pipe := Sprite3D.new()
 	pipe.name = "EscapePipe"
-	pipe.position = Vector3(16.0, 2.15, -12.12)
+	pipe.position = Vector3(pipe_station.x, 2.15, -half.y + 0.38)
 	pipe.texture = load(ESCAPE_PIPE_TEXTURE_PATH) as Texture2D
 	pipe.pixel_size = 0.0043
 	pipe.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -306,7 +343,7 @@ func _build_escape_pipe() -> void:
 	pipe.render_priority = 30
 	pipe.add_to_group("shelter_exit_pipe")
 	add_child(pipe)
-	_add_obstacle("EscapePipeCollision", Vector3(16.0, 1.0, -11.75), Vector3(1.65, 2.0, 1.05))
+	_add_obstacle("EscapePipeCollision", Vector3(pipe_station.x, 1.0, -half.y + 0.75), Vector3(1.65, 2.0, 1.05))
 
 
 func _build_stage_one_modules() -> void:
@@ -316,53 +353,106 @@ func _build_stage_one_modules() -> void:
 	module_root.set_meta("cat_capacity", GameState.get_resident_capacity())
 	module_root.set_meta("module_grid_size", BED_MODULE_PLATE_SIZE)
 	add_child(module_root)
-	for index in STAGE_ONE_BED_POSITIONS.size():
-		_build_module_plate(module_root, STAGE_ONE_BED_POSITIONS[index], index + 1, 90.0)
-		var bed := BED_MODULE_SCENE.instantiate() as Node3D
-		bed.name = "BedModule%02d" % (index + 1)
-		bed.position = STAGE_ONE_BED_POSITIONS[index]
-		bed.rotation_degrees.y = 90.0
-		bed.set("bed_index", index + 1)
-		module_root.add_child(bed)
+	var bed_position := _player_bed_position()
+	_build_module_plate(module_root, bed_position, 1, 90.0)
+	var bed := BED_MODULE_SCENE.instantiate() as Node3D
+	bed.name = "PlayerBed"
+	bed.position = bed_position
+	bed.rotation_degrees.y = 90.0
+	bed.set("bed_index", 1)
+	module_root.add_child(bed)
 	var workbench := WORKBENCH_MODULE_SCENE.instantiate() as Node3D
 	workbench.name = "WeaponWorkbench"
-	workbench.position = WORKBENCH_POSITION
+	workbench.position = _workbench_position()
 	module_root.add_child(workbench)
 	var bank := SCRATCHER_BANK_MODULE_SCENE.instantiate() as Node3D
 	bank.name = "ScratcherBank"
-	bank.position = SCRATCHER_BANK_POSITION
+	bank.position = _scratcher_bank_position()
 	module_root.add_child(bank)
 	var catnip_scraper := CATNIP_SCRAPER_MODULE_SCENE.instantiate() as Node3D
 	catnip_scraper.name = "CatnipScraper"
-	catnip_scraper.position = CATNIP_SCRAPER_POSITION
+	catnip_scraper.position = _catnip_scraper_position()
 	module_root.add_child(catnip_scraper)
-	_build_tier_dormitory_racks(module_root)
+	var training := TRAINING_MODULE_SCENE.instantiate() as Node3D
+	training.name = "SurvivalTrainingFacility"
+	training.position = _training_position()
+	module_root.add_child(training)
+	_build_production_lines(module_root)
 
 
-func _build_tier_dormitory_racks(module_root: Node3D) -> void:
-	var rack_count_by_tier := {1: 0, 2: 1, 3: 3, 4: 6, 5: 9}
-	var rack_count := int(rack_count_by_tier.get(GameState.shelter_tier, 0))
-	for index in rack_count:
-		if module_root.get_node_or_null("DormitoryRack%02d" % (index + 1)) != null:
-			continue
-		var rack := Sprite3D.new()
-		rack.name = "DormitoryRack%02d" % (index + 1)
-		rack.texture = DORMITORY_RACK_TEXTURE
-		rack.position = DORMITORY_RACK_POSITIONS[index] + Vector3(0.0, 2.05, 0.0)
-		rack.pixel_size = 0.00305
-		rack.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		rack.shaded = false
-		rack.transparent = true
-		rack.no_depth_test = true
-		rack.render_priority = 26
-		rack.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-		rack.set_meta("resident_capacity", 5)
-		module_root.add_child(rack)
-		_add_obstacle(
-			"DormitoryRackCollision%02d" % (index + 1),
-			DORMITORY_RACK_POSITIONS[index] + Vector3(0.0, 0.75, 0.0),
-			Vector3(4.1, 1.5, 1.0)
-		)
+func _build_production_lines(module_root: Node3D) -> void:
+	var scratcher_slots := GameState.get_scratcher_worker_slots()
+	var scratcher_rows := ceili(float(scratcher_slots) / 2.0)
+	_build_production_track(
+		module_root,
+		_scratcher_bank_position().x,
+		_north_module_z() + 3.0,
+		scratcher_rows,
+		3.35,
+		"scratcher"
+	)
+	for index in scratcher_slots:
+		_build_production_slot(module_root, _scratcher_work_position(index), index, "scratcher")
+	var catnip_slots := GameState.get_catnip_worker_slots()
+	_build_production_track(
+		module_root,
+		_catnip_scraper_position().x,
+		_north_module_z() + 3.0,
+		catnip_slots,
+		1.75,
+		"catnip"
+	)
+	for index in catnip_slots:
+		_build_production_slot(module_root, _catnip_work_position(index), index, "catnip")
+
+
+func _build_production_track(parent: Node3D, x: float, first_z: float, rows: int, width: float, kind: String) -> void:
+	if rows <= 0:
+		return
+	var length := 1.0 + float(rows - 1) * 1.35
+	var center_z := first_z + float(rows - 1) * 0.675
+	var track_root := Node3D.new()
+	track_root.name = "CatnipConveyor" if kind == "catnip" else "ScratcherConveyor"
+	track_root.position = Vector3(x, 0.008, center_z)
+	parent.add_child(track_root)
+	var base_color := Color("#14221b") if kind == "catnip" else Color("#252016")
+	var rail_color := Color("#557e58") if kind == "catnip" else Color("#7e6b42")
+	_add_plane("TrackBed", Vector3.ZERO, Vector2(width, length + 0.42), _material(base_color), track_root)
+	var rail_material := _material(rail_color)
+	_add_visual_box("LeftRail", Vector3(-width * 0.5, 0.02, 0), Vector3(0.07, 0.04, length + 0.42), rail_material, track_root)
+	_add_visual_box("RightRail", Vector3(width * 0.5, 0.02, 0), Vector3(0.07, 0.04, length + 0.42), rail_material, track_root)
+	for row in rows + 1:
+		var cross_z := -length * 0.5 + float(row) * (length / float(maxi(1, rows)))
+		_add_visual_box("CrossTie%02d" % row, Vector3(0, 0.018, cross_z), Vector3(width, 0.025, 0.055), rail_material, track_root)
+
+
+func _build_production_slot(parent: Node3D, slot_position: Vector3, index: int, kind: String) -> void:
+	var is_catnip := kind == "catnip"
+	var plate_color := Color("#173026") if is_catnip else Color("#30291b")
+	var edge_color := Color("#79b86b") if is_catnip else Color("#c2a358")
+	var slot_name := "CatnipLineSlot" if is_catnip else "ScratcherLineSlot"
+	var slot_root := Node3D.new()
+	slot_root.name = "%s%02d" % [slot_name, index + 1]
+	slot_root.position = Vector3(slot_position.x, 0.022, slot_position.z)
+	slot_root.set_meta("production_kind", kind)
+	slot_root.set_meta("slot_index", index)
+	parent.add_child(slot_root)
+	_add_plane("Plate", Vector3.ZERO, Vector2(1.35, 1.0), _material(plate_color), slot_root)
+	var edge_material := _emissive_material(edge_color, 1.5)
+	_add_visual_box("NorthEdge", Vector3(0, 0.018, -0.5), Vector3(1.35, 0.025, 0.035), edge_material, slot_root)
+	_add_visual_box("SouthEdge", Vector3(0, 0.018, 0.5), Vector3(1.35, 0.025, 0.035), edge_material, slot_root)
+	_add_visual_box("WestEdge", Vector3(-0.675, 0.018, 0), Vector3(0.035, 0.025, 1.0), edge_material, slot_root)
+	_add_visual_box("EastEdge", Vector3(0.675, 0.018, 0), Vector3(0.035, 0.025, 1.0), edge_material, slot_root)
+	var number := Label3D.new()
+	number.text = "%02d" % (index + 1)
+	number.position = Vector3(0.0, 0.035, 0.0)
+	number.rotation_degrees.x = -90.0
+	number.font = FONT
+	number.font_size = 34
+	number.pixel_size = 0.006
+	number.modulate = Color(edge_color, 0.78)
+	number.no_depth_test = true
+	slot_root.add_child(number)
 
 
 func _build_player() -> void:
@@ -400,13 +490,42 @@ func _build_player() -> void:
 func _build_shelter_residents() -> void:
 	GameState._ensure_resident_records()
 	for resident_id in GameState.resident_cat_ids:
-		var resident := SHELTER_RESIDENT_SCRIPT.new() as CharacterBody3D
-		var waiting_index := shelter_residents.size()
-		resident.name = "ShelterResident_%s" % resident_id
-		resident.call("configure", resident_id, _resident_wait_position(waiting_index))
-		add_child(resident)
-		shelter_residents.append(resident)
+		_spawn_shelter_resident(resident_id)
 	refresh_shelter_residents(true)
+
+
+func _spawn_shelter_resident(resident_id: String) -> CharacterBody3D:
+	for resident in shelter_residents:
+		if is_instance_valid(resident) and str(resident.get_meta("resident_id", "")) == resident_id:
+			return resident
+	var resident := SHELTER_RESIDENT_SCRIPT.new() as CharacterBody3D
+	var waiting_index := shelter_residents.size()
+	resident.name = "ShelterResident_%s" % resident_id
+	resident.call("configure", resident_id, _resident_wait_position(waiting_index))
+	add_child(resident)
+	resident.call("set_roam_bounds", _resident_roam_bounds())
+	shelter_residents.append(resident)
+	return resident
+
+
+func _add_debug_resident() -> bool:
+	var previous_ids := GameState.resident_cat_ids.duplicate()
+	if GameState.try_add_rescued_workers(1) <= 0:
+		_show_status("주민 수용 공간이 가득 찼습니다. 쉘터 Tier를 올려주세요.")
+		return false
+	GameState._ensure_resident_records()
+	for resident_id in GameState.resident_cat_ids:
+		if not previous_ids.has(resident_id):
+			_spawn_shelter_resident(resident_id)
+			break
+	refresh_shelter_residents(true)
+	GameState.save_persistent_state()
+	_update_stats()
+	_show_status("테스트 주민이 쉘터에 합류했습니다.  주민 %d/%d" % [
+		GameState.resident_cat_ids.size(),
+		GameState.get_resident_capacity(),
+	])
+	return true
 
 
 func _setup_merchant_visit() -> void:
@@ -414,8 +533,12 @@ func _setup_merchant_visit() -> void:
 	match GameState.merchant_status:
 		"waiting":
 			_build_merchant_waiting_marker()
+			_set_merchant_notice_visible(true)
 		"inside":
 			_spawn_merchant()
+			_set_merchant_notice_visible(false)
+		_:
+			_set_merchant_notice_visible(false)
 
 
 func _build_merchant_waiting_marker() -> void:
@@ -423,32 +546,40 @@ func _build_merchant_waiting_marker() -> void:
 		return
 	merchant_waiting_marker = Node3D.new()
 	merchant_waiting_marker.name = "MerchantWaitingBubble"
-	merchant_waiting_marker.position = MERCHANT_WAIT_POSITION
+	merchant_waiting_marker.position = _pipe_position()
 	add_child(merchant_waiting_marker)
 
-	var portrait := Sprite3D.new()
-	portrait.name = "MerchantFace"
-	portrait.texture = _merchant_face_texture()
-	portrait.position = Vector3(0.0, 3.05, 0.0)
-	portrait.pixel_size = 0.0074
-	portrait.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	portrait.shaded = false
-	portrait.transparent = true
-	portrait.no_depth_test = true
-	portrait.render_priority = 127
-	portrait.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	merchant_waiting_marker.add_child(portrait)
+	var arrow := Label3D.new()
+	arrow.name = "MerchantArrow"
+	arrow.text = "▼"
+	arrow.position = Vector3(0.0, 3.55, 0.0)
+	arrow.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	arrow.no_depth_test = true
+	arrow.render_priority = 127
+	arrow.font = FONT
+	arrow.font_size = 72
+	arrow.pixel_size = 0.006
+	arrow.modulate = Color(0.96, 0.76, 0.28, 0.0)
+	arrow.outline_modulate = Color(0.08, 0.055, 0.02, 0.96)
+	arrow.outline_size = 14
+	merchant_waiting_marker.add_child(arrow)
+	var arrow_tween := arrow.create_tween().set_loops()
+	arrow_tween.tween_property(arrow, "position:y", 2.3, 0.9).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	arrow_tween.parallel().tween_property(arrow, "modulate:a", 1.0, 0.24).set_trans(Tween.TRANS_SINE)
+	arrow_tween.tween_property(arrow, "modulate:a", 0.0, 0.2).set_trans(Tween.TRANS_SINE)
+	arrow_tween.tween_property(arrow, "position:y", 3.55, 0.01)
+	arrow_tween.tween_interval(0.34)
 
 	var dialogue := Label3D.new()
 	dialogue.name = "MerchantKnockLine"
-	dialogue.text = "문 좀 열어주실 수 있겠냥?"
-	dialogue.position = Vector3(-1.95, 3.08, 0.0)
+	dialogue.text = "행상인이 기다리는 중"
+	dialogue.position = Vector3(0.0, 4.0, 0.0)
 	dialogue.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	dialogue.no_depth_test = true
 	dialogue.render_priority = 127
 	dialogue.font = FONT
-	dialogue.font_size = 42
-	dialogue.pixel_size = 0.0052
+	dialogue.font_size = 30
+	dialogue.pixel_size = 0.0048
 	dialogue.modulate = Color("#f5e6bd")
 	dialogue.outline_modulate = Color(0.015, 0.02, 0.018, 0.96)
 	dialogue.outline_size = 12
@@ -458,7 +589,7 @@ func _spawn_merchant() -> void:
 	if is_instance_valid(merchant):
 		return
 	merchant = SHELTER_MERCHANT_SCRIPT.new() as Node3D
-	merchant.position = MERCHANT_POSITION
+	merchant.position = _merchant_inside_position()
 	add_child(merchant)
 
 
@@ -479,6 +610,7 @@ func refresh_shelter_residents(snap := false) -> void:
 	for resident in shelter_residents:
 		if not is_instance_valid(resident):
 			continue
+		resident.call("set_roam_bounds", _resident_roam_bounds())
 		var resident_id := str(resident.get_meta("resident_id", ""))
 		var kneading_index := GameState.assigned_worker_ids.find(resident_id)
 		var catnip_index := GameState.assigned_catnip_worker_ids.find(resident_id)
@@ -488,32 +620,46 @@ func refresh_shelter_residents(snap := false) -> void:
 		if kneading_index >= 0:
 			assignment_kind = "kneading"
 			target = _scratcher_work_position(kneading_index)
-			focus = SCRATCHER_BANK_POSITION
+			focus = _scratcher_bank_position()
 		elif catnip_index >= 0:
 			assignment_kind = "catnip"
 			target = _catnip_work_position(catnip_index)
-			focus = CATNIP_SCRAPER_POSITION
+			focus = _catnip_scraper_position()
 		resident.call("set_work_assignment", assignment_kind, target, focus, snap)
 
 
 func _resident_wait_position(index: int) -> Vector3:
-	if index >= 0 and index < RESIDENT_WAIT_POSITIONS.size():
-		return RESIDENT_WAIT_POSITIONS[index]
-	var overflow := maxi(0, index - RESIDENT_WAIT_POSITIONS.size())
-	return Vector3(-14.6 + float(overflow % 7) * 1.55, 0.78, 8.0 - float(overflow / 7) * 1.45)
+	var bounds := _resident_roam_bounds()
+	var columns := maxi(3, ceili(sqrt(float(GameState.get_resident_capacity()))))
+	var column := maxi(0, index) % columns
+	var row := maxi(0, index) / columns
+	var x_spacing := minf(2.4, (bounds.size.x - 2.0) / float(maxi(1, columns - 1)))
+	var row_space := maxf(2.0, bounds.size.y - 2.0)
+	return Vector3(
+		bounds.position.x + 1.0 + float(column) * x_spacing,
+		0.78,
+		bounds.position.y + 1.0 + fmod(float(row) * 2.2, row_space)
+	)
 
 
 func _scratcher_work_position(index: int) -> Vector3:
-	if index >= 0 and index < SCRATCHER_WORK_POSITIONS.size():
-		return SCRATCHER_WORK_POSITIONS[index]
-	var overflow := maxi(0, index - SCRATCHER_WORK_POSITIONS.size())
-	return Vector3(10.55 + float(overflow % 4) * 1.25, 0.78, -6.9 + float(overflow / 4) * 1.25)
+	var station := _scratcher_bank_position()
+	var column := maxi(0, index) % 2
+	var row := maxi(0, index) / 2
+	return Vector3(
+		station.x - 0.85 + float(column) * 1.7,
+		0.78,
+		_north_module_z() + 3.0 + float(row) * 1.35
+	)
 
 
 func _catnip_work_position(index: int) -> Vector3:
-	if index >= 0 and index < CATNIP_WORK_POSITIONS.size():
-		return CATNIP_WORK_POSITIONS[index]
-	return CATNIP_WORK_POSITIONS[CATNIP_WORK_POSITIONS.size() - 1]
+	var station := _catnip_scraper_position()
+	return Vector3(
+		station.x,
+		0.78,
+		_north_module_z() + 3.0 + float(maxi(0, index)) * 1.35
+	)
 
 
 func _update_camera(delta: float) -> void:
@@ -524,6 +670,15 @@ func _update_camera(delta: float) -> void:
 	camera_focus = camera_focus.lerp(desired_focus, follow_weight)
 	shelter_camera.position = camera_focus + Vector3(18.0, 18.0, 18.0)
 	shelter_camera.look_at(camera_focus)
+
+
+func _ui_blocks_player() -> bool:
+	return (
+		merchant_ui_open
+		or raid_zone_ui_open
+		or not get_tree().get_nodes_in_group("shelter_modal_ui").is_empty()
+		or (inventory_ui != null and bool(inventory_ui.call("is_open")))
+	)
 
 
 func _build_interface() -> void:
@@ -551,6 +706,9 @@ func _build_interface() -> void:
 	stats_label.add_theme_font_size_override("font_size", 16)
 	stats_box.add_child(stats_label)
 	shelter_upgrade_button = Button.new()
+	shelter_upgrade_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#d8c47b"))
+	shelter_upgrade_button.expand_icon = true
+	shelter_upgrade_button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	shelter_upgrade_button.add_theme_font_override("font", FONT)
 	shelter_upgrade_button.add_theme_font_size_override("font_size", 13)
 	shelter_upgrade_button.pressed.connect(_upgrade_shelter_tier)
@@ -584,19 +742,89 @@ func _build_interface() -> void:
 	status_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	status_label.add_theme_constant_override("outline_size", 6)
 	canvas.add_child(status_label)
+	_build_merchant_arrival_notice(canvas)
 	interact_button = Button.new()
 	interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	interact_button.position = Vector2(-154, -142)
 	interact_button.size = Vector2(118, 72)
 	interact_button.text = "상호작용"
+	interact_button.icon = UI_ICONS.get_icon("interact", 32, Color("#dce8e1"))
+	interact_button.expand_icon = true
 	interact_button.add_theme_font_override("font", FONT)
 	interact_button.add_theme_font_size_override("font_size", 17)
 	interact_button.pressed.connect(_interact)
 	canvas.add_child(interact_button)
+	inventory_ui = INVENTORY_UI_SCRIPT.new()
+	inventory_ui.name = "InventoryUI"
+	canvas.add_child(inventory_ui)
+	inventory_ui.call("setup", FONT, WEAPON_VISUAL_CATALOG.get_weapon_texture(GameState.equipped_weapon_id), AMMO_TEXTURE, {
+		"rubber_gasket": RUBBER_GASKET_TEXTURE,
+		"scope_lens": SCOPE_LENS_TEXTURE,
+		"magazine_spring": MAGAZINE_SPRING_TEXTURE,
+	}, WEAPON_VISUAL_CATALOG.get_inventory_textures())
+	inventory_ui.connect("open_state_changed", _on_inventory_open_state_changed)
+	inventory_ui.connect("weapon_mods_changed", _on_inventory_weapon_mods_changed)
+	inventory_ui.connect("weapon_equipped", _on_inventory_weapon_equipped)
+	inventory_ui.connect("equipment_changed", _on_inventory_equipment_changed)
+	_refresh_inventory_state()
 	roll_cooldown_indicator = ROLL_COOLDOWN_INDICATOR_SCRIPT.new() as Control
 	roll_cooldown_indicator.name = "ShelterRollCooldownIndicator"
 	canvas.add_child(roll_cooldown_indicator)
 	_build_touch_stick(canvas)
+
+
+func _build_merchant_arrival_notice(canvas: CanvasLayer) -> void:
+	merchant_notice_panel = PanelContainer.new()
+	merchant_notice_panel.name = "MerchantArrivalNotice"
+	merchant_notice_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	merchant_notice_panel.offset_left = -406
+	merchant_notice_panel.offset_top = 22
+	merchant_notice_panel.offset_right = -24
+	merchant_notice_panel.offset_bottom = 94
+	merchant_notice_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	merchant_notice_panel.add_theme_stylebox_override(
+		"panel",
+		_rounded_panel_style(Color(0.018, 0.027, 0.026, 0.96), Color("#c9a65d"), 7)
+	)
+	canvas.add_child(merchant_notice_panel)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	merchant_notice_panel.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	margin.add_child(row)
+	var portrait := TextureRect.new()
+	portrait.custom_minimum_size = Vector2(52, 52)
+	portrait.texture = _merchant_face_texture()
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(portrait)
+	var text_box := VBoxContainer.new()
+	text_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(text_box)
+	var title := Label.new()
+	title.text = "하수구 방문자"
+	title.add_theme_font_override("font", FONT)
+	title.add_theme_font_size_override("font_size", 15)
+	title.add_theme_color_override("font_color", Color("#efd58d"))
+	text_box.add_child(title)
+	var body := Label.new()
+	body.text = "낯선 행상인이 문을 두드리고 있습니다."
+	body.add_theme_font_override("font", FONT)
+	body.add_theme_font_size_override("font_size", 12)
+	body.add_theme_color_override("font_color", Color("#c8d7cf"))
+	text_box.add_child(body)
+	merchant_notice_panel.visible = false
+
+
+func _set_merchant_notice_visible(value: bool) -> void:
+	if is_instance_valid(merchant_notice_panel):
+		merchant_notice_panel.visible = value
 
 
 func _open_merchant_arrival_dialog() -> void:
@@ -617,47 +845,56 @@ func _open_merchant_arrival_dialog() -> void:
 	merchant_ui_layer.add_child(root_control)
 	var dim := ColorRect.new()
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.color = Color(0.005, 0.008, 0.01, 0.78)
+	dim.color = Color(0.005, 0.008, 0.01, 0.72)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	root_control.add_child(dim)
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root_control.add_child(center)
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(640, 310)
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.025, 0.034, 0.031, 0.98), Color("#9a8153")))
+	panel.name = "MerchantArrivalCard"
+	panel.custom_minimum_size = Vector2(580, 286)
+	panel.add_theme_stylebox_override("panel", _rounded_panel_style(Color(0.025, 0.034, 0.031, 0.99), Color("#c6a45c"), 8))
 	center.add_child(panel)
 	var margin := MarginContainer.new()
 	for margin_name in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
-		margin.add_theme_constant_override(margin_name, 20)
+		margin.add_theme_constant_override(margin_name, 22)
 	panel.add_child(margin)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 16)
+	box.add_theme_constant_override("separation", 14)
 	margin.add_child(box)
 	var title := Label.new()
-	title.text = "하수구 밖에서 들려오는 목소리"
+	title.text = "낯선 방문자"
 	title.add_theme_font_override("font", FONT)
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_size_override("font_size", 22)
 	title.add_theme_color_override("font_color", Color("#ead69c"))
 	box.add_child(title)
 	var content := HBoxContainer.new()
-	content.add_theme_constant_override("separation", 18)
+	content.add_theme_constant_override("separation", 16)
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(content)
 	var portrait := TextureRect.new()
-	portrait.custom_minimum_size = Vector2(142, 142)
+	portrait.custom_minimum_size = Vector2(116, 116)
 	portrait.texture = _merchant_face_texture()
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	content.add_child(portrait)
 	var dialogue_box := VBoxContainer.new()
+	dialogue_box.custom_minimum_size = Vector2(360, 116)
 	dialogue_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	dialogue_box.add_theme_constant_override("separation", 7)
 	dialogue_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_child(dialogue_box)
+	var location := Label.new()
+	location.text = "하수구 입구  ·  행상인"
+	location.add_theme_font_override("font", FONT)
+	location.add_theme_font_size_override("font_size", 13)
+	location.add_theme_color_override("font_color", Color("#a8bcb1"))
+	dialogue_box.add_child(location)
 	var line := Label.new()
-	line.text = "문 좀 열어주실 수 있겠냥?\n필요한 물건이라면 제법 챙겨 왔다냥."
+	line.text = "“문 좀 열어주실 수 있겠냥?”\n물건을 챙겨 온 행상인이 입장을 기다립니다."
 	line.add_theme_font_override("font", FONT)
-	line.add_theme_font_size_override("font_size", 19)
+	line.add_theme_font_size_override("font_size", 17)
 	line.add_theme_color_override("font_color", Color("#ebe5d4"))
 	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dialogue_box.add_child(line)
@@ -665,10 +902,12 @@ func _open_merchant_arrival_dialog() -> void:
 	choices.alignment = BoxContainer.ALIGNMENT_END
 	choices.add_theme_constant_override("separation", 10)
 	box.add_child(choices)
-	var decline := _merchant_button("돌려보낸다", false)
+	var decline := _merchant_button("돌려보낸다", false, "close")
+	decline.custom_minimum_size = Vector2(150, 44)
 	decline.pressed.connect(_decline_merchant)
 	choices.add_child(decline)
-	var accept := _merchant_button("들어오게 한다", true)
+	var accept := _merchant_button("들어오게 한다", true, "resident")
+	accept.custom_minimum_size = Vector2(150, 44)
 	accept.pressed.connect(_accept_merchant)
 	choices.add_child(accept)
 
@@ -678,6 +917,7 @@ func _accept_merchant() -> void:
 	if is_instance_valid(merchant_waiting_marker):
 		merchant_waiting_marker.queue_free()
 	merchant_waiting_marker = null
+	_set_merchant_notice_visible(false)
 	_spawn_merchant()
 	_close_merchant_ui()
 	_show_status("행상인이 쉘터에 들어왔습니다. 말을 걸어 거래할 수 있습니다.")
@@ -688,6 +928,7 @@ func _decline_merchant() -> void:
 	if is_instance_valid(merchant_waiting_marker):
 		merchant_waiting_marker.queue_free()
 	merchant_waiting_marker = null
+	_set_merchant_notice_visible(false)
 	_close_merchant_ui()
 	_show_status("행상인을 돌려보냈습니다. 다음 복귀 때 다시 찾아올 수도 있습니다.")
 
@@ -762,17 +1003,17 @@ func _open_merchant_shop() -> void:
 	merchant_shop_scrap_label.add_theme_color_override("font_color", Color("#e8cb72"))
 	merchant_shop_scrap_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	header.add_child(merchant_shop_scrap_label)
-	var close := _merchant_button("닫기", false)
+	var close := _merchant_button("닫기", false, "close")
 	close.pressed.connect(_close_merchant_ui)
 	header.add_child(close)
 
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 8)
 	box.add_child(tabs)
-	merchant_buy_tab = _merchant_button("구매", true)
+	merchant_buy_tab = _merchant_button("구매", true, "backpack")
 	merchant_buy_tab.pressed.connect(func() -> void: _set_merchant_shop_mode("buy"))
 	tabs.add_child(merchant_buy_tab)
-	merchant_sell_tab = _merchant_button("판매", false)
+	merchant_sell_tab = _merchant_button("판매", false, "scrap")
 	merchant_sell_tab.pressed.connect(func() -> void: _set_merchant_shop_mode("sell"))
 	tabs.add_child(merchant_sell_tab)
 
@@ -805,7 +1046,7 @@ func _refresh_merchant_shop() -> void:
 	for child in merchant_shop_list.get_children():
 		merchant_shop_list.remove_child(child)
 		child.queue_free()
-	merchant_shop_scrap_label.text = "고철  %d" % GameState.scrap
+	merchant_shop_scrap_label.text = "🔩 %d   🥫 %d" % [GameState.scrap, GameState.canned_food]
 	merchant_buy_tab.disabled = merchant_shop_mode == "buy"
 	merchant_sell_tab.disabled = merchant_shop_mode == "sell"
 	for good_variant in MERCHANT_GOODS:
@@ -815,12 +1056,13 @@ func _refresh_merchant_shop() -> void:
 
 func _merchant_trade_row(good: Dictionary) -> Button:
 	var buying := merchant_shop_mode == "buy"
-	var price := int(good["buy_price"] if buying else good["sell_price"])
+	var price := int(good["buy_price"] if buying else good.get("sell_cans", 0))
 	var owned := _merchant_item_count(good)
 	var action := "구매" if buying else "판매"
+	var currency := "🔩 고철" if buying else "🥫 통조림"
 	var button := _merchant_button(
-		"%s  x%d\n%s    ·    보유 %d    ·    고철 %d" % [
-			str(good["title"]), int(good["amount"]), str(good["description"]), owned, price,
+		"%s  x%d\n%s    ·    보유 %d    ·    %s %d" % [
+			str(good["title"]), int(good["amount"]), str(good["description"]), owned, currency, price,
 		],
 		buying
 	)
@@ -830,30 +1072,35 @@ func _merchant_trade_row(good: Dictionary) -> Button:
 	var icon_path := str(good.get("icon", ""))
 	if not icon_path.is_empty() and ResourceLoader.exists(icon_path):
 		button.icon = load(icon_path) as Texture2D
-		button.expand_icon = true
-		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.disabled = GameState.scrap < price if buying else owned < int(good["amount"])
+	else:
+		button.icon = _merchant_good_fallback_icon(good)
+	button.expand_icon = true
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.disabled = GameState.scrap < price if buying else (price <= 0 or owned < int(good["amount"]))
 	button.pressed.connect(func() -> void: _trade_merchant_good(good, buying))
 	return button
 
 
 func _trade_merchant_good(good: Dictionary, buying: bool) -> void:
-	var price := int(good["buy_price"] if buying else good["sell_price"])
+	var price := int(good["buy_price"] if buying else good.get("sell_cans", 0))
 	var amount := int(good["amount"])
 	if buying:
 		if GameState.scrap < price:
-			merchant_shop_message_label.text = "고철이 부족합니다."
+			merchant_shop_message_label.text = "🔩 고철이 부족합니다."
 			return
 		GameState.scrap -= price
 		_add_merchant_item(good, amount)
 		merchant_shop_message_label.text = "%s을(를) 구매했습니다." % str(good["title"])
 	else:
+		if price <= 0:
+			merchant_shop_message_label.text = "이 물건은 매입하지 않습니다."
+			return
 		if _merchant_item_count(good) < amount:
 			merchant_shop_message_label.text = "판매할 물건이 부족합니다."
 			return
 		_add_merchant_item(good, -amount)
-		GameState.scrap += price
-		merchant_shop_message_label.text = "%s을(를) 판매했습니다." % str(good["title"])
+		GameState.canned_food += price
+		merchant_shop_message_label.text = "%s을(를) 판매하고 🥫 통조림 %d개를 받았습니다." % [str(good["title"]), price]
 	_update_stats()
 	_refresh_merchant_shop()
 
@@ -892,9 +1139,24 @@ func _close_merchant_ui() -> void:
 	merchant_sell_tab = null
 
 
-func _merchant_button(text: String, accent: bool) -> Button:
+func _merchant_good_fallback_icon(good: Dictionary) -> Texture2D:
+	match str(good.get("type", "")):
+		"ammo":
+			return UI_ICONS.get_icon("ammo", 48, Color("#d7c16d"))
+		"food":
+			return UI_ICONS.get_icon("food", 48, Color("#e5b55b"))
+		"component":
+			return UI_ICONS.get_icon("mod", 48, Color("#84cbb9"))
+	return UI_ICONS.get_icon("all", 48, Color("#aebdb5"))
+
+
+func _merchant_button(text: String, accent: bool, icon_name := "") -> Button:
 	var button := Button.new()
 	button.text = text
+	if not icon_name.is_empty():
+		button.icon = UI_ICONS.get_icon(icon_name, 28, Color("#e8dfcb"))
+		button.expand_icon = true
+		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.focus_mode = Control.FOCUS_NONE
 	button.add_theme_font_override("font", FONT)
 	button.add_theme_font_size_override("font_size", 15)
@@ -946,22 +1208,21 @@ func _update_nearby_station() -> void:
 	var nearest := ""
 	var nearest_distance := INF
 	var nearest_module: Node3D
+	var exit_station := _pipe_exit_station()
 	if GameState.merchant_status == "waiting":
-		var waiting_distance := player_ground.distance_to(Vector2(MERCHANT_WAIT_POSITION.x, MERCHANT_WAIT_POSITION.z))
-		if waiting_distance <= 2.8:
+		var waiting_distance := player_ground.distance_to(exit_station["position"])
+		if waiting_distance <= float(exit_station["radius"]) + 0.35:
 			nearest = "merchant_waiting"
-			nearest_distance = waiting_distance
+			nearest_distance = -1.0
 	if GameState.merchant_status == "inside" and is_instance_valid(merchant):
 		var merchant_distance := player.global_position.distance_to(merchant.global_position)
 		if merchant_distance <= 2.15 and merchant_distance < nearest_distance:
 			nearest = "merchant_shop"
 			nearest_distance = merchant_distance
-	for station_name in STATIONS:
-		var station: Dictionary = STATIONS[station_name]
-		var distance := player_ground.distance_to(station["position"])
-		if distance <= float(station["radius"]) and distance < nearest_distance:
-			nearest = station_name
-			nearest_distance = distance
+	var exit_distance := player_ground.distance_to(exit_station["position"])
+	if exit_distance <= float(exit_station["radius"]) and exit_distance < nearest_distance:
+		nearest = "pipe_exit"
+		nearest_distance = exit_distance
 	for node in get_tree().get_nodes_in_group("shelter_module"):
 		if not (node is Node3D):
 			continue
@@ -981,16 +1242,34 @@ func _update_nearby_station() -> void:
 	current_station = nearest
 	interact_button.visible = not current_station.is_empty()
 	prompt_label.visible = not current_station.is_empty()
+	interact_button.text = "상호작용"
+	interact_button.icon = UI_ICONS.get_icon("interact", 32, Color("#dce8e1"))
 	if current_station.is_empty():
 		prompt_label.text = ""
 	elif current_station == "module" and is_instance_valid(current_module):
 		prompt_label.text = "[E]  %s" % str(current_module.call("get_interaction_prompt"))
+		interact_button.text = "사용"
+		var module_kind := str(current_module.get_meta("module_kind", ""))
+		var interaction_icon := "workbench"
+		if module_kind == "catnip_scraper":
+			interaction_icon = "catnip"
+		elif module_kind == "scratcher_bank":
+			interaction_icon = "scrap"
+		elif module_kind == "training":
+			interaction_icon = "fitness"
+		interact_button.icon = UI_ICONS.get_icon(interaction_icon, 32, Color("#dce8e1"))
 	elif current_station == "merchant_waiting":
-		prompt_label.text = "[E]  하수구 밖의 낯선 고양이와 대화하기"
+		prompt_label.text = "[E]  누군가와 대화"
+		interact_button.text = "대화"
+		interact_button.icon = UI_ICONS.get_icon("resident", 32, Color("#e4c874"))
 	elif current_station == "merchant_shop":
 		prompt_label.text = "[E]  행상인과 거래하기"
+		interact_button.text = "거래"
+		interact_button.icon = UI_ICONS.get_icon("backpack", 32, Color("#e4c874"))
 	else:
-		prompt_label.text = "[E]  %s" % STATIONS[current_station]["label"]
+		prompt_label.text = "[E]  %s" % _pipe_exit_station()["label"]
+		interact_button.text = "탐색"
+		interact_button.icon = UI_ICONS.get_icon("upgrade", 32, Color("#dce8e1"))
 
 
 func _interact() -> void:
@@ -1011,9 +1290,11 @@ func _interact() -> void:
 
 func _update_stats() -> void:
 	GameState._ensure_resident_records()
-	stats_label.text = "SHELTER 01  ·  Tier %d\n체력 %d/100   주민 %d/%d\n고철 %d   캣닢 %.1f\n통조림 %d   츄르 %d\n꾹꾹이 %d/%d   스크래핑 %d/%d" % [
+	stats_label.text = "SHELTER 01  ·  Tier %d  ·  Lv.%d\n체력 %d/%d   주민 %d/%d\n🔩 고철 %d   🌿 캣닢 %.1f\n🥫 통조림 %d   🍗 츄르 %d\n꾹꾹이 %d/%d   스크래핑 %d/%d" % [
 		GameState.shelter_tier,
+		GameState.player_level,
 		GameState.player_health,
+		GameState.get_max_health(),
 		GameState.rescued_workers,
 		GameState.get_resident_capacity(),
 		GameState.scrap,
@@ -1033,16 +1314,60 @@ func _update_stats() -> void:
 		else:
 			var scrap_cost := int(cost.get("scrap", 0))
 			var churu_cost := int(cost.get("churu", 0))
-			shelter_upgrade_button.text = "Tier %d 확장  ·  고철 %d + 츄르 %d" % [GameState.shelter_tier + 1, scrap_cost, churu_cost]
+			shelter_upgrade_button.text = "Tier %d 확장  ·  🔩 고철 %d + 🍗 츄르 %d" % [GameState.shelter_tier + 1, scrap_cost, churu_cost]
 			shelter_upgrade_button.disabled = GameState.scrap < scrap_cost or GameState.churu < churu_cost
+func _refresh_inventory_state() -> void:
+	if inventory_ui == null:
+		return
+	var weapon_id := str(GameState.equipped_weapon_id)
+	var weapon_definition := WEAPON_SYSTEM.get_weapon(weapon_id)
+	var stored_weapons := 0
+	for count in GameState.weapon_inventory.values():
+		stored_weapons += int(count)
+	inventory_ui.call("set_weapon_texture", WEAPON_VISUAL_CATALOG.get_weapon_texture(weapon_id))
+	inventory_ui.call("update_state",
+		GameState.get_weapon_count(weapon_id) > 0,
+		int(GameState.magazine_ammo),
+		int(GameState.get_ammo_count(GameState.equipped_ammo_id)),
+		str(weapon_definition.get("display_name", weapon_id.to_upper())),
+		int(weapon_definition.get("magazine_size", 30)),
+		float(GameState.weapon_durability),
+		GameState.equipped_weapon_mods,
+		int(GameState.canned_food),
+		stored_weapons,
+		GameState.mod_component_inventory,
+		int(GameState.rescued_workers),
+		float(GameState.fatigue)
+	)
+
+
+func _on_inventory_open_state_changed(is_open: bool) -> void:
+	if is_open:
+		_refresh_inventory_state()
+		touch_vector = Vector2.ZERO
+		player.velocity = Vector3.ZERO
+		_set_motion_state("idle")
+
+
+func _on_inventory_weapon_mods_changed() -> void:
+	GameState.save_persistent_state()
+	_refresh_inventory_state()
+
+
+func _on_inventory_weapon_equipped(weapon_id: String) -> void:
+	if not GameState.equip_weapon(weapon_id):
+		return
+	GameState.save_persistent_state()
+	_refresh_inventory_state()
+
+
+func _on_inventory_equipment_changed() -> void:
+	GameState.save_persistent_state()
+	_refresh_inventory_state()
 
 
 func _upgrade_shelter_tier() -> void:
 	if GameState.try_upgrade_shelter_tier():
-		var module_root := get_node_or_null("StageOneModules") as Node3D
-		if module_root:
-			_build_tier_dormitory_racks(module_root)
-		refresh_shelter_residents(false)
 		_show_status("쉘터 Tier %d 확장 완료 · 수용 %d · 꾹꾹이 %d · 스크래핑 %d" % [
 			GameState.shelter_tier,
 			GameState.get_resident_capacity(),
@@ -1050,6 +1375,8 @@ func _upgrade_shelter_tier() -> void:
 			GameState.get_catnip_worker_slots(),
 		])
 		GameState.save_persistent_state()
+		get_tree().reload_current_scene()
+		return
 	_update_stats()
 
 
@@ -1064,7 +1391,7 @@ func _update_live_shelter_income(delta: float) -> void:
 		shelter_stats_refresh_time = 0.0
 		_update_stats()
 	if gained > 0 and scrap_gain_label:
-		scrap_gain_label.text = "+%d 고철   %.2f/s" % [gained, GameState.get_scrap_per_second()]
+		scrap_gain_label.text = "+%d 🔩 고철   %.2f/s" % [gained, GameState.get_scrap_per_second()]
 		scrap_gain_label.modulate.a = 1.0
 
 
@@ -1109,6 +1436,8 @@ func _open_raid_zone_select() -> void:
 	header.add_child(title)
 	var close := Button.new()
 	close.text = "닫기"
+	close.icon = UI_ICONS.get_icon("close", 28, Color("#dce7df"))
+	close.expand_icon = true
 	close.add_theme_font_override("font", FONT)
 	close.pressed.connect(_close_raid_zone_select)
 	header.add_child(close)
@@ -1146,6 +1475,12 @@ func _build_raid_zone_row(zone_id: String) -> Control:
 	var content := HBoxContainer.new()
 	content.add_theme_constant_override("separation", 14)
 	margin.add_child(content)
+	var zone_icon := TextureRect.new()
+	zone_icon.custom_minimum_size = Vector2(56, 56)
+	zone_icon.texture = UI_ICONS.get_icon("raid", 56, Color("#d3b86b") if unlocked else Color("#5f6964"))
+	zone_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	zone_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	content.add_child(zone_icon)
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_child(info)
@@ -1170,6 +1505,8 @@ func _build_raid_zone_row(zone_id: String) -> Control:
 	var launch := Button.new()
 	launch.custom_minimum_size = Vector2(130, 58)
 	launch.text = "출정" if unlocked else "Tier %d 필요" % int(zone.get("required_tier", 1))
+	launch.icon = UI_ICONS.get_icon("upgrade" if not unlocked else "raid", 30, Color("#e6d8ae"))
+	launch.expand_icon = true
 	launch.disabled = not unlocked
 	launch.add_theme_font_override("font", FONT)
 	launch.add_theme_font_size_override("font_size", 15)
@@ -1227,7 +1564,7 @@ func _build_offline_status_text(progress: Dictionary) -> String:
 	var catnip_gain := float(progress.get("catnip", 0.0))
 	var repair_gain := float(progress.get("repair", 0.0))
 	if scrap_gain > 0 or catnip_gain > 0.01 or repair_gain > 0.01:
-		return "오프라인 정산 · 고철 +%d · 캣닢 +%.1f · 내구도 +%.1f%%" % [scrap_gain, catnip_gain, repair_gain]
+		return "오프라인 정산 · 🔩 고철 +%d · 🌿 캣닢 +%.1f · 내구도 +%.1f%%" % [scrap_gain, catnip_gain, repair_gain]
 	return "쉘터에 복귀했습니다. 생산기에 주민을 배치할 수 있습니다."
 
 
@@ -1292,6 +1629,10 @@ func _create_cat_frames() -> SpriteFrames:
 
 
 func _input(event: InputEvent) -> void:
+	if inventory_ui != null and bool(inventory_ui.call("is_open")):
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_ESCAPE, KEY_I, KEY_B]:
+			inventory_ui.call("toggle")
+		return
 	if raid_zone_ui_open:
 		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
 			_close_raid_zone_select()
@@ -1301,8 +1642,12 @@ func _input(event: InputEvent) -> void:
 			_close_merchant_ui()
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_E:
+		if event.keycode == KEY_I or event.keycode == KEY_B:
+			inventory_ui.call("toggle")
+		elif event.keycode == KEY_E:
 			_interact()
+		elif event.keycode == KEY_3:
+			_add_debug_resident()
 		elif event.keycode == KEY_SPACE:
 			_try_start_roll()
 	elif event is InputEventScreenTouch:
@@ -1451,7 +1796,7 @@ func _spawn_roll_afterimage() -> void:
 func _update_roll_feedback() -> void:
 	if roll_cooldown_indicator == null or shelter_camera == null or player == null:
 		return
-	var stamina_ratio := clampf(roll_stamina / ROLL_STAMINA_MAX, 0.0, 1.0)
+	var stamina_ratio := clampf(roll_stamina / GameState.get_max_stamina(), 0.0, 1.0)
 	var stamina_is_active := roll_active or stamina_ratio < 0.999
 	var head_position := shelter_camera.unproject_position(player.global_position + Vector3(0, 2.05, 0))
 	roll_cooldown_indicator.position = head_position + Vector2(26.0, -9.0)

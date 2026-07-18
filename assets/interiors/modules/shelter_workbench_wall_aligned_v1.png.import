@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b5h7ag3u4ks9m"
-path="res://.godot/imported/shelter_workbench_wall_aligned_v1.png-6e943b902e3d7b30a83dbe88a0ef23c1.ctex"
+uid="uid://b5h7ag3u4ktam"
+path="res://.godot/imported/shelter_workbench_wall_aligned_v1.png-8f998e2432591bed1d6c11902d071b2f.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/interiors/modules/shelter_workbench_wall_aligned_v1.png"
-dest_files=["res://.godot/imported/shelter_workbench_wall_aligned_v1.png-6e943b902e3d7b30a83dbe88a0ef23c1.ctex"]
+dest_files=["res://.godot/imported/shelter_workbench_wall_aligned_v1.png-8f998e2432591bed1d6c11902d071b2f.ctex"]
 
 [params]
 

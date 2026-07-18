@@ -80,6 +80,8 @@ _auto_generation_jobs: dict[str, dict] = {}
 _auto_generation_workers: set[str] = set()
 _notification_lock = threading.Lock()
 _character_lock = threading.Lock()
+_RUN_SNAPSHOT_RETRY_SECONDS = 60.0
+_RUN_SNAPSHOT_RETRY_INTERVAL = 0.2
 
 
 def _generation_job_lock(run_dir: Path, state: str, phase: int | None) -> threading.Lock:
@@ -385,24 +387,24 @@ _IDLE_PHASES = (
 
 _DIRECTION_VIEW = {
     "down": "front view, moving toward the viewer",
-    "down_right": "three-quarter front view, moving down-right",
-    "right": "pure side profile, moving right",
-    "up_right": "three-quarter back view, moving up-right",
+    "down_right": "three-quarter front view, moving toward the lower-right corner of the image (screen-right / viewer's right)",
+    "right": "pure side profile, moving toward the right edge of the image (screen-right / viewer's right)",
+    "up_right": "three-quarter back view, moving toward the upper-right corner of the image (screen-right / viewer's right); the face, chest, hips, and feet point toward the right edge, never the left edge",
     "up": "back view, moving away from the viewer; do not show the face",
-    "up_left": "three-quarter back view, moving up-left",
-    "left": "pure side profile, moving left",
-    "down_left": "three-quarter front view, moving down-left",
+    "up_left": "three-quarter back view, moving toward the upper-left corner of the image (screen-left / viewer's left); the face, chest, hips, and feet point toward the left edge, never the right edge",
+    "left": "pure side profile, moving toward the left edge of the image (screen-left / viewer's left)",
+    "down_left": "three-quarter front view, moving toward the lower-left corner of the image (screen-left / viewer's left)",
 }
 
 _IDLE_DIRECTION_VIEW = {
     "down": "front view, facing the viewer",
-    "down_right": "three-quarter front view, facing down-right",
-    "right": "pure side profile, facing right",
-    "up_right": "three-quarter back view, facing up-right",
+    "down_right": "three-quarter front view, facing the lower-right corner of the image (screen-right / viewer's right)",
+    "right": "pure side profile, facing the right edge of the image (screen-right / viewer's right)",
+    "up_right": "three-quarter back view, facing the upper-right corner of the image (screen-right / viewer's right); the face, chest, hips, and feet point toward the right edge, never the left edge",
     "up": "back view, facing away from the viewer; do not show the face",
-    "up_left": "three-quarter back view, facing up-left",
-    "left": "pure side profile, facing left",
-    "down_left": "three-quarter front view, facing down-left",
+    "up_left": "three-quarter back view, facing the upper-left corner of the image (screen-left / viewer's left); the face, chest, hips, and feet point toward the left edge, never the right edge",
+    "left": "pure side profile, facing the left edge of the image (screen-left / viewer's left)",
+    "down_left": "three-quarter front view, facing the lower-left corner of the image (screen-left / viewer's left)",
 }
 
 
@@ -983,20 +985,43 @@ def _state_direction(request: dict, state: str) -> str:
     return state.split("_", 1)[0]
 
 
+def _ordinal(value: int) -> str:
+    words = {
+        1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth",
+        6: "sixth", 7: "seventh", 8: "eighth", 9: "ninth", 10: "tenth",
+    }
+    if value in words:
+        return words[value]
+    if 10 <= value % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(value % 10, "th")
+    return f"{value}{suffix}"
+
+
 def _generation_prompt(request: dict, state: str, extra_prompt: str, phase: int | None,
-                       pose_template: bool = False) -> str:
+                       pose_template: bool = False, direction_anchor: bool = False) -> str:
     spec = request["states"][state]
     frame_count = int(spec.get("frames", 4))
     direction = _state_direction(request, state)
     is_idle = state.endswith("_idle")
     is_walk = state.endswith("_walk")
     is_custom = bool(spec.get("custom_animation")) or not (is_idle or is_walk)
-    view_map = _IDLE_DIRECTION_VIEW if (is_idle or is_custom) else _DIRECTION_VIEW
-    view = (
-        "the same canonical facing direction as the supplied base character"
-        if is_custom and spec.get("custom_animation") else
-        view_map.get(direction, direction.replace("_", " "))
+    custom_metadata = spec.get("custom_animation") or {}
+    is_directional_custom = (
+        is_custom
+        and bool(custom_metadata.get("directional_skeleton"))
+        and direction in _IDLE_DIRECTION_VIEW
     )
+    if is_directional_custom:
+        # A directional attack acts in place, so use the explicit facing view
+        # rather than the locomotion wording used by a walk cycle.
+        view = _IDLE_DIRECTION_VIEW[direction]
+    elif is_custom and spec.get("custom_animation"):
+        view = "the same canonical facing direction as the supplied base character"
+    else:
+        view_map = _IDLE_DIRECTION_VIEW if is_idle else _DIRECTION_VIEW
+        view = view_map.get(direction, direction.replace("_", " "))
     action = str(spec.get("action") or "animation")
     if is_idle and frame_count == 4:
         phases = list(_IDLE_PHASES)
@@ -1041,17 +1066,40 @@ def _generation_prompt(request: dict, state: str, extra_prompt: str, phase: int 
             f"while still returning the complete {frame_count}-panel cycle so identity and motion can be checked."
         )
     extra = f"\nUser correction: {extra_prompt.strip()}" if extra_prompt.strip() else ""
+    screen_axis_rule = ""
+    if direction.endswith("_right") or direction == "right":
+        screen_axis_rule = (
+            "\nScreen-axis lock: RIGHT means the right-hand edge of the output image from the viewer's "
+            "perspective, not the character's anatomical right. Never mirror the pose to face screen-left."
+        )
+    elif direction.endswith("_left") or direction == "left":
+        screen_axis_rule = (
+            "\nScreen-axis lock: LEFT means the left-hand edge of the output image from the viewer's "
+            "perspective, not the character's anatomical left. Never mirror the pose to face screen-right."
+        )
     pose_contract = ""
     if pose_template:
         frame_phrase = "four-frame" if frame_count == 4 else f"{frame_count}-frame"
-        pose_reference = (
-            "The second attached image is the exact target-frame pose guide and the third is the "
-            f"complete {frame_phrase} pose strip."
-            if phase is not None else
-            f"The second attached image is the complete {frame_phrase} pose strip."
-        )
+        pose_index = 3 if direction_anchor else 2
+        strip_index = pose_index + 1 if phase is not None else pose_index
+        if phase is not None:
+            pose_reference = (
+                f"The {_ordinal(pose_index)} attached image is the exact target-frame pose guide and the "
+                f"{_ordinal(strip_index)} is the complete {frame_phrase} pose strip."
+            )
+        else:
+            pose_reference = (
+                f"The {_ordinal(strip_index)} attached image is the complete {frame_phrase} pose strip."
+            )
+        anchor_reference = ""
+        if direction_anchor:
+            anchor_reference = (
+                " The second attached image is an accepted sprite of this same character in the target "
+                "direction. It is authoritative for screen-left/screen-right facing, head/torso/hip angle, "
+                "and the side on which asymmetric equipment appears; do not copy its idle motion."
+            )
         pose_contract = f"""
-Pose skeleton lock: the first attached image is the ONLY identity, species, outfit, palette, and rendering reference. {pose_reference}
+Pose skeleton lock: the first attached image is the ONLY identity, species, outfit, palette, and rendering reference.{anchor_reference} {pose_reference}
 Use the pose guide only for geometry and timing. Match its panel order, facing, head/torso/hip angle, limb placement, leading foot, left/right foot crossing, ground contact, silhouette, scale, and root position as closely as possible. Do not copy any character identity, clothing, colors, facial features, or accessories from the grayscale pose guide. When identity and pose references differ, take appearance exclusively from the first image and pose exclusively from the guide.
 """
     style = str(request.get("style") or "match the supplied reference exactly")
@@ -1059,24 +1107,73 @@ Use the pose guide only for geometry and timing. Match its panel order, facing, 
     return f"""Create a production-ready 2D game sprite strip from the supplied base character.
 
 Identity lock: preserve the exact character design, proportions, face, clothing, backpack, tail, palette, outline weight, and pixel-art rendering from the base reference. Do not redesign or beautify the character.
-Direction: {direction} — {view}. {facing_rule}
+Direction: {direction} — {view}. {facing_rule}{screen_axis_rule}
 Action: {action}.
 Motion contract, left to right, exactly {frame_count} panels:
 {phase_contract}
 {motion_rules}{focus}{extra}
 {pose_contract}
 
-Output contract: one horizontal strip containing exactly {frame_count} isolated full-body sprites, in the specified order, evenly spaced, equal scale and ground line. Use a perfectly flat solid #FF00FF background. No text, labels, arrows, borders, grid, scenery, cast shadow, extra character, or extra panel. Keep generous magenta separation between panels.
+Output contract: one horizontal strip containing exactly {frame_count} isolated full-body sprites, in the specified order, evenly spaced, equal scale and ground line. Use a perfectly flat solid #FF00FF background. No text, labels, arrows, borders, grid, scenery, cast shadow, extra character, or extra panel. Keep generous magenta separation between panels. Do not add motion trails, slash arcs, glow, particles, or speed lines unless the user explicitly requested them. Outside colors already locked by the identity reference, never use pink, purple, fuchsia, magenta, or any color close to #FF00FF on the character, weapon, outline, highlight, shadow, or effect; those colors are reserved exclusively for the removable background.
 Style contract: {style}
 """.strip()
 
 
+def _accepted_direction_anchor_ref(run_dir: Path, request: dict, state: str) -> Path | None:
+    """Return an accepted same-character idle frame for this state's screen direction.
+
+    Grayscale pose guides are easy for an image model to mirror.  A generated
+    idle frame from the same direction provides an unambiguous full-colour
+    screen-axis reference while the base image remains the identity source.
+    """
+    direction = _state_direction(request, state)
+    anchor_state = f"{direction}_idle"
+    if state == anchor_state or anchor_state not in (request.get("states") or {}):
+        return None
+    try:
+        manifest = load_consistent_frames_manifest(
+            run_dir, allow_pending_states=True) or {"rows": []}
+        row = next(
+            (candidate for candidate in manifest.get("rows", [])
+             if candidate.get("state") == anchor_state),
+            None,
+        )
+        if not row:
+            return None
+        curation, _ = load_curation_report(run_dir)
+        selected = (
+            (((curation or {}).get("states") or {}).get(anchor_state) or {}).get("selected") or []
+        )
+        indices = list(selected) + list(range(int(row.get("frames") or 0)))
+        seen: set[int] = set()
+        for raw_index in indices:
+            try:
+                index = int(raw_index)
+            except (TypeError, ValueError):
+                continue
+            if index in seen:
+                continue
+            seen.add(index)
+            try:
+                path = run_dir / row_frame_rel(row, index)
+            except (SystemExit, ValueError, TypeError, IndexError):
+                continue
+            if path.is_file():
+                return path
+    except (OSError, ValueError, SystemExit):
+        return None
+    return None
+
+
 def _generation_refs(run_dir: Path, request: dict, state: str,
-                     pose_refs: list[Path] | None = None) -> list[Path]:
+                     pose_refs: list[Path] | None = None,
+                     direction_anchor_ref: Path | None = None) -> list[Path]:
     refs: list[Path] = []
     base = _base_image_path(run_dir)
     if base:
         refs.append(base)
+    if direction_anchor_ref and direction_anchor_ref.is_file() and direction_anchor_ref not in refs:
+        refs.append(direction_anchor_ref)
     for pose_ref in pose_refs or []:
         if pose_ref.is_file() and pose_ref not in refs:
             refs.append(pose_ref)
@@ -1095,8 +1192,9 @@ def _generation_refs(run_dir: Path, request: dict, state: str,
                     refs.append(path)
     except (OSError, ValueError, SystemExit):
         pass
-    # Keep the provider input compact and deterministic: identity first, pose
-    # guide(s) second, then at most enough same-character examples to reach five.
+    # Keep the provider input compact and deterministic: identity first, the
+    # same-character direction anchor second, pose guides next, then selected
+    # examples from this state up to five total references.
     return refs[:5]
 
 
@@ -1218,7 +1316,11 @@ def generate_state_take(run_dir: Path, payload: dict) -> dict:
     take_rel = take_raw_rel(request, state, label)
     take_path = run_dir / take_rel
     pose_refs = _skeleton_generation_refs(run_dir, state, phase)
-    prompt = _generation_prompt(request, state, extra_prompt, phase, bool(pose_refs))
+    direction_anchor_ref = _accepted_direction_anchor_ref(run_dir, request, state)
+    prompt = _generation_prompt(
+        request, state, extra_prompt, phase,
+        bool(pose_refs), bool(direction_anchor_ref),
+    )
     prompt_path = run_dir / "prompts" / "studio" / state / f"{label}.txt"
     prompt_path.parent.mkdir(parents=True, exist_ok=True)
     prompt_path.write_text(prompt + "\n", encoding="utf-8")
@@ -1228,7 +1330,8 @@ def generate_state_take(run_dir: Path, payload: dict) -> dict:
         with _generation_slots:
             generated = generate_image(
                 "codex", prompt, take_path,
-                refs=_generation_refs(run_dir, request, state, pose_refs),
+                refs=_generation_refs(
+                    run_dir, request, state, pose_refs, direction_anchor_ref),
                 keep_session=False,
             )
 
@@ -1373,6 +1476,19 @@ def auto_generation_status(run_dir: Path) -> dict:
     return snapshot
 
 
+def _retryable_generation_quality_failure(error: BaseException) -> bool:
+    """Return whether a fresh take can fix a generated-image extraction defect."""
+    return "chroma-adjacent pixels" in str(error).lower()
+
+
+_CHROMA_QUALITY_RETRY_PROMPT = (
+    "The previous take could not be extracted because foreground pixels blended with the #FF00FF "
+    "background. Generate a clean replacement. Use no motion trail, slash arc, glow, particle, or "
+    "speed line. Keep every foreground edge crisp and use no pink, purple, fuchsia, magenta, or "
+    "chroma-adjacent color anywhere in the sprite. Convey the motion only through the body and weapon pose."
+)
+
+
 def _run_auto_generation(run_dir: Path, job_id: str, states: list[str]) -> None:
     key = _auto_generation_key(run_dir)
     try:
@@ -1406,9 +1522,21 @@ def _run_auto_generation(run_dir: Path, job_id: str, states: list[str]) -> None:
                 except (OSError, json.JSONDecodeError):
                     recovered = False
             try:
-                result = ({"poseTemplateUsed": True, "recovered": True}
-                          if recovered else
-                          generate_state_take(run_dir, {"state": state, "notify": False}))
+                if recovered:
+                    result = {"poseTemplateUsed": True, "recovered": True}
+                else:
+                    try:
+                        result = generate_state_take(
+                            run_dir, {"state": state, "notify": False})
+                    except (Exception, SystemExit) as first_error:
+                        if not _retryable_generation_quality_failure(first_error):
+                            raise
+                        result = generate_state_take(run_dir, {
+                            "state": state,
+                            "notify": False,
+                            "extraPrompt": _CHROMA_QUALITY_RETRY_PROMPT,
+                        })
+                        result["qualityRetry"] = True
             except (Exception, SystemExit) as exc:
                 with _auto_generation_jobs_lock:
                     job = _auto_generation_jobs.get(key)
@@ -1438,6 +1566,7 @@ def _run_auto_generation(run_dir: Path, job_id: str, states: list[str]) -> None:
                     "state": state,
                     "poseTemplateUsed": bool(result.get("poseTemplateUsed")),
                     "recovered": bool(result.get("recovered")),
+                    "qualityRetry": bool(result.get("qualityRetry")),
                 })
                 job["completed"] = len(job["results"])
                 _persist_auto_generation_job(run_dir, job)
@@ -1679,13 +1808,50 @@ def _state_refs(run_dir, state, request):
     return refs
 
 
+def _transient_generation_mismatch(run_dir: Path, error: BaseException) -> bool:
+    """Return whether a manifest count mismatch is plausibly an in-flight extract.
+
+    The in-process commit lock is authoritative for webview generations. The mtime/lock-file
+    checks cover an extractor started by another process, whose Python lock is necessarily a
+    different object. We only retry the narrow row-count mismatch and retain fail-loud behavior
+    for every other manifest corruption class.
+    """
+    message = str(error)
+    if not re.search(r"row '.+' has \d+ frame\(s\), request expects \d+", message):
+        return False
+    if _generation_run_busy(run_dir) or (run_dir / ".sprite-gen.lock").is_file():
+        return True
+    request_path = run_dir / "sprite-request.json"
+    manifest_path = run_dir / "frames" / "frames-manifest.json"
+    try:
+        request_mtime = request_path.stat().st_mtime
+        manifest_mtime = manifest_path.stat().st_mtime
+    except OSError:
+        return False
+    return request_mtime > manifest_mtime and (time.time() - request_mtime) < 120
+
+
 def build_run_state(run_dir: Path) -> dict:
     """Assemble the run snapshot the SPA needs. Read under the run dir's shared read_guard
     so a concurrent `--force` re-import (which holds the exclusive publish_guard for its
     swap) can never expose a half-published state to `/api/run` — the reader sees either
-    the complete prior run or the complete new run (reader isolation)."""
-    with read_guard(run_dir):
-        return _build_run_state_impl(run_dir)
+    the complete prior run or the complete new run (reader isolation).
+
+    Studio take publication updates ``sprite-request.json`` before the extractor swaps in
+    the matching frames manifest. The in-process generation commit lock covers that entire
+    request+extract transaction; readers must join it as well, otherwise a refresh in that
+    narrow window sees the new requested candidate count with the old manifest and reports
+    a false corruption error.
+    """
+    deadline = time.monotonic() + _RUN_SNAPSHOT_RETRY_SECONDS
+    while True:
+        try:
+            with _generation_commit_lock, read_guard(run_dir):
+                return _build_run_state_impl(run_dir)
+        except SystemExit as exc:
+            if not _transient_generation_mismatch(run_dir, exc) or time.monotonic() >= deadline:
+                raise
+        time.sleep(_RUN_SNAPSHOT_RETRY_INTERVAL)
 
 
 def _build_run_state_impl(run_dir: Path) -> dict:

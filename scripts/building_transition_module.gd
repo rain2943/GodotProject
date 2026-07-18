@@ -1,5 +1,7 @@
 extends Node3D
 
+const ELEVATOR_TEXTURE_PATH := "res://assets/interiors/office_dungeon/modules/wall_elevator_front_v2.png"
+
 signal activated(action: String)
 
 var transition_kind := "elevator_up"
@@ -18,6 +20,8 @@ func configure(kind: String, floor_number: int, label_text: String = "") -> void
 func _ready() -> void:
 	add_to_group("building_interactable")
 	add_to_group("building_transition_module")
+	if transition_kind.begins_with("elevator"):
+		add_to_group("building_elevator_module")
 	_build_visual()
 
 
@@ -35,6 +39,9 @@ func interact() -> String:
 
 
 func _build_visual() -> void:
+	if transition_kind.begins_with("elevator"):
+		_build_generated_elevator()
+		return
 	var accent := Color("#d3a84f")
 	if transition_kind == "exit": accent = Color("#63c997")
 	elif transition_kind.begins_with("stairs"): accent = Color("#91a9bc")
@@ -46,6 +53,39 @@ func _build_visual() -> void:
 	marker.position = Vector3(0, 2.85, 0.15)
 	marker.text = display_label
 	marker.font_size = 34
+	marker.modulate = Color("#e7e4d9")
+	marker.outline_size = 8
+	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	marker.no_depth_test = true
+	add_child(marker)
+
+
+func _build_generated_elevator() -> void:
+	var sprite := Sprite3D.new()
+	sprite.name = "GeneratedElevatorVisual"
+	sprite.texture = load(ELEVATOR_TEXTURE_PATH) as Texture2D
+	sprite.position = Vector3(0, 2.6, 0.12)
+	sprite.pixel_size = 0.0034
+	sprite.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	sprite.shaded = false
+	sprite.transparent = true
+	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	add_child(sprite)
+	var body := StaticBody3D.new()
+	body.name = "ElevatorDoorCollision"
+	body.position = Vector3(0, 1.45, 0)
+	body.collision_layer = 1
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(3.4, 2.9, 0.38)
+	collision.shape = shape
+	body.add_child(collision)
+	add_child(body)
+	var marker := Label3D.new()
+	marker.name = "TransitionLabel"
+	marker.position = Vector3(0, 3.75, 0.15)
+	marker.text = display_label
+	marker.font_size = 30
 	marker.modulate = Color("#e7e4d9")
 	marker.outline_size = 8
 	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED

@@ -6,7 +6,19 @@ const TRANSITION_MODULE_SCENE := preload("res://scenes/modules/building_transiti
 const LOOT_MODULE_SCENE := preload("res://scenes/modules/building_loot_module.tscn")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const BULLET_SCRIPT := preload("res://scripts/bullet_projectile.gd")
+const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
+const AIM_RETICLE_SCRIPT := preload("res://scripts/aim_reticle.gd")
+const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
+const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
+const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
+const RUBBER_GASKET_TEXTURE := preload("res://assets/items/mod_components/rubber_gasket.png")
+const SCOPE_LENS_TEXTURE := preload("res://assets/items/mod_components/scope_lens.png")
+const MAGAZINE_SPRING_TEXTURE := preload("res://assets/items/mod_components/magazine_spring.png")
 const CAT_ANIMATION_ROOT := "res://assets/characters/cat_8way"
+const CAT_ROLL_ANIMATION_ROOT := "res://assets/characters/cat_roll"
+const CORRIDOR_TEXTURE_PATH := "res://assets/interiors/office_dungeon/corridor_floor_tile_v1.png"
+const WALL_TEXTURE_PATH := "res://assets/interiors/office_dungeon/office_wall_panel_v1.png"
 const CAT_DIRECTION_STATES := {
 	"n": "up", "ne": "up_right", "e": "right", "se": "down_right",
 	"s": "down", "sw": "down_left", "w": "left", "nw": "up_left",
@@ -14,7 +26,28 @@ const CAT_DIRECTION_STATES := {
 const SCREEN_DIRECTIONS := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const ROOM_TYPES := ["open_office", "open_office", "meeting", "storage", "server", "executive"]
 const MOVE_SPEED := 4.65
-const FLOOR_BOUNDS := Vector2(16.45, 11.4)
+const ROOM_SIZE := Vector2(28.0, 22.0)
+const ROOM_STEP := Vector2(38.0, 32.0)
+const CORRIDOR_WIDTH := 3.2
+const ROLL_DURATION := 0.48
+const ROLL_STAMINA_MAX := 100.0
+const ROLL_STAMINA_COST := 35.0
+const ROLL_STAMINA_RECOVERY := 28.0
+const ROLL_START_SPEED := 36.0
+const ROLL_END_SPEED := 4.4
+const MELEE_ATTACK_RANGE := 1.65
+const MELEE_ATTACK_DAMAGE := 34
+const MELEE_ATTACK_COOLDOWN := 0.62
+const MOBILE_AIM_ASSIST_MAX_DISTANCE := 30.0
+const MOBILE_AIM_ASSIST_HALF_ANGLE_DEG := 55.0
+const FATIGUE_MAX := 100.0
+const FATIGUE_MOVING_RATE := 0.055
+const FATIGUE_AIM_HOLD_RATE := 0.09
+const FATIGUE_SHOT_GAIN := 0.28
+const FATIGUE_MELEE_GAIN := 1.1
+const FATIGUE_RELOAD_GAIN := 0.8
+const FATIGUE_ROLL_GAIN := 0.45
+const FATIGUE_SPEED_MIN := 0.58
 
 var floor_root: Node3D
 var player: CharacterBody3D
@@ -24,13 +57,49 @@ var prompt_label: Label
 var status_label: Label
 var floor_label: Label
 var health_bar: ProgressBar
+var ammo_label: Label
+var fire_button: Button
+var melee_button: Button
+var dash_button: Button
 var current_interactable: Node3D
 var enemies: Array[CharacterBody3D] = []
+var floor_cells: Array[Vector2i] = []
+var floor_connections: Array[Dictionary] = []
 var facing := "s"
 var motion_state := "idle"
 var camera_focus := Vector3.ZERO
 var fire_cooldown := 0.0
 var loading_floor := false
+var weapon_stats: Dictionary = {}
+var weapon_reloading := false
+var reload_timer := 0.0
+var mouse_fire_held := false
+var fire_button_held := false
+var aim_world_position := Vector3.ZERO
+var laser_aim_held := false
+var melee_attack_cooldown := 0.0
+var aim_reticle: Control
+var laser_glow_layers: Array[MeshInstance3D] = []
+var laser_glow_meshes: Array[BoxMesh] = []
+var laser_endpoint: MeshInstance3D
+var visibility_material: ShaderMaterial
+var building_info_label: Label
+var elevator_menu: PanelContainer
+var inventory_ui: Control
+var weapon_sprite: Sprite3D
+var roll_active := false
+var roll_elapsed := 0.0
+var roll_stamina := ROLL_STAMINA_MAX
+var roll_direction := Vector3.ZERO
+var touch_stick: Control
+var touch_knob: Control
+var touch_id := -1
+var touch_origin := Vector2.ZERO
+var touch_vector := Vector2.ZERO
+var fatigue := 0.0
+var fatigue_panel: PanelContainer
+var fatigue_bar: ProgressBar
+var fatigue_label: Label
 @onready var BuildingRunState: Node = get_node("/root/BuildingRunState")
 @onready var GameState: Node = get_node("/root/GameState")
 
@@ -46,52 +115,121 @@ func _ready() -> void:
 		)
 	_build_environment()
 	_build_player()
+	_setup_weapon()
+	_setup_weapon_visual()
+	_setup_aim_laser()
+	fatigue = clampf(float(GameState.fatigue), 0.0, FATIGUE_MAX)
 	_build_interface()
+	_build_visibility_fog()
 	_load_floor(BuildingRunState.current_floor, "entry")
 
 
 func _physics_process(delta: float) -> void:
 	if player == null or loading_floor:
 		return
+	if inventory_ui != null and bool(inventory_ui.call("is_open")):
+		player.velocity = Vector3.ZERO
+		return
 	fire_cooldown = maxf(0.0, fire_cooldown - delta)
+	melee_attack_cooldown = maxf(0.0, melee_attack_cooldown - delta)
+	if melee_button != null:
+		melee_button.disabled = melee_attack_cooldown > 0.0
+	if dash_button != null:
+		dash_button.disabled = roll_active or roll_stamina < ROLL_STAMINA_COST
+	roll_stamina = minf(ROLL_STAMINA_MAX, roll_stamina + ROLL_STAMINA_RECOVERY * delta)
+	if weapon_reloading:
+		reload_timer = maxf(0.0, reload_timer - delta)
+		if reload_timer <= 0.0:
+			_finish_reload()
+	if (mouse_fire_held or fire_button_held) and bool(weapon_stats.get("automatic", true)) and not weapon_reloading:
+		if mouse_fire_held:
+			_fire_toward_screen_point(get_viewport().get_mouse_position())
+		else:
+			_fire_at_nearest_enemy()
 	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if Input.is_key_pressed(KEY_A): input_vector.x -= 1.0
 	if Input.is_key_pressed(KEY_D): input_vector.x += 1.0
 	if Input.is_key_pressed(KEY_W): input_vector.y -= 1.0
 	if Input.is_key_pressed(KEY_S): input_vector.y += 1.0
 	input_vector = input_vector.limit_length(1.0)
+	if touch_vector.length_squared() > input_vector.length_squared():
+		input_vector = touch_vector
 	var direction := Vector3(input_vector.x + input_vector.y, 0.0, -input_vector.x + input_vector.y)
-	if direction.length_squared() > 0.01:
-		player.velocity = direction.normalized() * MOVE_SPEED
+	_update_fatigue(delta, direction.length_squared() > 0.01)
+	if roll_active:
+		_update_roll(delta)
+	elif direction.length_squared() > 0.01:
+		var movement_speed := MOVE_SPEED * _get_fatigue_speed_multiplier()
+		if weapon_reloading:
+			movement_speed *= 0.55
+		player.velocity = direction.normalized() * movement_speed
 		_update_facing(input_vector)
 		_set_motion_state("walk")
 	else:
 		player.velocity = Vector3.ZERO
 		_set_motion_state("idle")
 	player.move_and_slide()
-	player.position.x = clampf(player.position.x, -FLOOR_BOUNDS.x, FLOOR_BOUNDS.x)
-	player.position.z = clampf(player.position.z, -FLOOR_BOUNDS.y, FLOOR_BOUNDS.y)
+	_update_weapon_visual()
+	_update_aim_laser()
 	_update_camera(delta)
 	_update_nearby_interactable()
+	_update_aim_reticle()
+	_update_visibility_fog()
+	_update_enemy_visibility()
 	status_label.modulate.a = move_toward(status_label.modulate.a, 0.0, delta * 0.16)
 
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_E:
+	if event is InputEventKey and not event.echo:
+		if event.keycode == KEY_E and event.pressed:
 			_interact()
-		elif event.keycode == KEY_F:
-			_fire_at_nearest_enemy()
-		elif event.keycode == KEY_ESCAPE and BuildingRunState.current_floor == 1:
+		elif event.keycode == KEY_SPACE and event.pressed:
+			_try_start_roll()
+		elif event.keycode == KEY_R and event.pressed:
+			_start_reload()
+		elif (event.keycode == KEY_I or event.keycode == KEY_B) and event.pressed and inventory_ui != null:
+			inventory_ui.call("toggle")
+		elif event.keycode == KEY_ESCAPE and event.pressed and BuildingRunState.current_floor == 1:
 			_show_status("1층 출구에서 나갈 수 있습니다.")
-	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		_fire_toward_screen_point(event.position)
+	elif event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			if mouse_event.pressed:
+				if laser_aim_held:
+					mouse_fire_held = true
+					_fire_toward_screen_point(mouse_event.position)
+				else:
+					mouse_fire_held = false
+					_try_melee_attack(mouse_event.position)
+			else:
+				mouse_fire_held = false
+		elif mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			laser_aim_held = mouse_event.pressed and _has_equipped_firearm()
+			if not mouse_event.pressed:
+				mouse_fire_held = false
+	elif event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed and touch.position.x < get_viewport().get_visible_rect().size.x * 0.5:
+			touch_id = touch.index
+			touch_origin = touch.position
+			touch_vector = Vector2.ZERO
+			touch_stick.position = touch_origin - touch_stick.size * 0.5
+		elif not touch.pressed and touch.index == touch_id:
+			touch_id = -1
+			touch_vector = Vector2.ZERO
+			touch_knob.position = Vector2(40, 40)
+	elif event is InputEventScreenDrag and event.index == touch_id:
+		var radius := touch_stick.size.x * 0.34
+		var offset: Vector2 = (event.position - touch_origin).limit_length(radius)
+		touch_vector = offset / radius
+		touch_knob.position = Vector2(40, 40) + offset
 
 
 func take_damage(amount: int) -> void:
-	GameState.player_health = maxi(0, GameState.player_health - amount)
+	var applied_damage := maxi(1, roundi(float(amount) * GameState.get_damage_taken_multiplier()))
+	GameState.player_health = maxi(0, GameState.player_health - applied_damage)
 	_update_health()
-	_show_status("피격 · 체력 %d" % GameState.player_health)
+	_show_status("피격 -%d · 체력 %d" % [applied_damage, GameState.player_health])
 	if GameState.player_health <= 0:
 		GameState.player_health = 35
 		BuildingRunState.active = false
@@ -118,8 +256,8 @@ func _build_environment() -> void:
 	camera = Camera3D.new()
 	camera.name = "BuildingCamera"
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 24.0
-	camera.position = Vector3(17.5, 18.5, 17.5)
+	camera.size = 21.5
+	camera.position = Vector3(14.5, 16.5, 14.5)
 	add_child(camera)
 	camera.look_at(Vector3.ZERO)
 	camera.current = true
@@ -160,13 +298,77 @@ func _build_player() -> void:
 	_play_animation()
 
 
+func _setup_weapon() -> void:
+	var weapon_id := str(GameState.get("equipped_weapon_id"))
+	if weapon_id.is_empty(): weapon_id = "ak47"
+	var mods: Array[String] = []
+	var stored_mods = GameState.get("equipped_weapon_mods")
+	if stored_mods is Array:
+		for mod_id in stored_mods:
+			mods.append(str(mod_id))
+	var enhancement_level := int(GameState.get("weapon_level")) if GameState.get("weapon_level") != null else 0
+	weapon_stats = WEAPON_SYSTEM.build_stats(weapon_id, mods, enhancement_level)
+
+
+func _setup_weapon_visual() -> void:
+	if weapon_sprite != null and is_instance_valid(weapon_sprite):
+		weapon_sprite.queue_free()
+	weapon_sprite = Sprite3D.new()
+	weapon_sprite.name = "EquippedWeapon"
+	var weapon_id := str(GameState.get("equipped_weapon_id"))
+	if weapon_id.is_empty():
+		weapon_id = "ak47"
+	weapon_sprite.texture = WEAPON_VISUAL_CATALOG.get_weapon_texture(weapon_id)
+	weapon_sprite.pixel_size = WEAPON_VISUAL_CATALOG.get_world_pixel_size(weapon_id, 0.0018)
+	weapon_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	weapon_sprite.shaded = false
+	weapon_sprite.transparent = true
+	weapon_sprite.no_depth_test = true
+	weapon_sprite.offset = Vector2(0, -24)
+	player.add_child(weapon_sprite)
+	_update_weapon_visual()
+
+
+func _update_weapon_visual() -> void:
+	if weapon_sprite == null:
+		return
+	weapon_sprite.visible = _has_equipped_firearm() and weapon_sprite.texture != null and not roll_active
+	if not weapon_sprite.visible:
+		return
+	var screen_vectors := {
+		"n": Vector2(0, -1), "ne": Vector2(1, -1), "e": Vector2(1, 0), "se": Vector2(1, 1),
+		"s": Vector2(0, 1), "sw": Vector2(-1, 1), "w": Vector2(-1, 0), "nw": Vector2(-1, -1),
+	}
+	var screen_direction: Vector2 = screen_vectors.get(facing, Vector2.DOWN)
+	weapon_sprite.flip_h = screen_direction.x < -0.01
+	var source_angle := PI if weapon_sprite.flip_h else 0.0
+	weapon_sprite.rotation.z = wrapf(screen_direction.angle() - source_angle, -PI, PI)
+	weapon_sprite.position = _get_facing_world_direction() * 0.34 + Vector3(0, 0.38, 0)
+	weapon_sprite.render_priority = 0 if facing in ["n", "ne", "nw"] else 2
+
+
+
 func _build_interface() -> void:
 	var canvas := CanvasLayer.new()
 	canvas.name = "BuildingHUD"
+	canvas.layer = 3
 	add_child(canvas)
+	aim_reticle = AIM_RETICLE_SCRIPT.new()
+	aim_reticle.name = "AimReticle"
+	canvas.add_child(aim_reticle)
+	aim_reticle.visible = not DisplayServer.is_touchscreen_available()
+	inventory_ui = INVENTORY_UI_SCRIPT.new()
+	inventory_ui.name = "InventoryUI"
+	canvas.add_child(inventory_ui)
+	inventory_ui.call("setup", FONT, WEAPON_VISUAL_CATALOG.get_weapon_texture(str(GameState.equipped_weapon_id)), AMMO_762_TEXTURE, {
+		"rubber_gasket": RUBBER_GASKET_TEXTURE,
+		"scope_lens": SCOPE_LENS_TEXTURE,
+		"magazine_spring": MAGAZINE_SPRING_TEXTURE,
+	}, WEAPON_VISUAL_CATALOG.get_inventory_textures())
+	inventory_ui.connect("weapon_mods_changed", _on_inventory_weapon_mods_changed)
 	var panel := PanelContainer.new()
 	panel.position = Vector2(18, 18)
-	panel.size = Vector2(330, 126)
+	panel.size = Vector2(332, 104)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.015, 0.02, 0.022, 0.9)
 	style.border_color = Color(0.42, 0.55, 0.52, 0.65)
@@ -186,17 +388,62 @@ func _build_interface() -> void:
 	floor_label.add_theme_font_override("font", FONT)
 	floor_label.add_theme_font_size_override("font_size", 18)
 	box.add_child(floor_label)
+	floor_label.text = "윤서  ·  Lv. 01"
 	health_bar = ProgressBar.new()
 	health_bar.custom_minimum_size = Vector2(290, 10)
 	health_bar.max_value = 100
 	health_bar.show_percentage = false
 	box.add_child(health_bar)
+	ammo_label = Label.new()
+	ammo_label.add_theme_font_override("font", FONT)
+	ammo_label.add_theme_font_size_override("font_size", 14)
+	ammo_label.modulate = Color("#d6d2bd")
+	box.add_child(ammo_label)
 	var help := Label.new()
-	help.text = "이동 WASD · 상호작용 E · 사격 F/클릭"
+	help.text = "WASD 이동 · SPACE 대시 · 좌클릭 근접 · 우클릭 조준+좌클릭 사격 · R 재장전 · E 상호작용"
 	help.add_theme_font_override("font", FONT)
 	help.add_theme_font_size_override("font_size", 13)
 	help.modulate = Color("#aeb7b3")
+	help.visible = false
 	box.add_child(help)
+	var objective := PanelContainer.new()
+	objective.position = Vector2(18, 132)
+	objective.size = Vector2(334, 72)
+	objective.add_theme_stylebox_override("panel", _make_panel_style(Color(0.015, 0.02, 0.022, 0.9), Color(0.42, 0.55, 0.52, 0.65)))
+	canvas.add_child(objective)
+	var objective_text := Label.new()
+	objective_text.text = "  오피스 타워 수색\n  · 적을 제압하고 물자를 회수하십시오"
+	objective_text.add_theme_font_override("font", FONT)
+	objective_text.add_theme_font_size_override("font_size", 15)
+	objective_text.modulate = Color(0.92, 0.76, 0.32)
+	objective.add_child(objective_text)
+	building_info_label = Label.new()
+	building_info_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	building_info_label.position = Vector2(-330, 18)
+	building_info_label.size = Vector2(308, 82)
+	building_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	building_info_label.add_theme_font_override("font", FONT)
+	building_info_label.add_theme_font_size_override("font_size", 15)
+	building_info_label.modulate = Color("#d6d2bd")
+	canvas.add_child(building_info_label)
+	var quick_slots := HBoxContainer.new()
+	quick_slots.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	quick_slots.position = Vector2(22, -86)
+	quick_slots.add_theme_constant_override("separation", 7)
+	canvas.add_child(quick_slots)
+	var slot_texts := ["소총\n%d" % int(GameState.magazine_ammo), "물\n2", "붕대\n3", "🥫 통조림\n1"]
+	for slot_text in slot_texts:
+		var slot := PanelContainer.new()
+		slot.custom_minimum_size = Vector2(62, 62)
+		slot.add_theme_stylebox_override("panel", _make_panel_style(Color(0.015, 0.02, 0.022, 0.9), Color(0.34, 0.4, 0.38, 0.8)))
+		var slot_label := Label.new()
+		slot_label.text = slot_text
+		slot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		slot_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		slot_label.add_theme_font_override("font", FONT)
+		slot_label.add_theme_font_size_override("font_size", 12)
+		slot.add_child(slot_label)
+		quick_slots.add_child(slot)
 	prompt_label = Label.new()
 	prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	prompt_label.position = Vector2(-250, -82)
@@ -215,23 +462,263 @@ func _build_interface() -> void:
 	status_label.add_theme_font_size_override("font_size", 17)
 	status_label.modulate = Color("#d8e4dd")
 	canvas.add_child(status_label)
-	var fire_button := Button.new()
+	fire_button = Button.new()
+	fire_button.name = "FireButton"
 	fire_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	fire_button.position = Vector2(-142, -128)
 	fire_button.size = Vector2(104, 82)
-	fire_button.text = "사격"
+	fire_button.text = "발사"
+	fire_button.icon = UI_ICONS.get_icon("weapon", 36, Color("#ffd29a"))
+	fire_button.expand_icon = true
 	fire_button.add_theme_font_override("font", FONT)
-	fire_button.pressed.connect(_fire_at_nearest_enemy)
+	fire_button.button_down.connect(func():
+		fire_button_held = true
+		_fire_at_nearest_enemy()
+	)
+	fire_button.button_up.connect(func(): fire_button_held = false)
 	canvas.add_child(fire_button)
+	_build_elevator_menu(canvas)
+	melee_button = Button.new()
+	melee_button.name = "MeleeButton"
+	melee_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	melee_button.position = Vector2(-260, -128)
+	melee_button.size = Vector2(104, 82)
+	melee_button.text = "근접"
+	melee_button.icon = UI_ICONS.get_icon("melee", 36, Color("#dbe9df"))
+	melee_button.expand_icon = true
+	melee_button.add_theme_font_override("font", FONT)
+	melee_button.pressed.connect(_try_melee_forward)
+	canvas.add_child(melee_button)
 	var interact_button := Button.new()
+	interact_button.name = "InteractButton"
 	interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	interact_button.position = Vector2(-260, -128)
+	interact_button.position = Vector2(-496, -128)
 	interact_button.size = Vector2(104, 82)
 	interact_button.text = "상호작용"
+	interact_button.icon = UI_ICONS.get_icon("interact", 36, Color("#c7e2d4"))
+	interact_button.expand_icon = true
 	interact_button.add_theme_font_override("font", FONT)
 	interact_button.pressed.connect(_interact)
 	canvas.add_child(interact_button)
+	dash_button = Button.new()
+	dash_button.name = "DashButton"
+	dash_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	dash_button.position = Vector2(-378, -128)
+	dash_button.size = Vector2(104, 82)
+	dash_button.text = "대시"
+	dash_button.icon = UI_ICONS.get_icon("dash", 36, Color("#d8e5de"))
+	dash_button.expand_icon = true
+	dash_button.add_theme_font_override("font", FONT)
+	dash_button.pressed.connect(_try_start_roll)
+	canvas.add_child(dash_button)
+	touch_stick = Panel.new()
+	touch_stick.name = "TouchStick"
+	touch_stick.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	touch_stick.position = Vector2(34, -160)
+	touch_stick.size = Vector2(120, 120)
+	touch_stick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var stick_style := StyleBoxFlat.new()
+	stick_style.bg_color = Color(0.1, 0.13, 0.14, 0.38)
+	stick_style.border_color = Color(0.5, 0.62, 0.6, 0.42)
+	stick_style.set_border_width_all(2)
+	stick_style.set_corner_radius_all(60)
+	touch_stick.add_theme_stylebox_override("panel", stick_style)
+	canvas.add_child(touch_stick)
+	touch_knob = ColorRect.new()
+	touch_knob.position = Vector2(40, 40)
+	touch_knob.size = Vector2(40, 40)
+	touch_knob.color = Color(0.72, 0.78, 0.75, 0.58)
+	touch_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	touch_stick.add_child(touch_knob)
+	_build_fatigue_panel(canvas)
 	_update_health()
+	_update_ammo_label()
+	_update_fatigue_ui()
+
+
+func _build_fatigue_panel(canvas: CanvasLayer) -> void:
+	fatigue_panel = PanelContainer.new()
+	fatigue_panel.name = "FatiguePanel"
+	fatigue_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	fatigue_panel.offset_left = 24
+	fatigue_panel.offset_top = -188
+	fatigue_panel.offset_right = 340
+	fatigue_panel.offset_bottom = -132
+	fatigue_panel.add_theme_stylebox_override(
+		"panel",
+		_make_panel_style(Color(0.015, 0.02, 0.022, 0.9), Color(0.34, 0.4, 0.38, 0.8))
+	)
+	canvas.add_child(fatigue_panel)
+	var fatigue_box := VBoxContainer.new()
+	fatigue_box.add_theme_constant_override("separation", 3)
+	fatigue_panel.add_child(fatigue_box)
+	fatigue_label = Label.new()
+	fatigue_label.text = "피로  0%"
+	fatigue_label.add_theme_font_override("font", FONT)
+	fatigue_label.add_theme_font_size_override("font_size", 13)
+	fatigue_label.add_theme_color_override("font_color", Color("#b9c4bb"))
+	fatigue_box.add_child(fatigue_label)
+	fatigue_bar = ProgressBar.new()
+	fatigue_bar.custom_minimum_size = Vector2(300, 9)
+	fatigue_bar.max_value = FATIGUE_MAX
+	fatigue_bar.show_percentage = false
+	fatigue_bar.add_theme_stylebox_override("background", _make_panel_style(Color("#202622"), Color.TRANSPARENT, 2))
+	fatigue_bar.add_theme_stylebox_override("fill", _make_panel_style(Color("#c8ad62"), Color.TRANSPARENT, 2))
+	fatigue_box.add_child(fatigue_bar)
+
+
+func _make_panel_style(background: Color, border: Color, radius: int = 4) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = background
+	style.border_color = border
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(radius)
+	return style
+
+
+func _on_inventory_weapon_mods_changed() -> void:
+	_setup_weapon()
+	_setup_weapon_visual()
+	_update_ammo_label()
+
+
+func _build_elevator_menu(canvas: CanvasLayer) -> void:
+	elevator_menu = PanelContainer.new()
+	elevator_menu.name = "ElevatorFloorMenu"
+	elevator_menu.set_anchors_preset(Control.PRESET_CENTER)
+	elevator_menu.position = Vector2(-155, -120)
+	elevator_menu.size = Vector2(310, 240)
+	elevator_menu.add_theme_stylebox_override("panel", _make_panel_style(Color(0.012, 0.018, 0.02, 0.97), Color("#9b8a5d"), 6))
+	elevator_menu.visible = false
+	canvas.add_child(elevator_menu)
+
+
+func _show_elevator_menu() -> void:
+	if elevator_menu == null:
+		return
+	for child in elevator_menu.get_children():
+		child.queue_free()
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	elevator_menu.add_child(box)
+	var title := Label.new()
+	title.text = "엘리베이터 · 이동할 층 선택"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", FONT)
+	title.add_theme_font_size_override("font_size", 18)
+	box.add_child(title)
+	var current_floor := int(BuildingRunState.current_floor)
+	if current_floor < int(BuildingRunState.max_floors):
+		_add_elevator_floor_button(box, "윗층 · %d층" % (current_floor + 1), current_floor + 1)
+	if current_floor > 1:
+		_add_elevator_floor_button(box, "아랫층 · %d층" % (current_floor - 1), current_floor - 1)
+	if current_floor > 2:
+		_add_elevator_floor_button(box, "1층 로비", 1)
+	var cancel := Button.new()
+	cancel.text = "취소"
+	cancel.icon = UI_ICONS.get_icon("close", 28, Color("#dce6df"))
+	cancel.expand_icon = true
+	cancel.add_theme_font_override("font", FONT)
+	cancel.pressed.connect(func() -> void: elevator_menu.visible = false)
+	box.add_child(cancel)
+	elevator_menu.visible = true
+
+
+func _add_elevator_floor_button(parent: VBoxContainer, label_text: String, target_floor: int) -> void:
+	var button := Button.new()
+	button.text = label_text
+	button.icon = UI_ICONS.get_icon("up" if target_floor > int(BuildingRunState.current_floor) else "down", 30, Color("#d8e5de"))
+	button.expand_icon = true
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.custom_minimum_size = Vector2(280, 42)
+	button.add_theme_font_override("font", FONT)
+	button.pressed.connect(func() -> void:
+		elevator_menu.visible = false
+		var arrival := "from_below" if target_floor > int(BuildingRunState.current_floor) else "from_above"
+		_load_floor(target_floor, arrival)
+	)
+	parent.add_child(button)
+
+
+func _build_visibility_fog() -> void:
+	var fog_layer := CanvasLayer.new()
+	fog_layer.name = "VisibilityFog"
+	fog_layer.layer = 2
+	add_child(fog_layer)
+	var darkness := ColorRect.new()
+	darkness.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	darkness.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fog_layer.add_child(darkness)
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+uniform vec2 viewport_size = vec2(1280.0, 720.0);
+uniform vec2 player_screen = vec2(640.0, 360.0);
+uniform vec2 facing_screen_direction = vec2(0.0, -1.0);
+uniform float inner_radius = 360.0;
+uniform float outer_radius = 500.0;
+uniform float near_radius = 100.0;
+uniform float fan_cos = 0.16;
+uniform float darkness = 0.91;
+uniform float aim_expanded = 0.0;
+uniform float circle_radius = 160.0;
+void fragment() {
+	vec2 pixel_position = UV * viewport_size;
+	vec2 to_pixel = pixel_position - player_screen;
+	float distance_from_player = length(to_pixel);
+	vec2 pixel_direction = distance_from_player > 0.001 ? normalize(to_pixel) : facing_screen_direction;
+	float alignment = dot(pixel_direction, normalize(facing_screen_direction));
+	float near_visibility = 1.0 - smoothstep(near_radius * 0.72, near_radius, distance_from_player);
+	float circle_visibility = 1.0 - smoothstep(circle_radius * 0.78, circle_radius, distance_from_player);
+	float fan_visibility = smoothstep(fan_cos - 0.11, fan_cos + 0.08, alignment);
+	float range_visibility = 1.0 - smoothstep(inner_radius, outer_radius, distance_from_player);
+	float relaxed_visibility = max(near_visibility, circle_visibility);
+	float aimed_visibility = max(relaxed_visibility, fan_visibility * range_visibility);
+	float visibility = mix(relaxed_visibility, aimed_visibility, aim_expanded);
+	float fog_alpha = mix(darkness, 0.035, visibility);
+	COLOR = vec4(0.008, 0.012, 0.015, fog_alpha);
+}
+"""
+	visibility_material = ShaderMaterial.new()
+	visibility_material.shader = shader
+	darkness.material = visibility_material
+
+
+func _update_visibility_fog() -> void:
+	if visibility_material == null or camera == null or player == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var player_screen := camera.unproject_position(player.global_position)
+	var aim_direction := _get_facing_world_direction()
+	if laser_aim_held:
+		var mouse_world := _screen_point_to_world(get_viewport().get_mouse_position())
+		if is_finite(mouse_world.x):
+			aim_direction = (mouse_world - player.global_position).normalized()
+	var facing_screen := camera.unproject_position(player.global_position + aim_direction * 5.0)
+	var facing_screen_direction := (facing_screen - player_screen).normalized()
+	visibility_material.set_shader_parameter("viewport_size", viewport_size)
+	visibility_material.set_shader_parameter("player_screen", player_screen)
+	visibility_material.set_shader_parameter("facing_screen_direction", facing_screen_direction)
+	visibility_material.set_shader_parameter("inner_radius", 390.0)
+	visibility_material.set_shader_parameter("outer_radius", 520.0)
+	visibility_material.set_shader_parameter("near_radius", 96.0)
+	visibility_material.set_shader_parameter("fan_cos", 0.16)
+	visibility_material.set_shader_parameter("darkness", 0.91)
+	visibility_material.set_shader_parameter("aim_expanded", 1.0 if laser_aim_held else 0.0)
+	visibility_material.set_shader_parameter("circle_radius", 170.0)
+
+
+func _update_enemy_visibility() -> void:
+	if camera == null or player == null:
+		return
+	var player_screen := camera.unproject_position(player.global_position)
+	for enemy in enemies:
+		if not is_instance_valid(enemy):
+			continue
+		var enemy_screen := camera.unproject_position(enemy.global_position)
+		var distance := player_screen.distance_to(enemy_screen)
+		var visible_radius := 520.0 if laser_aim_held else 180.0
+		enemy.visible = distance <= visible_radius
 
 
 func _load_floor(floor_number: int, arrival: String) -> void:
@@ -253,69 +740,122 @@ func _load_floor(floor_number: int, arrival: String) -> void:
 	BuildingRunState.current_floor = floor_number
 	var random := RandomNumberGenerator.new()
 	random.seed = BuildingRunState.get_floor_seed(floor_number)
-	_build_floor_shell()
+	_generate_floor_layout(random)
 	_build_room_modules(random)
+	_build_corridors()
 	_build_transitions()
 	_spawn_floor_loot(random)
 	_spawn_floor_enemies(random)
-	match arrival:
-		"from_below": player.position = Vector3(-12.8, 0.78, 0.0)
-		"from_above": player.position = Vector3(12.8, 0.78, 0.0)
-		_: player.position = Vector3(0.0, 0.78, 0.0)
+	player.position = _get_arrival_position(arrival)
 	camera_focus = Vector3(player.position.x, 0, player.position.z)
-	floor_label.text = "%s · %d / %d층" % [BuildingRunState.building_id, floor_number, BuildingRunState.max_floors]
+	building_info_label.text = "%s · %d / %d층\n경계 중\n실내 수색 구역" % [BuildingRunState.building_id, floor_number, BuildingRunState.max_floors]
 	_show_status("%d층 진입 · 배치 시드 %d" % [floor_number, BuildingRunState.get_floor_seed(floor_number)])
 	loading_floor = false
 
 
-func _build_floor_shell() -> void:
-	var floor_material := _material(Color("#272d30"))
-	_add_plane(floor_root, "CorridorFloor", Vector3(0, 0, 0), Vector2(34, 24), floor_material)
-	var corridor_material := _material(Color("#363d40"))
-	_add_plane(floor_root, "MainCorridor", Vector3(0, 0.012, 0), Vector2(30, 4.6), corridor_material)
-	_add_static_box(floor_root, "NorthOuterWall", Vector3(0, 1.4, -12), Vector3(34, 2.8, 0.35), Color("#42494c"))
-	_add_static_box(floor_root, "SouthOuterWall", Vector3(0, 1.4, 12), Vector3(34, 2.8, 0.35), Color("#42494c"))
-	_add_static_box(floor_root, "WestOuterWall", Vector3(-17, 1.4, 0), Vector3(0.35, 2.8, 24), Color("#42494c"))
-	_add_static_box(floor_root, "EastOuterWall", Vector3(17, 1.4, 0), Vector3(0.35, 2.8, 24), Color("#42494c"))
-	for light_index in 7:
-		var x := -13.5 + light_index * 4.5
-		_add_visual_box(floor_root, "CorridorLight%d" % light_index, Vector3(x, 0.05, -1.85), Vector3(1.7, 0.05, 0.08), Color("#75c8c1"))
+func _generate_floor_layout(random: RandomNumberGenerator) -> void:
+	floor_cells.clear()
+	floor_connections.clear()
+	floor_cells.append(Vector2i.ZERO)
+	var target_count := clampi(7 + int(BuildingRunState.current_floor) / 2, 7, 10)
+	var directions := [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]
+	var attempts := 0
+	while floor_cells.size() < target_count and attempts < 300:
+		attempts += 1
+		var parent_index := random.randi_range(0, floor_cells.size() - 1)
+		var direction: Vector2i = directions[random.randi_range(0, directions.size() - 1)]
+		var candidate := floor_cells[parent_index] + direction
+		if absi(candidate.x) > 3 or absi(candidate.y) > 3 or floor_cells.has(candidate):
+			continue
+		var child_index := floor_cells.size()
+		floor_cells.append(candidate)
+		floor_connections.append({"a": parent_index, "b": child_index})
+	floor_root.set_meta("room_cells", floor_cells)
+	floor_root.set_meta("room_connections", floor_connections)
 
 
 func _build_room_modules(random: RandomNumberGenerator) -> void:
-	var room_width := 6.75
-	for row in 2:
-		var entrance_sign := 1.0 if row == 0 else -1.0
-		var center_z := -7.35 if row == 0 else 7.35
-		for column in 4:
-			var index := row * 4 + column
-			var room := ROOM_MODULE_SCENE.instantiate() as Node3D
-			var type_name: String = ROOM_TYPES[random.randi_range(0, ROOM_TYPES.size() - 1)]
-			room.call("configure", index, Vector2(room_width, 9.1), entrance_sign, type_name, random.randi())
-			room.name = "Room%02d_%s" % [index + 1, type_name]
-			room.position = Vector3(-10.2 + column * 6.8, 0, center_z)
-			floor_root.add_child(room)
-			var label := Label3D.new()
-			label.name = "RoomLabel"
-			label.position = Vector3(0, 2.45, entrance_sign * 4.48)
-			label.text = "%02d · %s" % [index + 1, _room_display_name(type_name)]
-			label.font = FONT
-			label.font_size = 28
-			label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-			label.no_depth_test = true
-			room.add_child(label)
+	var door_map: Dictionary = {}
+	for index in floor_cells.size():
+		door_map[index] = [] as Array[String]
+	for connection in floor_connections:
+		var a := int(connection["a"])
+		var b := int(connection["b"])
+		var delta: Vector2i = floor_cells[b] - floor_cells[a]
+		(door_map[a] as Array[String]).append(_door_side_for_delta(delta))
+		(door_map[b] as Array[String]).append(_door_side_for_delta(-delta))
+	for index in floor_cells.size():
+		var room := ROOM_MODULE_SCENE.instantiate() as Node3D
+		var type_name: String = ROOM_TYPES[random.randi_range(0, ROOM_TYPES.size() - 1)]
+		if index == 0: type_name = "open_office"
+		room.call("configure", index, ROOM_SIZE, type_name, random.randi(), door_map[index])
+		room.name = "OfficeZone%02d_%s" % [index + 1, type_name]
+		room.position = _cell_to_world(floor_cells[index])
+		floor_root.add_child(room)
+		var label := Label3D.new()
+		label.name = "ZoneLabel"
+		label.position = Vector3(0, 2.95, 0)
+		label.text = "%02d · %s" % [index + 1, _room_display_name(type_name)]
+		label.font = FONT
+		label.font_size = 28
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.no_depth_test = true
+		room.add_child(label)
+
+
+func _build_corridors() -> void:
+	for index in floor_connections.size():
+		var connection := floor_connections[index]
+		var a := int(connection["a"])
+		var b := int(connection["b"])
+		var from := _cell_to_world(floor_cells[a])
+		var to := _cell_to_world(floor_cells[b])
+		var delta := floor_cells[b] - floor_cells[a]
+		var center := (from + to) * 0.5
+		if delta.x != 0:
+			var length := absf(to.x - from.x) - ROOM_SIZE.x
+			_build_horizontal_corridor(index, center, length)
+		else:
+			var length := absf(to.z - from.z) - ROOM_SIZE.y
+			_build_vertical_corridor(index, center, length)
+
+
+func _build_horizontal_corridor(index: int, center: Vector3, length: float) -> void:
+	_build_corridor_floor_tiles(index, center, length + 0.35, true)
+	var wall_material := _texture_material(WALL_TEXTURE_PATH, Vector3(maxf(1.0, length / 4.0), 1.0, 1.0))
+	_add_static_box_material(floor_root, "CorridorH%dNorth" % index, center + Vector3(0, 1.4, -CORRIDOR_WIDTH * 0.5), Vector3(length + 0.3, 2.8, 0.24), wall_material)
+	_add_static_box_material(floor_root, "CorridorH%dSouth" % index, center + Vector3(0, 0.36, CORRIDOR_WIDTH * 0.5), Vector3(length + 0.3, 0.72, 0.24), wall_material)
+
+
+func _build_vertical_corridor(index: int, center: Vector3, length: float) -> void:
+	_build_corridor_floor_tiles(index, center, length + 0.35, false)
+	var wall_material := _texture_material(WALL_TEXTURE_PATH, Vector3(maxf(1.0, length / 4.0), 1.0, 1.0))
+	_add_static_box_material(floor_root, "CorridorV%dWest" % index, center + Vector3(-CORRIDOR_WIDTH * 0.5, 1.4, 0), Vector3(0.24, 2.8, length + 0.3), wall_material)
+	_add_static_box_material(floor_root, "CorridorV%dEast" % index, center + Vector3(CORRIDOR_WIDTH * 0.5, 0.36, 0), Vector3(0.24, 0.72, length + 0.3), wall_material)
+
+
+func _build_corridor_floor_tiles(index: int, center: Vector3, length: float, horizontal: bool) -> void:
+	var tile_length := 4.0
+	var tile_count := ceili(length / tile_length)
+	for tile_index in tile_count:
+		var piece_length := minf(tile_length, length - float(tile_index) * tile_length)
+		var axis_offset := -length * 0.5 + float(tile_index) * tile_length + piece_length * 0.5
+		var position := center + (Vector3(axis_offset, 0.02, 0) if horizontal else Vector3(0, 0.02, axis_offset))
+		var size := Vector2(piece_length, CORRIDOR_WIDTH) if horizontal else Vector2(CORRIDOR_WIDTH, piece_length)
+		var material := _texture_material(CORRIDOR_TEXTURE_PATH, Vector3.ONE)
+		var tile := _add_plane(floor_root, "Corridor%dTile%02d" % [index, tile_index], position, size, material)
+		tile.add_to_group("building_floor_tile")
+		tile.set_meta("corridor_index", index)
+		tile.set_meta("tile_index", tile_index)
 
 
 func _build_transitions() -> void:
 	var floor_number: int = int(BuildingRunState.current_floor)
+	var entry_room := _cell_to_world(floor_cells[0])
+	var upper_room := _cell_to_world(floor_cells[floor_cells.size() - 1])
 	if floor_number == 1:
-		_add_transition("ExitToCity", Vector3(0, 0, 2.05), 0.0, "exit", 0, "도시로 나가기")
-	if floor_number < BuildingRunState.max_floors:
-		_add_transition("ElevatorUp", Vector3(-15.55, 0, -1.4), 90.0, "elevator_up", floor_number + 1, "엘리베이터 · %d층" % (floor_number + 1))
-		_add_transition("StairsUp", Vector3(15.55, 0, -1.4), -90.0, "stairs_up", floor_number + 1, "계단 · %d층" % (floor_number + 1))
-	if floor_number > 1:
-		_add_transition("ElevatorDown", Vector3(-15.55, 0, 1.45), 90.0, "elevator_down", floor_number - 1, "엘리베이터 · %d층" % (floor_number - 1))
-		_add_transition("StairsDown", Vector3(15.55, 0, 1.45), -90.0, "stairs_down", floor_number - 1, "계단 · %d층" % (floor_number - 1))
+		_add_transition("ExitToCity", entry_room + Vector3(-10.2, 0, 8.5), 0.0, "exit", 0, "도시로 나가기")
+	_add_transition("FloorElevator", upper_room + Vector3(0, 0, -10.82), 0.0, "elevator_menu", 0, "엘리베이터 층 선택")
 
 
 func _add_transition(node_name: String, position: Vector3, rotation_y: float, kind: String, target_floor: int, label_text: String) -> void:
@@ -329,19 +869,27 @@ func _add_transition(node_name: String, position: Vector3, rotation_y: float, ki
 
 
 func _spawn_floor_loot(random: RandomNumberGenerator) -> void:
-	var count: int = 4 + int(BuildingRunState.current_floor)
+	var count: int = floor_cells.size() + int(BuildingRunState.current_floor)
 	for index in count:
 		var key := "f%02d_loot_%02d" % [BuildingRunState.current_floor, index]
 		if BuildingRunState.is_loot_collected(BuildingRunState.current_floor, key):
 			continue
-		var column: int = index % 4
-		var north: bool = index % 2 == 0
-		var position := Vector3(-10.2 + column * 6.8 + random.randf_range(-1.5, 1.5), 0, -5.0 if north else 5.0)
+		var room_index := index % floor_cells.size()
+		var room_center := _cell_to_world(floor_cells[room_index])
+		var position := room_center + Vector3(random.randf_range(-6.8, 6.8), 0, random.randf_range(-4.7, 4.7))
 		var type_roll := random.randf()
-		var type_name := "scrap"
-		if type_roll > 0.72: type_name = "component"
-		elif type_roll > 0.48: type_name = "ammo"
-		var amount := random.randi_range(8, 22) if type_name != "component" else 1
+		var type_name := "ammo"
+		if type_roll < 0.28:
+			type_name = "ammo"
+		elif type_roll < 0.48:
+			type_name = "canned_food"
+		elif type_roll < 0.66:
+			type_name = "component"
+		elif type_roll < 0.84:
+			type_name = "weapon"
+		else:
+			type_name = "equipment"
+		var amount := random.randi_range(8, 22) if type_name == "ammo" else 1
 		var loot := LOOT_MODULE_SCENE.instantiate() as Node3D
 		loot.call("configure", key, type_name, amount, BuildingRunState.current_floor)
 		loot.name = "Loot_%s" % key
@@ -351,7 +899,7 @@ func _spawn_floor_loot(random: RandomNumberGenerator) -> void:
 
 
 func _spawn_floor_enemies(random: RandomNumberGenerator) -> void:
-	var count: int = clampi(1 + int(BuildingRunState.current_floor), 2, 7)
+	var count: int = clampi(floor_cells.size() - 2 + int(BuildingRunState.current_floor), 4, 12)
 	for index in count:
 		var key := "f%02d_enemy_%02d" % [BuildingRunState.current_floor, index]
 		if BuildingRunState.is_enemy_defeated(BuildingRunState.current_floor, key):
@@ -359,15 +907,19 @@ func _spawn_floor_enemies(random: RandomNumberGenerator) -> void:
 		var enemy := CharacterBody3D.new()
 		enemy.name = key
 		enemy.set_script(ENEMY_SCRIPT)
-		enemy.position = Vector3(
-			random.randf_range(-11.5, 11.5),
-			0.78,
-			random.randf_range(-1.25, 1.25)
-		)
-		var ranged: bool = index % 3 == 2 or int(BuildingRunState.current_floor) >= 3 and index % 2 == 1
-		var kind := "ranged" if ranged else "melee"
-		var weapon := "m1911" if ranged else "baseball_bat"
-		enemy.call("configure", kind, player, {}, minf(1.0, 0.12 * BuildingRunState.current_floor), weapon)
+		var room_index := 1 + index % maxi(1, floor_cells.size() - 1)
+		var room_center := _cell_to_world(floor_cells[room_index])
+		enemy.position = room_center + Vector3(random.randf_range(-5.5, 5.5), 0.78, random.randf_range(-3.8, 3.8))
+		var floor_number := int(BuildingRunState.current_floor)
+		var weapon_pool: Array[String] = ["m1911", "m1911", "mp5", "double_barrel"]
+		if floor_number >= 2:
+			weapon_pool.append("mp5")
+		if floor_number >= 3:
+			weapon_pool.append("ak47")
+		if floor_number >= 4:
+			weapon_pool.append("ak47")
+		var weapon := weapon_pool[random.randi_range(0, weapon_pool.size() - 1)]
+		enemy.call("configure", "ranged", player, {}, minf(1.0, 0.12 * floor_number), weapon)
 		enemy.connect("died", _on_enemy_died.bind(key))
 		floor_root.add_child(enemy)
 		enemies.append(enemy)
@@ -397,6 +949,9 @@ func _on_transition_activated(_action: String, transition: Node3D) -> void:
 	var target_floor := int(transition.get_meta("target_floor", 0))
 	if kind == "exit":
 		BuildingRunState.leave_building()
+		return
+	if kind == "elevator_menu":
+		_show_elevator_menu()
 		return
 	if target_floor < 1 or target_floor > BuildingRunState.max_floors:
 		return
@@ -429,53 +984,377 @@ func _interact() -> void:
 
 
 func _fire_at_nearest_enemy() -> void:
+	var facing_direction := _get_facing_world_direction()
+	var closest := _get_mobile_aim_assist_enemy(facing_direction)
+	if closest != null:
+		_fire_toward_world(closest.global_position)
+	else:
+		_fire_toward_world(player.global_position + facing_direction * MOBILE_AIM_ASSIST_MAX_DISTANCE)
+
+
+func _get_mobile_aim_assist_enemy(facing_direction: Vector3) -> CharacterBody3D:
+	var closest: CharacterBody3D
+	var closest_distance := INF
+	var minimum_dot := cos(deg_to_rad(MOBILE_AIM_ASSIST_HALF_ANGLE_DEG))
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
+			continue
+		if float(enemy.get("player_visibility_factor")) < 0.2:
+			continue
+		var offset := enemy.global_position - player.global_position
+		offset.y = 0.0
+		var distance := offset.length()
+		if distance <= 0.05 or distance > MOBILE_AIM_ASSIST_MAX_DISTANCE:
+			continue
+		if facing_direction.dot(offset / distance) < minimum_dot:
+			continue
+		var query := PhysicsRayQueryParameters3D.create(
+			player.global_position + Vector3(0, 0.45, 0),
+			enemy.global_position + Vector3(0, 0.45, 0),
+			3
+		)
+		query.exclude = [player.get_rid()]
+		var hit := player.get_world_3d().direct_space_state.intersect_ray(query)
+		if hit.is_empty() or hit.get("collider") != enemy:
+			continue
+		if distance < closest_distance:
+			closest = enemy
+			closest_distance = distance
+	return closest
+
+
+func _try_melee_forward() -> void:
+	var target_world := player.global_position + _get_facing_world_direction() * MELEE_ATTACK_RANGE
+	_try_melee_attack(camera.unproject_position(target_world))
+
+
+func _fire_toward_screen_point(screen_point: Vector2) -> void:
+	aim_world_position = _screen_point_to_world(screen_point)
+	if not is_finite(aim_world_position.x):
+		return
+	_fire_toward_world(aim_world_position)
+
+
+func _screen_point_to_world(screen_point: Vector2) -> Vector3:
+	if camera == null:
+		return Vector3(INF, INF, INF)
+	var origin := camera.project_ray_origin(screen_point)
+	var ray_direction := camera.project_ray_normal(screen_point)
+	if absf(ray_direction.y) < 0.001:
+		return Vector3(INF, INF, INF)
+	var distance := (0.45 - origin.y) / ray_direction.y
+	return origin + ray_direction * distance
+
+
+func _try_melee_attack(screen_point: Vector2) -> void:
+	if melee_attack_cooldown > 0.0 or roll_active:
+		return
+	melee_attack_cooldown = MELEE_ATTACK_COOLDOWN
+	_add_fatigue(FATIGUE_MELEE_GAIN)
+	var target := _screen_point_to_world(screen_point)
+	var attack_direction := Vector3.ZERO
+	if is_finite(target.x):
+		attack_direction = target - player.global_position
+		attack_direction.y = 0.0
+	if attack_direction.length_squared() < 0.01:
+		attack_direction = _get_facing_world_direction()
+	attack_direction = attack_direction.normalized()
+	_set_facing_from_world_direction(attack_direction)
 	var closest: CharacterBody3D
 	var closest_distance := INF
 	for enemy in enemies:
 		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
 			continue
-		var distance := player.global_position.distance_to(enemy.global_position)
+		var offset := enemy.global_position - player.global_position
+		offset.y = 0.0
+		var distance := offset.length()
+		if distance <= 0.05 or distance > MELEE_ATTACK_RANGE:
+			continue
+		if attack_direction.dot(offset.normalized()) < cos(deg_to_rad(56.0)):
+			continue
 		if distance < closest_distance:
-			closest = enemy
 			closest_distance = distance
+			closest = enemy
 	if closest != null:
-		_fire_toward_world(closest.global_position)
+		var backstab := bool(closest.call("is_backstab_from", player.global_position)) if closest.has_method("is_backstab_from") else false
+		closest.call("take_melee_hit", MELEE_ATTACK_DAMAGE, attack_direction, backstab)
 
 
-func _fire_toward_screen_point(screen_point: Vector2) -> void:
-	if camera == null:
+func _update_aim_reticle() -> void:
+	if aim_reticle == null:
 		return
-	var origin := camera.project_ray_origin(screen_point)
-	var ray_direction := camera.project_ray_normal(screen_point)
-	if absf(ray_direction.y) < 0.001:
+	aim_reticle.visible = not DisplayServer.is_touchscreen_available()
+	if aim_reticle.visible:
+		aim_reticle.call(
+			"update_feedback",
+			get_viewport().get_mouse_position(),
+			float(weapon_stats.get("base_spread_deg", 2.4)),
+			Vector2.ZERO,
+			laser_aim_held
+		)
+
+
+func _setup_aim_laser() -> void:
+	var widths := [0.072, 0.034, 0.010]
+	var colors := [Color(1.0, 0.02, 0.08, 0.10), Color(1.0, 0.04, 0.09, 0.32), Color(1.0, 0.72, 0.72, 0.96)]
+	var energies := [1.8, 3.8, 7.0]
+	for layer_index in widths.size():
+		var mesh := BoxMesh.new()
+		mesh.size = Vector3(widths[layer_index], widths[layer_index], 1.0)
+		var material := StandardMaterial3D.new()
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.albedo_color = colors[layer_index]
+		material.emission_enabled = true
+		material.emission = Color(1.0, 0.015, 0.055)
+		material.emission_energy_multiplier = energies[layer_index]
+		material.no_depth_test = true
+		mesh.material = material
+		var layer := MeshInstance3D.new()
+		layer.name = "AimGuideLaserCore" if layer_index == 2 else "AimGuideLaserGlow%d" % layer_index
+		layer.mesh = mesh
+		layer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		layer.visible = false
+		add_child(layer)
+		laser_glow_layers.append(layer)
+		laser_glow_meshes.append(mesh)
+	var endpoint_mesh := SphereMesh.new()
+	endpoint_mesh.radius = 0.065
+	endpoint_mesh.height = 0.13
+	endpoint_mesh.radial_segments = 12
+	endpoint_mesh.rings = 6
+	var endpoint_material := StandardMaterial3D.new()
+	endpoint_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	endpoint_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	endpoint_material.albedo_color = Color(1.0, 0.18, 0.22, 0.82)
+	endpoint_material.emission_enabled = true
+	endpoint_material.emission = Color(1.0, 0.025, 0.06)
+	endpoint_material.emission_energy_multiplier = 6.0
+	endpoint_material.no_depth_test = true
+	endpoint_mesh.material = endpoint_material
+	laser_endpoint = MeshInstance3D.new()
+	laser_endpoint.name = "AimGuideLaserEndpoint"
+	laser_endpoint.mesh = endpoint_mesh
+	laser_endpoint.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	laser_endpoint.visible = false
+	add_child(laser_endpoint)
+
+
+func _update_aim_laser() -> void:
+	var should_show := laser_aim_held and _has_equipped_firearm() and not roll_active
+	for layer in laser_glow_layers:
+		layer.visible = should_show
+	if laser_endpoint != null:
+		laser_endpoint.visible = should_show
+	if not should_show or camera == null or player == null:
 		return
-	var distance := (0.45 - origin.y) / ray_direction.y
-	_fire_toward_world(origin + ray_direction * distance)
+	var target := _screen_point_to_world(get_viewport().get_mouse_position())
+	if not is_finite(target.x):
+		return
+	var direction := target - player.global_position
+	direction.y = 0.0
+	if direction.length_squared() <= 0.01:
+		return
+	direction = direction.normalized()
+	var start := player.global_position + direction * 0.46 + Vector3(0, 0.47, 0)
+	var end := start + direction * 48.0
+	var query := PhysicsRayQueryParameters3D.create(start, end, 3)
+	query.exclude = [player.get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty():
+		end = hit.get("position")
+	var distance := start.distance_to(end)
+	if distance <= 0.02:
+		return
+	var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
+	var widths := [0.072, 0.034, 0.010]
+	for layer_index in laser_glow_layers.size():
+		var width_scale := 1.0 + pulse * (0.18 if layer_index == 0 else 0.06)
+		laser_glow_meshes[layer_index].size = Vector3(widths[layer_index] * width_scale, widths[layer_index] * width_scale, distance)
+		laser_glow_layers[layer_index].global_position = start.lerp(end, 0.5)
+		laser_glow_layers[layer_index].look_at(end, Vector3.UP)
+	if laser_endpoint != null:
+		laser_endpoint.global_position = end
+		laser_endpoint.scale = Vector3.ONE * lerpf(0.82, 1.28, pulse)
 
 
 func _fire_toward_world(target_position: Vector3) -> void:
-	if fire_cooldown > 0.0 or GameState.magazine_ammo <= 0:
+	if not _has_equipped_firearm() or roll_active or weapon_reloading or fire_cooldown > 0.0:
+		return
+	if int(GameState.magazine_ammo) <= 0:
+		_start_reload()
 		return
 	var direction := target_position - player.global_position
 	direction.y = 0
 	if direction.length_squared() < 0.01:
 		return
 	direction = direction.normalized()
-	var bullet := Area3D.new()
-	bullet.name = "BuildingPlayerBullet"
-	bullet.set_script(BULLET_SCRIPT)
-	bullet.set("direction", direction)
-	bullet.set("source_body", player)
-	bullet.set("damage", 32)
-	bullet.position = player.global_position + direction * 0.75 + Vector3(0, 0.35, 0)
-	add_child(bullet)
-	GameState.magazine_ammo -= 1
-	fire_cooldown = 0.18
+	_set_facing_from_world_direction(direction)
+	var pellet_count := int(weapon_stats.get("pellet_count", 1))
+	var spread := float(weapon_stats.get("base_spread_deg", 2.4))
+	for pellet_index in pellet_count:
+		var shot_direction := direction.rotated(Vector3.UP, deg_to_rad(randf_range(-spread, spread))).normalized()
+		var bullet := Area3D.new()
+		bullet.name = "BuildingPlayerBullet%d" % pellet_index
+		bullet.set_script(BULLET_SCRIPT)
+		bullet.set("direction", shot_direction)
+		bullet.set("source_body", player)
+		bullet.set("damage", roundi(float(weapon_stats.get("damage", 24))))
+		bullet.set("critical_chance", 0.12)
+		bullet.set("penetrations_remaining", int(weapon_stats.get("penetration_count", 0)))
+		bullet.position = player.global_position + shot_direction * 0.75 + Vector3(0, 0.35, 0)
+		add_child(bullet)
+	GameState.magazine_ammo = int(GameState.magazine_ammo) - 1
+	_add_fatigue(FATIGUE_SHOT_GAIN)
+	fire_cooldown = float(weapon_stats.get("fire_interval", 0.12))
+	_update_ammo_label()
+
+
+func _has_equipped_firearm() -> bool:
+	var value = GameState.get("has_ak")
+	return true if value == null else bool(value)
+
+
+func _start_reload() -> void:
+	if weapon_reloading:
+		return
+	var magazine_size := int(weapon_stats.get("magazine_size", 30))
+	var reserve := _get_reserve_ammo()
+	if int(GameState.magazine_ammo) >= magazine_size or reserve <= 0:
+		if reserve <= 0: _show_status("예비 탄약이 없습니다.")
+		return
+	weapon_reloading = true
+	_add_fatigue(FATIGUE_RELOAD_GAIN)
+	reload_timer = float(weapon_stats.get("reload_time", 2.15))
+	fire_cooldown = reload_timer
+	_show_status("재장전 중 · %.1f초" % reload_timer)
+	_update_ammo_label()
+
+
+func _finish_reload() -> void:
+	weapon_reloading = false
+	var magazine_size := int(weapon_stats.get("magazine_size", 30))
+	var reserve := _get_reserve_ammo()
+	var needed := magazine_size - int(GameState.magazine_ammo)
+	var loaded := mini(needed, reserve)
+	GameState.magazine_ammo = int(GameState.magazine_ammo) + loaded
+	_set_reserve_ammo(reserve - loaded)
+	_show_status("재장전 완료 · +%d" % loaded)
+	_update_ammo_label()
+
+
+func _get_reserve_ammo() -> int:
+	if GameState.has_method("get_ammo_count"):
+		return int(GameState.call("get_ammo_count", str(GameState.equipped_ammo_id)))
+	return int(GameState.get("reserve_ammo"))
+
+
+func _set_reserve_ammo(value: int) -> void:
+	if GameState.has_method("set_ammo_count"):
+		GameState.call("set_ammo_count", str(GameState.equipped_ammo_id), value)
+	GameState.set("reserve_ammo", value)
+
+
+func _update_ammo_label() -> void:
+	if ammo_label == null:
+		return
+	var reload_text := " · 재장전 %.1f" % reload_timer if weapon_reloading else ""
+	ammo_label.text = "체력  %d/100     수분  74     탄약  %d / %d%s" % [
+		int(GameState.player_health),
+		int(GameState.magazine_ammo),
+		_get_reserve_ammo(),
+		reload_text,
+	]
+	if inventory_ui != null:
+		var mods: Array[String] = []
+		var stored_mods = GameState.get("equipped_weapon_mods")
+		if stored_mods is Array:
+			for mod_id in stored_mods:
+				mods.append(str(mod_id))
+		inventory_ui.call("update_state", true, int(GameState.magazine_ammo), _get_reserve_ammo(), str(weapon_stats.get("display_name", "AK-47")), int(weapon_stats.get("magazine_size", 30)), float(GameState.get("weapon_durability") if GameState.get("weapon_durability") != null else 100.0), mods, int(GameState.get("canned_food") if GameState.get("canned_food") != null else 0), 0, GameState.get("mod_component_inventory") if GameState.get("mod_component_inventory") is Dictionary else {}, 0, fatigue)
+
+
+func _try_start_roll() -> void:
+	if roll_active or roll_stamina < ROLL_STAMINA_COST:
+		return
+	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	if Input.is_key_pressed(KEY_A): input_vector.x -= 1.0
+	if Input.is_key_pressed(KEY_D): input_vector.x += 1.0
+	if Input.is_key_pressed(KEY_W): input_vector.y -= 1.0
+	if Input.is_key_pressed(KEY_S): input_vector.y += 1.0
+	if touch_vector.length_squared() > input_vector.length_squared():
+		input_vector = touch_vector
+	if input_vector.length_squared() > 0.01:
+		roll_direction = Vector3(input_vector.x + input_vector.y, 0, -input_vector.x + input_vector.y).normalized()
+		_update_facing(input_vector)
+	else:
+		roll_direction = _get_facing_world_direction()
+	roll_active = true
+	roll_elapsed = 0.0
+	roll_stamina -= ROLL_STAMINA_COST
+	_add_fatigue(FATIGUE_ROLL_GAIN)
+	motion_state = "roll"
+	_play_animation()
+
+
+func _update_roll(delta: float) -> void:
+	roll_elapsed += delta
+	var progress := clampf(roll_elapsed / ROLL_DURATION, 0.0, 1.0)
+	var speed := lerpf(ROLL_END_SPEED, ROLL_START_SPEED, pow(1.0 - progress, 2.35))
+	player.velocity = roll_direction * speed
+	if roll_elapsed >= ROLL_DURATION:
+		roll_active = false
+		roll_elapsed = 0.0
+		_set_motion_state("idle")
+
+
+func _get_facing_world_direction() -> Vector3:
+	var screen_vectors := {
+		"n": Vector2(0, -1), "ne": Vector2(1, -1), "e": Vector2(1, 0), "se": Vector2(1, 1),
+		"s": Vector2(0, 1), "sw": Vector2(-1, 1), "w": Vector2(-1, 0), "nw": Vector2(-1, -1),
+	}
+	var screen_direction: Vector2 = screen_vectors.get(facing, Vector2.DOWN)
+	return Vector3(screen_direction.x + screen_direction.y, 0, -screen_direction.x + screen_direction.y).normalized()
+
+
+func _update_fatigue(delta: float, is_moving: bool) -> void:
+	var rate := FATIGUE_MOVING_RATE if is_moving else 0.0
+	if laser_aim_held and _has_equipped_firearm():
+		rate += FATIGUE_AIM_HOLD_RATE
+	_add_fatigue(rate * delta)
+	_update_fatigue_ui()
+
+
+func _add_fatigue(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	fatigue = clampf(fatigue + amount, 0.0, FATIGUE_MAX)
+	GameState.fatigue = fatigue
+	_update_fatigue_ui()
+
+
+func _update_fatigue_ui() -> void:
+	if fatigue_bar != null:
+		fatigue_bar.value = fatigue
+	if fatigue_label != null:
+		var penalty_text := " · 탈진: 이동 저하" if fatigue >= 99.9 else ""
+		fatigue_label.text = "피로  %d%%%s" % [roundi(fatigue), penalty_text]
+
+
+func _get_fatigue_speed_multiplier() -> float:
+	if fatigue < 70.0:
+		return 1.0
+	return lerpf(1.0, FATIGUE_SPEED_MIN, inverse_lerp(70.0, FATIGUE_MAX, fatigue))
+
+
+func _set_facing_from_world_direction(direction: Vector3) -> void:
+	var screen_direction := Vector2(direction.x - direction.z, direction.x + direction.z)
+	_update_facing(screen_direction)
 
 
 func _update_camera(delta: float) -> void:
 	camera_focus = camera_focus.lerp(Vector3(player.position.x, 0, player.position.z), clampf(delta * 5.0, 0, 1))
-	camera.position = camera_focus + Vector3(17.5, 18.5, 17.5)
+	camera.position = camera_focus + Vector3(14.5, 16.5, 14.5)
 	camera.look_at(camera_focus)
 
 
@@ -514,6 +1393,13 @@ func _create_cat_frames() -> SpriteFrames:
 			for frame_index in 4:
 				var path := "%s/%s_%s_%d.png" % [CAT_ANIMATION_ROOT, state_prefix, state, frame_index]
 				if ResourceLoader.exists(path): frames.add_frame(animation_name, load(path) as Texture2D)
+		var roll_animation := "roll_%s" % direction_name
+		frames.add_animation(roll_animation)
+		frames.set_animation_loop(roll_animation, false)
+		frames.set_animation_speed(roll_animation, 10.0)
+		for frame_index in 4:
+			var roll_path := "%s/%s_action-frame-%d.png" % [CAT_ROLL_ANIMATION_ROOT, state_prefix, frame_index]
+			if ResourceLoader.exists(roll_path): frames.add_frame(roll_animation, load(roll_path) as Texture2D)
 	return frames
 
 
@@ -526,9 +1412,30 @@ func _room_display_name(type_name: String) -> String:
 	return "사무실"
 
 
+func _cell_to_world(cell: Vector2i) -> Vector3:
+	return Vector3(float(cell.x) * ROOM_STEP.x, 0, float(cell.y) * ROOM_STEP.y)
+
+
+func _door_side_for_delta(delta: Vector2i) -> String:
+	if delta.x > 0: return "east"
+	if delta.x < 0: return "west"
+	if delta.y > 0: return "south"
+	return "north"
+
+
+func _get_arrival_position(arrival: String) -> Vector3:
+	if arrival == "from_below" and not floor_cells.is_empty():
+		return _cell_to_world(floor_cells[floor_cells.size() - 1]) + Vector3(0, 0.78, 3.8)
+	if arrival == "from_above" and floor_cells.size() >= 2:
+		return _cell_to_world(floor_cells[floor_cells.size() - 2]) + Vector3(3.8, 0.78, 0)
+	return _cell_to_world(floor_cells[0]) + Vector3(0, 0.78, 0)
+
+
 func _update_health() -> void:
 	if health_bar != null:
 		health_bar.value = GameState.player_health
+	if ammo_label != null:
+		_update_ammo_label()
 
 
 func _show_status(message: String) -> void:
@@ -545,7 +1452,18 @@ func _material(color: Color) -> StandardMaterial3D:
 	return material
 
 
-func _add_plane(parent: Node, node_name: String, position: Vector3, size: Vector2, material: Material) -> void:
+func _texture_material(path: String, uv_scale: Vector3) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	if ResourceLoader.exists(path):
+		material.albedo_texture = load(path) as Texture2D
+	material.texture_repeat = true
+	material.uv1_scale = uv_scale
+	material.roughness = 0.9
+	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	return material
+
+
+func _add_plane(parent: Node, node_name: String, position: Vector3, size: Vector2, material: Material) -> MeshInstance3D:
 	var instance := MeshInstance3D.new()
 	instance.name = node_name
 	instance.position = position
@@ -554,6 +1472,7 @@ func _add_plane(parent: Node, node_name: String, position: Vector3, size: Vector
 	mesh.material = material
 	instance.mesh = mesh
 	parent.add_child(instance)
+	return instance
 
 
 func _add_visual_box(parent: Node, node_name: String, position: Vector3, size: Vector3, color: Color) -> void:
@@ -569,6 +1488,27 @@ func _add_visual_box(parent: Node, node_name: String, position: Vector3, size: V
 
 func _add_static_box(parent: Node, node_name: String, position: Vector3, size: Vector3, color: Color) -> void:
 	_add_visual_box(parent, "%sVisual" % node_name, position, size, color)
+	var body := StaticBody3D.new()
+	body.name = "%sCollision" % node_name
+	body.position = position
+	body.collision_layer = 1
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = size
+	collision.shape = shape
+	body.add_child(collision)
+	parent.add_child(body)
+
+
+func _add_static_box_material(parent: Node, node_name: String, position: Vector3, size: Vector3, material: Material) -> void:
+	var instance := MeshInstance3D.new()
+	instance.name = "%sVisual" % node_name
+	instance.position = position
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mesh.material = material
+	instance.mesh = mesh
+	parent.add_child(instance)
 	var body := StaticBody3D.new()
 	body.name = "%sCollision" % node_name
 	body.position = position

@@ -222,6 +222,24 @@ func _run() -> void:
 			for apartment_cell in apartment_cells:
 				assert(_block_distance(building_cell, apartment_cell) > 2)
 		assert(low_count > high_count)
+		var interior_portals := get_nodes_in_group("building_entrance_portal")
+		assert(interior_portals.size() >= 1)
+		assert(interior_portals.size() <= 3)
+		for portal_node in interior_portals:
+			var portal := portal_node as Area3D
+			assert(portal.is_in_group("field_interaction"))
+			assert(str(portal.get_meta("interaction_type", "")) == "building_portal")
+			assert(portal.get_node_or_null("EntranceMarker") != null)
+			assert(portal.get_node_or_null("EntrancePrompt") != null)
+			var building := portal.get_parent() as StaticBody3D
+			assert(building != null and bool(building.get_meta("interior_accessible", false)))
+			var building_collision := building.get_node("BuildingCollision") as CollisionShape3D
+			var building_box := building_collision.shape as BoxShape3D
+			var frontage := str(portal.get_meta("frontage", ""))
+			if frontage in ["west", "east"]:
+				assert(absf(portal.position.x) > building_box.size.x * 0.5)
+			else:
+				assert(absf(portal.position.z) > building_box.size.z * 0.5)
 
 		city.queue_free()
 		await process_frame

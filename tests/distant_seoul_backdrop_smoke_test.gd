@@ -32,10 +32,12 @@ func _run() -> void:
 	var fence_root := fences[0] as Node3D
 	assert(fence_root != null)
 	assert(fence_root.get_child_count() >= 48)
-	assert(fence_root.get_node("FenceRailNorth_0.62") is MeshInstance3D)
-	assert(fence_root.get_node("FenceRailSouth_1.08") is MeshInstance3D)
-	assert(fence_root.get_node("FenceRailWest_0.62") is MeshInstance3D)
-	assert(fence_root.get_node("FenceRailEast_1.08") is MeshInstance3D)
+	for side in ["North", "South", "West", "East"]:
+		var rail_count := 0
+		for fence_child in fence_root.get_children():
+			if str(fence_child.name).begins_with("FenceRail%s_" % side) and fence_child is MeshInstance3D:
+				rail_count += 1
+		assert(rail_count == 2)
 	for child in city.get_children():
 		assert(not str(child.name).begins_with("ApocalypseSeoulSkyline"))
 

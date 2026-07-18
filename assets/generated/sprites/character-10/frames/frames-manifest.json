@@ -1,0 +1,994 @@
+{
+  "ok": true,
+  "engine": "component-row",
+  "engine_revision": "760766bab118",
+  "extract_args": {
+    "allow_slot_fallback": true
+  },
+  "run_dir": "C:\\Users\\rain2\\Documents\\GitHub\\GodotProject\\assets\\generated\\sprites\\character-10",
+  "cell": {
+    "shape": "square",
+    "width": 256,
+    "height": 256,
+    "safe_margin_x": 24,
+    "safe_margin_y": 24,
+    "size": 256,
+    "safe_margin": 24
+  },
+  "chroma_key": {
+    "name": "magenta",
+    "hex": "#FF00FF",
+    "rgb": [
+      255,
+      0,
+      255
+    ],
+    "selection": "manual"
+  },
+  "rows": [
+    {
+      "state": "down_action",
+      "frames": 4,
+      "method": "components",
+      "files": [
+        "frames/down/action/frame-0.png",
+        "frames/down/action/frame-1.png",
+        "frames/down/action/frame-2.png",
+        "frames/down/action/frame-3.png"
+      ],
+      "frame_records": [
+        {
+          "index": 0,
+          "nontransparent_pixels": 20518,
+          "bbox": [
+            57,
+            24,
+            197,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "nontransparent_pixels": 21447,
+          "bbox": [
+            35,
+            24,
+            198,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "nontransparent_pixels": 22018,
+          "bbox": [
+            26,
+            24,
+            206,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "nontransparent_pixels": 19896,
+          "bbox": [
+            69,
+            24,
+            200,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ],
+      "ok": true,
+      "engine_revision": "760766bab118"
+    },
+    {
+      "state": "right_action",
+      "frames": 4,
+      "method": "components",
+      "files": [
+        "frames/right/action/frame-0.png",
+        "frames/right/action/frame-1.png",
+        "frames/right/action/frame-2.png",
+        "frames/right/action/frame-3.png"
+      ],
+      "frame_records": [
+        {
+          "index": 0,
+          "nontransparent_pixels": 22333,
+          "bbox": [
+            43,
+            24,
+            230,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "nontransparent_pixels": 22216,
+          "bbox": [
+            42,
+            24,
+            232,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "nontransparent_pixels": 20586,
+          "bbox": [
+            48,
+            36,
+            256,
+            232
+          ],
+          "edge_pixels": 26,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "nontransparent_pixels": 22120,
+          "bbox": [
+            42,
+            24,
+            234,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ],
+      "ok": true,
+      "engine_revision": "760766bab118"
+    },
+    {
+      "state": "down_right_action",
+      "frames": 8,
+      "method": "components",
+      "files": [
+        "frames/down_right/action/frame-0.png",
+        "frames/down_right/action/frame-1.png",
+        "frames/down_right/action/frame-2.png",
+        "frames/down_right/action/frame-3.png",
+        "frames/down_right/action/frame-4.png",
+        "frames/down_right/action/frame-5.png",
+        "frames/down_right/action/frame-6.png",
+        "frames/down_right/action/frame-7.png"
+      ],
+      "frame_records": [
+        {
+          "index": 0,
+          "nontransparent_pixels": 22367,
+          "bbox": [
+            52,
+            24,
+            219,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "nontransparent_pixels": 17987,
+          "bbox": [
+            48,
+            52,
+            256,
+            232
+          ],
+          "edge_pixels": 13,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "nontransparent_pixels": 20420,
+          "bbox": [
+            48,
+            42,
+            256,
+            232
+          ],
+          "edge_pixels": 67,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "nontransparent_pixels": 22786,
+          "bbox": [
+            33,
+            24,
+            220,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "nontransparent_pixels": 20634,
+          "bbox": [
+            52,
+            24,
+            215,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 5,
+          "nontransparent_pixels": 21227,
+          "bbox": [
+            52,
+            24,
+            234,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 6,
+          "nontransparent_pixels": 21403,
+          "bbox": [
+            49,
+            24,
+            248,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 7,
+          "nontransparent_pixels": 20763,
+          "bbox": [
+            52,
+            24,
+            218,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ],
+      "ok": true,
+      "engine_revision": "760766bab118",
+      "labels": [
+        "",
+        "",
+        "",
+        "",
+        "studio-20260718-190758-5f74a2#0",
+        "studio-20260718-190758-5f74a2#1",
+        "studio-20260718-190758-5f74a2#2",
+        "studio-20260718-190758-5f74a2#3"
+      ],
+      "takes": [
+        {
+          "label": null,
+          "start": 0,
+          "frames": 4,
+          "raw": "raw/down_right/action.png"
+        },
+        {
+          "label": "studio-20260718-190758-5f74a2",
+          "start": 4,
+          "frames": 4,
+          "raw": "raw/down_right/action.takes/studio-20260718-190758-5f74a2.png"
+        }
+      ]
+    },
+    {
+      "state": "up_action",
+      "frames": 8,
+      "method": "components",
+      "files": [
+        "frames/up/action/frame-0.png",
+        "frames/up/action/frame-1.png",
+        "frames/up/action/frame-2.png",
+        "frames/up/action/frame-3.png",
+        "frames/up/action/frame-4.png",
+        "frames/up/action/frame-5.png",
+        "frames/up/action/frame-6.png",
+        "frames/up/action/frame-7.png"
+      ],
+      "frame_records": [
+        {
+          "index": 0,
+          "nontransparent_pixels": 17856,
+          "bbox": [
+            76,
+            24,
+            209,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "nontransparent_pixels": 18870,
+          "bbox": [
+            73,
+            24,
+            226,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "nontransparent_pixels": 19703,
+          "bbox": [
+            51,
+            24,
+            256,
+            232
+          ],
+          "edge_pixels": 22,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "nontransparent_pixels": 19415,
+          "bbox": [
+            56,
+            24,
+            224,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "nontransparent_pixels": 18103,
+          "bbox": [
+            74,
+            24,
+            189,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 5,
+          "nontransparent_pixels": 19304,
+          "bbox": [
+            66,
+            24,
+            229,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 6,
+          "nontransparent_pixels": 19359,
+          "bbox": [
+            58,
+            24,
+            256,
+            232
+          ],
+          "edge_pixels": 32,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 7,
+          "nontransparent_pixels": 18428,
+          "bbox": [
+            65,
+            24,
+            213,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ],
+      "ok": true,
+      "engine_revision": "760766bab118",
+      "labels": [
+        "",
+        "",
+        "",
+        "",
+        "studio-20260718-191441-1f11a6#0",
+        "studio-20260718-191441-1f11a6#1",
+        "studio-20260718-191441-1f11a6#2",
+        "studio-20260718-191441-1f11a6#3"
+      ],
+      "takes": [
+        {
+          "label": null,
+          "start": 0,
+          "frames": 4,
+          "raw": "raw/up/action.png"
+        },
+        {
+          "label": "studio-20260718-191441-1f11a6",
+          "start": 4,
+          "frames": 4,
+          "raw": "raw/up/action.takes/studio-20260718-191441-1f11a6.png"
+        }
+      ]
+    },
+    {
+      "state": "up_left_action",
+      "frames": 8,
+      "method": "components",
+      "files": [
+        "frames/up_left/action/frame-0.png",
+        "frames/up_left/action/frame-1.png",
+        "frames/up_left/action/frame-2.png",
+        "frames/up_left/action/frame-3.png",
+        "frames/up_left/action/frame-4.png",
+        "frames/up_left/action/frame-5.png",
+        "frames/up_left/action/frame-6.png",
+        "frames/up_left/action/frame-7.png"
+      ],
+      "frame_records": [
+        {
+          "index": 0,
+          "nontransparent_pixels": 21534,
+          "bbox": [
+            54,
+            24,
+            217,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "nontransparent_pixels": 17874,
+          "bbox": [
+            0,
+            42,
+            208,
+            232
+          ],
+          "edge_pixels": 29,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "nontransparent_pixels": 21186,
+          "bbox": [
+            38,
+            24,
+            210,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "nontransparent_pixels": 18874,
+          "bbox": [
+            60,
+            24,
+            202,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "nontransparent_pixels": 20391,
+          "bbox": [
+            43,
+            24,
+            207,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 5,
+          "nontransparent_pixels": 21072,
+          "bbox": [
+            0,
+            26,
+            208,
+            232
+          ],
+          "edge_pixels": 34,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 6,
+          "nontransparent_pixels": 21378,
+          "bbox": [
+            4,
+            25,
+            212,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 7,
+          "nontransparent_pixels": 20773,
+          "bbox": [
+            42,
+            24,
+            210,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ],
+      "ok": true,
+      "engine_revision": "760766bab118",
+      "labels": [
+        "",
+        "",
+        "",
+        "",
+        "studio-20260718-191444-3c9467#0",
+        "studio-20260718-191444-3c9467#1",
+        "studio-20260718-191444-3c9467#2",
+        "studio-20260718-191444-3c9467#3"
+      ],
+      "takes": [
+        {
+          "label": null,
+          "start": 0,
+          "frames": 4,
+          "raw": "raw/up_left/action.png"
+        },
+        {
+          "label": "studio-20260718-191444-3c9467",
+          "start": 4,
+          "frames": 4,
+          "raw": "raw/up_left/action.takes/studio-20260718-191444-3c9467.png"
+        }
+      ]
+    },
+    {
+      "state": "up_right_action",
+      "frames": 8,
+      "method": "components",
+      "files": [
+        "frames/up_right/action/frame-0.png",
+        "frames/up_right/action/frame-1.png",
+        "frames/up_right/action/frame-2.png",
+        "frames/up_right/action/frame-3.png",
+        "frames/up_right/action/frame-4.png",
+        "frames/up_right/action/frame-5.png",
+        "frames/up_right/action/frame-6.png",
+        "frames/up_right/action/frame-7.png"
+      ],
+      "frame_records": [
+        {
+          "index": 0,
+          "nontransparent_pixels": 19037,
+          "bbox": [
+            64,
+            24,
+            190,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "nontransparent_pixels": 20994,
+          "bbox": [
+            11,
+            24,
+            209,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "nontransparent_pixels": 16510,
+          "bbox": [
+            48,
+            48,
+            256,
+            232
+          ],
+          "edge_pixels": 26,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "nontransparent_pixels": 19921,
+          "bbox": [
+            50,
+            24,
+            248,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "nontransparent_pixels": 18218,
+          "bbox": [
+            63,
+            24,
+            206,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 5,
+          "nontransparent_pixels": 19107,
+          "bbox": [
+            56,
+            24,
+            247,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 6,
+          "nontransparent_pixels": 19564,
+          "bbox": [
+            57,
+            24,
+            256,
+            232
+          ],
+          "edge_pixels": 28,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 7,
+          "nontransparent_pixels": 18483,
+          "bbox": [
+            63,
+            24,
+            197,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ],
+      "ok": true,
+      "engine_revision": "760766bab118",
+      "labels": [
+        "",
+        "",
+        "",
+        "",
+        "studio-20260718-191437-dc8207#0",
+        "studio-20260718-191437-dc8207#1",
+        "studio-20260718-191437-dc8207#2",
+        "studio-20260718-191437-dc8207#3"
+      ],
+      "takes": [
+        {
+          "label": null,
+          "start": 0,
+          "frames": 4,
+          "raw": "raw/up_right/action.png"
+        },
+        {
+          "label": "studio-20260718-191437-dc8207",
+          "start": 4,
+          "frames": 4,
+          "raw": "raw/up_right/action.takes/studio-20260718-191437-dc8207.png"
+        }
+      ]
+    },
+    {
+      "state": "left_action",
+      "frames": 8,
+      "method": "components",
+      "files": [
+        "frames/left/action/frame-0.png",
+        "frames/left/action/frame-1.png",
+        "frames/left/action/frame-2.png",
+        "frames/left/action/frame-3.png",
+        "frames/left/action/frame-4.png",
+        "frames/left/action/frame-5.png",
+        "frames/left/action/frame-6.png",
+        "frames/left/action/frame-7.png"
+      ],
+      "frame_records": [
+        {
+          "index": 0,
+          "nontransparent_pixels": 20201,
+          "bbox": [
+            44,
+            24,
+            207,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "nontransparent_pixels": 16499,
+          "bbox": [
+            0,
+            46,
+            208,
+            232
+          ],
+          "edge_pixels": 26,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "nontransparent_pixels": 16186,
+          "bbox": [
+            0,
+            51,
+            208,
+            232
+          ],
+          "edge_pixels": 32,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "nontransparent_pixels": 19223,
+          "bbox": [
+            63,
+            24,
+            207,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "nontransparent_pixels": 20068,
+          "bbox": [
+            48,
+            24,
+            211,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 5,
+          "nontransparent_pixels": 21408,
+          "bbox": [
+            31,
+            24,
+            214,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 6,
+          "nontransparent_pixels": 19394,
+          "bbox": [
+            3,
+            35,
+            211,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 7,
+          "nontransparent_pixels": 19543,
+          "bbox": [
+            55,
+            24,
+            210,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ],
+      "ok": true,
+      "engine_revision": "760766bab118",
+      "labels": [
+        "",
+        "",
+        "",
+        "",
+        "studio-20260718-191447-fa102c#0",
+        "studio-20260718-191447-fa102c#1",
+        "studio-20260718-191447-fa102c#2",
+        "studio-20260718-191447-fa102c#3"
+      ],
+      "takes": [
+        {
+          "label": null,
+          "start": 0,
+          "frames": 4,
+          "raw": "raw/left/action.png"
+        },
+        {
+          "label": "studio-20260718-191447-fa102c",
+          "start": 4,
+          "frames": 4,
+          "raw": "raw/left/action.takes/studio-20260718-191447-fa102c.png"
+        }
+      ]
+    },
+    {
+      "state": "down_left_action",
+      "frames": 8,
+      "method": "components",
+      "files": [
+        "frames/down_left/action/frame-0.png",
+        "frames/down_left/action/frame-1.png",
+        "frames/down_left/action/frame-2.png",
+        "frames/down_left/action/frame-3.png",
+        "frames/down_left/action/frame-4.png",
+        "frames/down_left/action/frame-5.png",
+        "frames/down_left/action/frame-6.png",
+        "frames/down_left/action/frame-7.png"
+      ],
+      "frame_records": [
+        {
+          "index": 0,
+          "nontransparent_pixels": 23216,
+          "bbox": [
+            43,
+            24,
+            216,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "nontransparent_pixels": 21474,
+          "bbox": [
+            55,
+            24,
+            208,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "nontransparent_pixels": 21320,
+          "bbox": [
+            0,
+            31,
+            208,
+            232
+          ],
+          "edge_pixels": 28,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "nontransparent_pixels": 22649,
+          "bbox": [
+            38,
+            24,
+            221,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "nontransparent_pixels": 21202,
+          "bbox": [
+            48,
+            24,
+            204,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 5,
+          "nontransparent_pixels": 21619,
+          "bbox": [
+            61,
+            24,
+            242,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 6,
+          "nontransparent_pixels": 20889,
+          "bbox": [
+            47,
+            34,
+            255,
+            232
+          ],
+          "edge_pixels": 14,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 7,
+          "nontransparent_pixels": 21878,
+          "bbox": [
+            52,
+            24,
+            211,
+            232
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ],
+      "ok": true,
+      "engine_revision": "760766bab118",
+      "labels": [
+        "",
+        "",
+        "",
+        "",
+        "studio-20260718-191449-a04315#0",
+        "studio-20260718-191449-a04315#1",
+        "studio-20260718-191449-a04315#2",
+        "studio-20260718-191449-a04315#3"
+      ],
+      "takes": [
+        {
+          "label": null,
+          "start": 0,
+          "frames": 4,
+          "raw": "raw/down_left/action.png"
+        },
+        {
+          "label": "studio-20260718-191449-a04315",
+          "start": 4,
+          "frames": 4,
+          "raw": "raw/down_left/action.takes/studio-20260718-191449-a04315.png"
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    "down_left_action: frame 02 has 28 non-transparent edge pixels"
+  ]
+}

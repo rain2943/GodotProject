@@ -1,0 +1,192 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-request",
+  "engine": "component-row",
+  "character": {
+    "id": "character-10",
+    "description": "주인공 고양이 휘두르기",
+    "base_image": "base-source.png"
+  },
+  "cell": {
+    "shape": "square",
+    "width": 256,
+    "height": 256,
+    "safe_margin_x": 24,
+    "safe_margin_y": 24,
+    "size": 256,
+    "safe_margin": 24
+  },
+  "chroma_key": {
+    "name": "magenta",
+    "hex": "#FF00FF",
+    "rgb": [
+      255,
+      0,
+      255
+    ],
+    "selection": "manual"
+  },
+  "states": {
+    "down_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "무언가 휘두르는 방향별 모션",
+      "custom_animation": {
+        "id": "6a8a298a08344a94833f9bcd627bcc58",
+        "name": "휘두르기",
+        "prompt": "무언가 휘두르는 방향별 모션",
+        "directional_skeleton": true
+      }
+    },
+    "down_right_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "무언가 휘두르는 방향별 모션",
+      "custom_animation": {
+        "id": "6a8a298a08344a94833f9bcd627bcc58",
+        "name": "휘두르기",
+        "prompt": "무언가 휘두르는 방향별 모션",
+        "directional_skeleton": true
+      },
+      "takes": [
+        {
+          "label": "studio-20260718-190758-5f74a2",
+          "frames": 4
+        }
+      ]
+    },
+    "right_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "무언가 휘두르는 방향별 모션",
+      "custom_animation": {
+        "id": "6a8a298a08344a94833f9bcd627bcc58",
+        "name": "휘두르기",
+        "prompt": "무언가 휘두르는 방향별 모션",
+        "directional_skeleton": true
+      }
+    },
+    "up_right_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "무언가 휘두르는 방향별 모션",
+      "custom_animation": {
+        "id": "6a8a298a08344a94833f9bcd627bcc58",
+        "name": "휘두르기",
+        "prompt": "무언가 휘두르는 방향별 모션",
+        "directional_skeleton": true
+      },
+      "takes": [
+        {
+          "label": "studio-20260718-191437-dc8207",
+          "frames": 4
+        }
+      ]
+    },
+    "up_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "무언가 휘두르는 방향별 모션",
+      "custom_animation": {
+        "id": "6a8a298a08344a94833f9bcd627bcc58",
+        "name": "휘두르기",
+        "prompt": "무언가 휘두르는 방향별 모션",
+        "directional_skeleton": true
+      },
+      "takes": [
+        {
+          "label": "studio-20260718-191441-1f11a6",
+          "frames": 4
+        }
+      ]
+    },
+    "up_left_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "무언가 휘두르는 방향별 모션",
+      "custom_animation": {
+        "id": "6a8a298a08344a94833f9bcd627bcc58",
+        "name": "휘두르기",
+        "prompt": "무언가 휘두르는 방향별 모션",
+        "directional_skeleton": true
+      },
+      "takes": [
+        {
+          "label": "studio-20260718-191444-3c9467",
+          "frames": 4
+        }
+      ]
+    },
+    "left_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "무언가 휘두르는 방향별 모션",
+      "custom_animation": {
+        "id": "6a8a298a08344a94833f9bcd627bcc58",
+        "name": "휘두르기",
+        "prompt": "무언가 휘두르는 방향별 모션",
+        "directional_skeleton": true
+      },
+      "takes": [
+        {
+          "label": "studio-20260718-191447-fa102c",
+          "frames": 4
+        }
+      ]
+    },
+    "down_left_action": {
+      "frames": 4,
+      "fps": 8,
+      "loop": true,
+      "action": "무언가 휘두르는 방향별 모션",
+      "custom_animation": {
+        "id": "6a8a298a08344a94833f9bcd627bcc58",
+        "name": "휘두르기",
+        "prompt": "무언가 휘두르는 방향별 모션",
+        "directional_skeleton": true
+      },
+      "takes": [
+        {
+          "label": "studio-20260718-191449-a04315",
+          "frames": 4
+        }
+      ]
+    }
+  },
+  "style": "match the supplied base character exactly: preserve its proportions, face, clothing, accessories, palette, outline weight, and rendering style; do not redesign it",
+  "motion_phase_guides": false,
+  "directions": {
+    "set": [
+      "down",
+      "down_right",
+      "right",
+      "up_right",
+      "up",
+      "up_left",
+      "left",
+      "down_left"
+    ],
+    "mirror": {},
+    "anchor_suffix": "idle",
+    "match_longest": true
+  },
+  "layout": "taxonomy/v1",
+  "chroma": {
+    "mode": "rgb",
+    "unmix_reach": 4,
+    "spill_max_fraction": 0.005
+  },
+  "studio_skeleton": {
+    "mode": "new",
+    "name": "휘두르기",
+    "prompt": "무언가 휘두르는 방향별 모션",
+    "frames": 4
+  }
+}

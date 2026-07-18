@@ -5,6 +5,7 @@ signal reinforcement_called(enemy: CharacterBody3D)
 signal damaged(enemy: CharacterBody3D, amount: int)
 
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
+const GRENADE_PROJECTILE := preload("res://scripts/enemy_grenade.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
 const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/baseball_bat_temp.png")
@@ -36,13 +37,17 @@ const MELEE_WINDUP_TIME := 0.46
 const MELEE_STRIKE_TIME := 0.16
 const MELEE_RECOVERY_TIME := 0.34
 const HIT_STAGGER_TIME := 0.13
-const MELEE_VISION_RANGE := 9.5
-const RANGED_VISION_RANGE := 13.0
-const VISION_RANGE_THREAT_BONUS := 5.5
+const MELEE_VISION_RANGE := 18.0
+const RANGED_VISION_RANGE := 27.0
+const GRENADIER_VISION_RANGE := 30.0
+const VISION_RANGE_THREAT_BONUS := 9.0
 const VISION_HALF_ANGLE_DEGREES := 55.0
-const VISION_FAN_SEGMENTS := 28
-const COMBAT_MEMORY_BASE := 16.0
-const COMBAT_MEMORY_THREAT_BONUS := 14.0
+const COMBAT_MEMORY_BASE := 20.0
+const COMBAT_MEMORY_THREAT_BONUS := 16.0
+const MELEE_DISENGAGE_DISTANCE := 46.0
+const RANGED_DISENGAGE_DISTANCE := 62.0
+const GRENADE_WINDUP_TIME := 0.72
+const GRENADE_RECOVERY_TIME := 0.9
 
 var enemy_kind := "melee"
 var target: CharacterBody3D
@@ -103,6 +108,8 @@ var hold_position_timer := 0.0
 var health_ratio := 1.0
 var damage_trail_ratio := 1.0
 var damage_trail_delay := 0.0
+var grenade_cooldown := 0.0
+var grenade_target_position := Vector3.ZERO
 static var weapon_texture_cache: Dictionary = {}
 static var health_bar_texture_cache: Dictionary = {}
 static var reload_texture_cache: Dictionary = {}
@@ -128,8 +135,8 @@ func configure(
 		magazine_size = maxi(1, int(weapon_stats.get("magazine_size", 7)))
 		magazine_ammo = magazine_size
 		reload_duration = maxf(0.6, float(weapon_stats.get("reload_time", 1.8)))
-	var base_health := 105 if enemy_kind == "melee" else 55
-	var threat_health_bonus := 45.0 if enemy_kind == "melee" else 35.0
+	var base_health := 150 if enemy_kind == "melee" else (122 if enemy_kind == "grenadier" else 105)
+	var threat_health_bonus := 70.0 if enemy_kind == "melee" else (62.0 if enemy_kind == "grenadier" else 55.0)
 	health = base_health + roundi(threat_health_bonus * threat_level)
 	max_health = health
 	health_ratio = 1.0
@@ -169,7 +176,9 @@ func set_player_visibility_factor(value: float) -> void:
 
 
 func _ready() -> void:
+	add_to_group("raid_enemy")
 	weapon_random.seed = get_instance_id() * 7919 + int(threat_level * 1000.0)
+	grenade_cooldown = weapon_random.randf_range(2.4, 5.0)
 	collision_layer = 2
 	collision_mask = 3
 
@@ -196,7 +205,6 @@ func _ready() -> void:
 	shadow.mesh = shadow_mesh
 	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(shadow)
-	_setup_vision_fan()
 
 	sprite = AnimatedSprite3D.new()
 	sprite.name = "EnemySprite"
@@ -237,6 +245,7 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
+	grenade_cooldown = maxf(0.0, grenade_cooldown - delta)
 	_update_alert_marker(delta)
 	_update_enemy_health_bar(delta)
 	tactical_repath_timer = maxf(0.0, tactical_repath_timer - delta)
@@ -270,19 +279,22 @@ func _physics_process(delta: float) -> void:
 	offset.y = 0.0
 	var distance := offset.length()
 	var vision_range := _get_vision_range()
-	_update_vision_fan(vision_range)
 	var has_line_of_sight := _has_line_of_sight()
-	var detected_in_fan := _is_position_inside_vision_fan(target.global_position, vision_range) and has_line_of_sight
-	var has_combat_contact := (
-		visual_contact_confirmed
+	if alerted and distance > _get_disengage_distance():
+		_clear_alert()
+		_update_patrol(delta)
+		move_and_slide()
+		return
+	var detected_in_fan := (
+		not alerted
+		and _is_position_inside_vision_fan(target.global_position, vision_range)
 		and has_line_of_sight
-		and distance <= _get_weapon_engagement_range()
 	)
-	if detected_in_fan or has_combat_contact:
+	if detected_in_fan:
+		_become_alerted()
+	if alerted and has_line_of_sight:
 		last_known_position = target.global_position
 		pursuit_time = COMBAT_MEMORY_BASE + COMBAT_MEMORY_THREAT_BONUS * threat_level
-		if not visual_contact_confirmed:
-			_become_alerted()
 	elif alerted and pursuit_time > 0.0:
 		pursuit_time = maxf(0.0, pursuit_time - delta)
 		_pursue_last_known_position()
@@ -298,17 +310,22 @@ func _physics_process(delta: float) -> void:
 	_set_facing_from_world_direction(direction)
 	if enemy_kind == "melee":
 		_update_melee(direction, distance)
+	elif enemy_kind == "grenadier":
+		_update_grenadier(direction, distance, delta)
 	else:
 		_update_pistol(direction, distance, delta)
 	if combat_state == "normal":
 		_set_motion_state("walk" if velocity.length_squared() > 0.05 else "idle")
 	move_and_slide()
-	_update_vision_fan(_get_vision_range())
 
 
 func _get_vision_range() -> float:
-	var base_range := MELEE_VISION_RANGE if enemy_kind == "melee" else RANGED_VISION_RANGE
+	var base_range := MELEE_VISION_RANGE if enemy_kind == "melee" else (GRENADIER_VISION_RANGE if enemy_kind == "grenadier" else RANGED_VISION_RANGE)
 	return base_range + VISION_RANGE_THREAT_BONUS * threat_level
+
+
+func _get_disengage_distance() -> float:
+	return MELEE_DISENGAGE_DISTANCE if enemy_kind == "melee" else RANGED_DISENGAGE_DISTANCE
 
 
 func _is_position_inside_vision_fan(world_position: Vector3, vision_range: float = -1.0) -> bool:
@@ -328,64 +345,17 @@ func _is_position_inside_vision_fan(world_position: Vector3, vision_range: float
 
 
 func _setup_vision_fan() -> void:
-	vision_fan_material = StandardMaterial3D.new()
-	vision_fan_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	vision_fan_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	vision_fan_material.albedo_color = Color(0.95, 0.08, 0.055, 0.13)
-	vision_fan_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	vision_fan_material.no_depth_test = false
-	vision_fan = MeshInstance3D.new()
-	vision_fan.name = "VisionFan"
-	vision_fan.position.y = -0.68
-	vision_fan.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(vision_fan)
-	_update_vision_fan(_get_vision_range(), true)
-
-
-func _create_vision_fan_mesh(radius: float) -> ArrayMesh:
-	var vertices := PackedVector3Array()
-	for segment in VISION_FAN_SEGMENTS:
-		var angle_a := lerpf(
-			-deg_to_rad(VISION_HALF_ANGLE_DEGREES),
-			deg_to_rad(VISION_HALF_ANGLE_DEGREES),
-			float(segment) / float(VISION_FAN_SEGMENTS)
-		)
-		var angle_b := lerpf(
-			-deg_to_rad(VISION_HALF_ANGLE_DEGREES),
-			deg_to_rad(VISION_HALF_ANGLE_DEGREES),
-			float(segment + 1) / float(VISION_FAN_SEGMENTS)
-		)
-		vertices.append(Vector3.ZERO)
-		vertices.append(Vector3(sin(angle_a) * radius, 0.0, -cos(angle_a) * radius))
-		vertices.append(Vector3(sin(angle_b) * radius, 0.0, -cos(angle_b) * radius))
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	mesh.surface_set_material(0, vision_fan_material)
-	return mesh
+	# Detection remains directional, but its debug fan is intentionally hidden in play.
+	vision_fan = null
+	vision_fan_material = null
 
 
 func _update_vision_fan(radius: float, force_rebuild: bool = false) -> void:
-	if vision_fan == null:
-		return
-	if force_rebuild or absf(radius - vision_fan_range) > 0.05:
-		vision_fan_range = radius
-		vision_fan.mesh = _create_vision_fan_mesh(radius)
-	var forward := facing_world_direction
-	forward.y = 0.0
-	if forward.length_squared() > 0.0001:
-		vision_fan.look_at(vision_fan.global_position + forward.normalized(), Vector3.UP)
-	_update_vision_fan_visual()
+	vision_fan_range = radius
 
 
 func _update_vision_fan_visual() -> void:
-	if vision_fan == null or vision_fan_material == null:
-		return
-	vision_fan.visible = not dying and not visual_contact_confirmed and player_visibility_factor > 0.01
-	var alpha := (0.24 if alerted else 0.13) * player_visibility_factor
-	vision_fan_material.albedo_color = Color(1.0, 0.055, 0.035, alpha)
+	pass
 
 
 func _setup_enemy_health_bar() -> void:
@@ -671,7 +641,9 @@ func get_projectile_hit_center() -> Vector3:
 
 
 func get_projectile_hit_radius() -> float:
-	return 0.5
+	# Keep the logical hit silhouette slightly wider than the feet collider so
+	# stationary actions such as reloading and radio calls remain dependable.
+	return 0.62
 
 
 func _update_patrol(delta: float) -> void:
@@ -715,17 +687,12 @@ func _become_alerted() -> void:
 	threat_marker.scale = Vector3.ONE * 1.45
 
 
-func hear_sound(world_position: Vector3, loudness: float = 1.0) -> void:
+func receive_reinforcement_order(world_position: Vector3) -> void:
 	if dying or not is_instance_valid(target) or _target_is_in_safe_zone():
 		return
 	last_known_position = world_position
-	pursuit_time = maxf(pursuit_time, lerpf(5.5, 12.0, threat_level) * clampf(loudness, 0.35, 1.0))
-	alerted = true
-	if not visual_contact_confirmed:
-		alert_marker_time = 0.9
-		threat_marker.text = "?"
-		threat_marker.modulate = _with_player_visibility(Color("#f3c65b"))
-		threat_marker.visible = true
+	pursuit_time = COMBAT_MEMORY_BASE + COMBAT_MEMORY_THREAT_BONUS * threat_level
+	_become_alerted()
 
 
 func _with_player_visibility(color: Color) -> Color:
@@ -1021,6 +988,45 @@ func _update_pistol(direction: Vector3, distance: float, delta: float) -> void:
 		_start_recoil_pose()
 
 
+func _update_grenadier(direction: Vector3, distance: float, delta: float) -> void:
+	var movement_speed := PISTOL_SPEED * lerpf(1.0, 1.25, threat_level)
+	if grenade_cooldown <= 0.0 and distance >= 7.0 and distance <= 28.0 and _has_line_of_sight():
+		grenade_target_position = target.global_position + target.velocity * 0.32
+		combat_state = "grenade_windup"
+		state_timer = GRENADE_WINDUP_TIME
+		velocity = Vector3.ZERO
+		pending_attack_direction = direction
+		_set_motion_state("attack")
+		threat_marker.text = "!"
+		threat_marker.modulate = _with_player_visibility(Color("#ffb84f"))
+		threat_marker.visible = true
+		return
+	if distance > 20.0:
+		velocity = _steer_around_obstacles(direction) * movement_speed
+	elif distance < 9.0:
+		velocity = _steer_around_obstacles(-direction) * movement_speed
+	else:
+		strafe_switch_time = maxf(0.0, strafe_switch_time - delta)
+		if strafe_switch_time <= 0.0:
+			strafe_sign *= -1.0
+			strafe_switch_time = weapon_random.randf_range(0.8, 1.45)
+		var strafe_direction := Vector3(-direction.z, 0.0, direction.x) * strafe_sign
+		velocity = _steer_around_obstacles(strafe_direction) * movement_speed * 0.68
+
+
+func _throw_grenade() -> void:
+	if get_parent() == null:
+		return
+	var start := global_position + pending_attack_direction * 0.72 + Vector3(0.0, 0.62, 0.0)
+	var grenade := Node3D.new()
+	grenade.name = "EnemyGrenade"
+	grenade.set_script(GRENADE_PROJECTILE)
+	grenade.call("configure", self, target, start, grenade_target_position, 28, 3.15, 2.45)
+	get_parent().add_child(grenade)
+	grenade.global_position = start
+	grenade_cooldown = weapon_random.randf_range(6.8, 9.5)
+
+
 func _get_weapon_engagement_range() -> float:
 	match weapon_id:
 		"mp5":
@@ -1040,6 +1046,18 @@ func _update_combat_state(delta: float) -> void:
 		_update_reinforcement_call(delta)
 	elif combat_state == "reloading":
 		_update_reload(delta)
+	elif combat_state == "grenade_windup":
+		_set_facing_from_world_direction(pending_attack_direction)
+		if state_timer <= 0.0:
+			_throw_grenade()
+			combat_state = "grenade_recovery"
+			state_timer = GRENADE_RECOVERY_TIME
+			threat_marker.visible = false
+			_start_recoil_pose()
+	elif combat_state == "grenade_recovery" and state_timer <= 0.0:
+		combat_state = "normal"
+		_reset_sprite_pose()
+		_set_motion_state("idle")
 	elif combat_state == "melee_windup":
 		_update_threat_marker()
 		if state_timer <= 0.0:
@@ -1396,6 +1414,11 @@ func take_hit(amount: int, hit_direction: Vector3, is_critical: bool = false) ->
 		return
 	if reinforcement_call_active:
 		_cancel_reinforcement_call()
+	if is_instance_valid(target):
+		last_known_position = target.global_position
+		pursuit_time = maxf(pursuit_time, lerpf(8.0, 15.0, threat_level))
+		_become_alerted()
+		attack_cooldown = minf(attack_cooldown, 0.18)
 	var lethal := amount >= health
 	health -= amount
 	damaged.emit(self, amount)

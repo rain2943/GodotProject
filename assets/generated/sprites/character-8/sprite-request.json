@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "kind": "sprite-gen-request",
+  "engine": "component-row",
+  "character": {
+    "id": "character-8",
+    "description": "일꾼 고양이 꾹꾹이",
+    "base_image": "base-source.png"
+  },
+  "cell": {
+    "shape": "square",
+    "width": 256,
+    "height": 256,
+    "safe_margin_x": 24,
+    "safe_margin_y": 24,
+    "size": 256,
+    "safe_margin": 24
+  },
+  "chroma_key": {
+    "name": "magenta",
+    "hex": "#FF00FF",
+    "rgb": [
+      255,
+      0,
+      255
+    ],
+    "selection": "manual"
+  },
+  "states": {
+    "custom_animation": {
+      "frames": 6,
+      "fps": 12,
+      "loop": false,
+      "action": "up-right 방향으로 신나게 덩실덩실 꾹꾹이를 하는 애니메이션 스프라이트",
+      "custom_animation": {
+        "id": "d80aa16e61444fd59e2f6f07c8c5285f",
+        "name": "꾹꾹이",
+        "prompt": "up-right 방향으로 신나게 덩실덩실 꾹꾹이를 하는 애니메이션 스프라이트"
+      },
+      "takes": [
+        {
+          "label": "studio-20260718-135529-1a0480",
+          "frames": 6
+        },
+        {
+          "label": "studio-20260718-140606-249900",
+          "frames": 6
+        },
+        {
+          "label": "studio-20260718-141452-b6c37f",
+          "frames": 6
+        }
+      ]
+    }
+  },
+  "style": "match the supplied base character exactly: preserve its proportions, face, clothing, accessories, palette, outline weight, and rendering style; do not redesign it",
+  "motion_phase_guides": false,
+  "layout": "taxonomy/v1",
+  "chroma": {
+    "mode": "rgb",
+    "unmix_reach": 4,
+    "spill_max_fraction": 0.005
+  },
+  "studio_skeleton": {
+    "mode": "existing",
+    "profileId": "pose-20260718-165056-990eac",
+    "name": "8방향 꾹꾹이"
+  }
+}

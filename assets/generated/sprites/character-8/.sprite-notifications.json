@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "39b89a190ac248e59725c80a5a034acf",
+      "kind": "base_generated",
+      "state": "__base__",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "generated": false
+      },
+      "createdAt": "2026-07-18T13:11:42+0900",
+      "read": false
+    },
+    {
+      "id": "f25e37fee67d4084b98a0b9e7f1d5d49",
+      "kind": "animation_added",
+      "state": "custom_animation",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": "꾹꾹이",
+        "frames": 6,
+        "stateCount": 1
+      },
+      "createdAt": "2026-07-18T13:12:22+0900",
+      "read": false
+    },
+    {
+      "id": "a2199c6484d140579b9f589f1f8438f5",
+      "kind": "custom_animation_generated",
+      "state": "custom_animation",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "name": "꾹꾹이",
+        "total": 1
+      },
+      "createdAt": "2026-07-18T13:13:30+0900",
+      "read": false
+    },
+    {
+      "id": "f5cc9de79b364598ae4398ca2c51be1b",
+      "kind": "state_generated",
+      "state": "custom_animation",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260718-135529-1a0480",
+        "frameCount": 6
+      },
+      "createdAt": "2026-07-18T13:56:53+0900",
+      "read": true
+    },
+    {
+      "id": "734fab97f47e4202bf1488394cc4eb9c",
+      "kind": "state_generated",
+      "state": "custom_animation",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260718-140606-249900",
+        "frameCount": 6
+      },
+      "createdAt": "2026-07-18T14:07:28+0900",
+      "read": false
+    },
+    {
+      "id": "509c1b94a6964654a73a490bc2942098",
+      "kind": "state_generated",
+      "state": "custom_animation",
+      "phase": null,
+      "success": true,
+      "detail": {
+        "take": "studio-20260718-141452-b6c37f",
+        "frameCount": 6
+      },
+      "createdAt": "2026-07-18T14:16:29+0900",
+      "read": false
+    }
+  ]
+}

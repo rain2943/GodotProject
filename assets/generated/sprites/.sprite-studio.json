@@ -40,6 +40,31 @@
       "id": "character-6",
       "name": "일꾼 고양이 움추리기",
       "path": "character-6"
+    },
+    {
+      "id": "character-7",
+      "name": "고양이 상인",
+      "path": "character-7"
+    },
+    {
+      "id": "character-8",
+      "name": "일꾼 고양이 꾹꾹이",
+      "path": "character-8"
+    },
+    {
+      "id": "character-9",
+      "name": "보스 고양이",
+      "path": "character-9"
+    },
+    {
+      "id": "character-10",
+      "name": "주인공 고양이 휘두르기",
+      "path": "character-10"
+    },
+    {
+      "id": "character-11",
+      "name": "헬창 고양이",
+      "path": "character-11"
     }
   ]
 }

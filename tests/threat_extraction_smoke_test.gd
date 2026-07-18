@@ -72,9 +72,8 @@ func _run() -> void:
 		return
 
 	var perception: CanvasLayer = main.get("perception_system")
-	perception.call("emit_enemy_gunshot", ranged_enemy)
-	if not (perception.get("sound_waves") as Array).is_empty():
-		_fail("enemy gunshot still created a sound wave")
+	if perception.has_method("emit_enemy_gunshot") or ranged_enemy.has_method("hear_sound"):
+		_fail("obsolete gunshot attraction API is still available")
 		return
 	main.set("magazine_ammo", 0)
 	main.set("melee_attack_cooldown", 0.0)

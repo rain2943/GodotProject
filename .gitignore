@@ -18,3 +18,4 @@ tmp/
 .DS_Store
 Thumbs.db
 *.tmp
+*.sg-rwlock
