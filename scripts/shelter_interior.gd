@@ -60,7 +60,7 @@ const MERCHANT_GOODS := [
 		"description": "AK 계열 총기에 사용하는 보통탄 30발입니다.",
 	},
 	{
-		"id": "canned_food", "type": "food", "title": "🥫 밀봉 통조림", "amount": 1,
+		"id": "canned_food", "type": "food", "title": "밀봉 통조림", "amount": 1,
 		"buy_price": 64, "sell_cans": 0, "icon": "",
 		"description": "주민 노동과 쉘터 시설 운영에 필요한 기본 재화입니다.",
 	},
@@ -92,9 +92,11 @@ var current_module: Node3D
 var prompt_label: Label
 var status_label: Label
 var stats_label: Label
+var shelter_currency_labels: Dictionary = {}
 var scrap_gain_label: Label
 var shelter_upgrade_button: Button
 var interact_button: Button
+var dash_button: Button
 var roll_cooldown_indicator: Control
 var touch_stick: Control
 var touch_knob: Control
@@ -114,7 +116,7 @@ var merchant_waiting_marker: Node3D
 var merchant_notice_panel: PanelContainer
 var merchant_ui_layer: CanvasLayer
 var merchant_shop_list: VBoxContainer
-var merchant_shop_scrap_label: Label
+var merchant_shop_currency_labels: Dictionary = {}
 var merchant_shop_message_label: Label
 var merchant_buy_tab: Button
 var merchant_sell_tab: Button
@@ -212,6 +214,8 @@ func _physics_process(delta: float) -> void:
 			GameState.get_max_stamina(),
 			roll_stamina + ROLL_STAMINA_RECOVERY_PER_SECOND * GameState.get_stamina_recovery_multiplier() * delta
 		)
+	if dash_button:
+		dash_button.disabled = roll_active or roll_stamina < ROLL_STAMINA_COST
 	var input_vector := Vector2.ZERO
 	if not _ui_blocks_player():
 		input_vector = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
@@ -689,7 +693,7 @@ func _build_interface() -> void:
 	theme.default_font = FONT
 	var panel := PanelContainer.new()
 	panel.position = Vector2(24, 22)
-	panel.size = Vector2(370, 194)
+	panel.size = Vector2(370, 220)
 	panel.theme = theme
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.015, 0.025, 0.023, 0.92), Color("#577a69")))
 	canvas.add_child(panel)
@@ -705,6 +709,20 @@ func _build_interface() -> void:
 	stats_label = Label.new()
 	stats_label.add_theme_font_size_override("font_size", 16)
 	stats_box.add_child(stats_label)
+	var resource_grid := GridContainer.new()
+	resource_grid.columns = 2
+	resource_grid.add_theme_constant_override("h_separation", 14)
+	resource_grid.add_theme_constant_override("v_separation", 2)
+	stats_box.add_child(resource_grid)
+	for resource_data in [
+		["scrap", "고철", Color("#c7d1ce")],
+		["catnip", "캣닢", Color("#a9db78")],
+		["food", "통조림", Color("#e5b55b")],
+		["churu", "츄르", Color("#d99b67")],
+	]:
+		var chip := _currency_chip(str(resource_data[0]), str(resource_data[1]), resource_data[2], 20, 150)
+		resource_grid.add_child(chip)
+		shelter_currency_labels[str(resource_data[0])] = chip.get_meta("value_label")
 	shelter_upgrade_button = Button.new()
 	shelter_upgrade_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#d8c47b"))
 	shelter_upgrade_button.expand_icon = true
@@ -754,6 +772,19 @@ func _build_interface() -> void:
 	interact_button.add_theme_font_size_override("font_size", 17)
 	interact_button.pressed.connect(_interact)
 	canvas.add_child(interact_button)
+	dash_button = Button.new()
+	dash_button.name = "DashButton"
+	dash_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	dash_button.position = Vector2(-284, -142)
+	dash_button.size = Vector2(118, 72)
+	dash_button.text = "대시"
+	dash_button.icon = UI_ICONS.get_icon("dash", 32, Color("#d8e5de"))
+	dash_button.expand_icon = true
+	dash_button.add_theme_font_override("font", FONT)
+	dash_button.add_theme_font_size_override("font_size", 17)
+	dash_button.pressed.connect(_try_start_roll)
+	dash_button.visible = DisplayServer.is_touchscreen_available()
+	canvas.add_child(dash_button)
 	inventory_ui = INVENTORY_UI_SCRIPT.new()
 	inventory_ui.name = "InventoryUI"
 	canvas.add_child(inventory_ui)
@@ -765,6 +796,7 @@ func _build_interface() -> void:
 	inventory_ui.connect("open_state_changed", _on_inventory_open_state_changed)
 	inventory_ui.connect("weapon_mods_changed", _on_inventory_weapon_mods_changed)
 	inventory_ui.connect("weapon_equipped", _on_inventory_weapon_equipped)
+	inventory_ui.connect("weapon_unequipped", _on_inventory_weapon_unequipped)
 	inventory_ui.connect("equipment_changed", _on_inventory_equipment_changed)
 	_refresh_inventory_state()
 	roll_cooldown_indicator = ROLL_COOLDOWN_INDICATOR_SCRIPT.new() as Control
@@ -997,12 +1029,15 @@ func _open_merchant_shop() -> void:
 	subtitle.add_theme_font_size_override("font_size", 13)
 	subtitle.add_theme_color_override("font_color", Color("#9baaa3"))
 	title_box.add_child(subtitle)
-	merchant_shop_scrap_label = Label.new()
-	merchant_shop_scrap_label.add_theme_font_override("font", FONT)
-	merchant_shop_scrap_label.add_theme_font_size_override("font_size", 17)
-	merchant_shop_scrap_label.add_theme_color_override("font_color", Color("#e8cb72"))
-	merchant_shop_scrap_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	header.add_child(merchant_shop_scrap_label)
+	var currency_box := HBoxContainer.new()
+	currency_box.add_theme_constant_override("separation", 12)
+	header.add_child(currency_box)
+	var scrap_chip := _currency_chip("scrap", "고철", Color("#d4d9d6"), 24, 112)
+	var food_chip := _currency_chip("food", "통조림", Color("#e5b55b"), 24, 112)
+	currency_box.add_child(scrap_chip)
+	currency_box.add_child(food_chip)
+	merchant_shop_currency_labels["scrap"] = scrap_chip.get_meta("value_label")
+	merchant_shop_currency_labels["food"] = food_chip.get_meta("value_label")
 	var close := _merchant_button("닫기", false, "close")
 	close.pressed.connect(_close_merchant_ui)
 	header.add_child(close)
@@ -1046,12 +1081,30 @@ func _refresh_merchant_shop() -> void:
 	for child in merchant_shop_list.get_children():
 		merchant_shop_list.remove_child(child)
 		child.queue_free()
-	merchant_shop_scrap_label.text = "🔩 %d   🥫 %d" % [GameState.scrap, GameState.canned_food]
+	(merchant_shop_currency_labels.get("scrap") as Label).text = "고철  %d" % GameState.scrap
+	(merchant_shop_currency_labels.get("food") as Label).text = "통조림  %d" % GameState.canned_food
 	merchant_buy_tab.disabled = merchant_shop_mode == "buy"
 	merchant_sell_tab.disabled = merchant_shop_mode == "sell"
+	var visible_good_count := 0
 	for good_variant in MERCHANT_GOODS:
 		var good: Dictionary = good_variant
+		if merchant_shop_mode == "sell":
+			var owned := _merchant_item_count(good)
+			if owned <= 0 or int(good.get("sell_cans", 0)) <= 0:
+				continue
 		merchant_shop_list.add_child(_merchant_trade_row(good))
+		visible_good_count += 1
+	if visible_good_count == 0:
+		var empty_label := Label.new()
+		empty_label.name = "MerchantEmptyState"
+		empty_label.custom_minimum_size = Vector2(720, 180)
+		empty_label.text = "판매할 수 있는 물품이 없습니다."
+		empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		empty_label.add_theme_font_override("font", FONT)
+		empty_label.add_theme_font_size_override("font_size", 18)
+		empty_label.add_theme_color_override("font_color", Color("#7f9088"))
+		merchant_shop_list.add_child(empty_label)
 
 
 func _merchant_trade_row(good: Dictionary) -> Button:
@@ -1059,7 +1112,7 @@ func _merchant_trade_row(good: Dictionary) -> Button:
 	var price := int(good["buy_price"] if buying else good.get("sell_cans", 0))
 	var owned := _merchant_item_count(good)
 	var action := "구매" if buying else "판매"
-	var currency := "🔩 고철" if buying else "🥫 통조림"
+	var currency := "고철" if buying else "통조림"
 	var button := _merchant_button(
 		"%s  x%d\n%s    ·    보유 %d    ·    %s %d" % [
 			str(good["title"]), int(good["amount"]), str(good["description"]), owned, currency, price,
@@ -1086,7 +1139,7 @@ func _trade_merchant_good(good: Dictionary, buying: bool) -> void:
 	var amount := int(good["amount"])
 	if buying:
 		if GameState.scrap < price:
-			merchant_shop_message_label.text = "🔩 고철이 부족합니다."
+			merchant_shop_message_label.text = "고철이 부족합니다."
 			return
 		GameState.scrap -= price
 		_add_merchant_item(good, amount)
@@ -1100,7 +1153,7 @@ func _trade_merchant_good(good: Dictionary, buying: bool) -> void:
 			return
 		_add_merchant_item(good, -amount)
 		GameState.canned_food += price
-		merchant_shop_message_label.text = "%s을(를) 판매하고 🥫 통조림 %d개를 받았습니다." % [str(good["title"]), price]
+		merchant_shop_message_label.text = "%s을(를) 판매하고 통조림 %d개를 받았습니다." % [str(good["title"]), price]
 	_update_stats()
 	_refresh_merchant_shop()
 
@@ -1133,7 +1186,7 @@ func _close_merchant_ui() -> void:
 		merchant_ui_layer.queue_free()
 	merchant_ui_layer = null
 	merchant_shop_list = null
-	merchant_shop_scrap_label = null
+	merchant_shop_currency_labels.clear()
 	merchant_shop_message_label = null
 	merchant_buy_tab = null
 	merchant_sell_tab = null
@@ -1148,6 +1201,30 @@ func _merchant_good_fallback_icon(good: Dictionary) -> Texture2D:
 		"component":
 			return UI_ICONS.get_icon("mod", 48, Color("#84cbb9"))
 	return UI_ICONS.get_icon("all", 48, Color("#aebdb5"))
+
+
+func _currency_chip(icon_name: String, title: String, color: Color, icon_size: int, minimum_width: float) -> HBoxContainer:
+	var chip := HBoxContainer.new()
+	chip.custom_minimum_size.x = minimum_width
+	chip.add_theme_constant_override("separation", 6)
+	var icon := TextureRect.new()
+	icon.name = "%sIcon" % title
+	icon.custom_minimum_size = Vector2(icon_size, icon_size)
+	icon.texture = UI_ICONS.get_icon(icon_name, icon_size, color)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.add_child(icon)
+	var value_label := Label.new()
+	value_label.name = "%sValue" % title
+	value_label.text = title
+	value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	value_label.add_theme_font_override("font", FONT)
+	value_label.add_theme_font_size_override("font_size", 15)
+	value_label.add_theme_color_override("font_color", color)
+	chip.add_child(value_label)
+	chip.set_meta("value_label", value_label)
+	return chip
 
 
 func _merchant_button(text: String, accent: bool, icon_name := "") -> Button:
@@ -1181,7 +1258,8 @@ func _rounded_panel_style(background: Color, border: Color, radius: int) -> Styl
 
 func _build_touch_stick(canvas: CanvasLayer) -> void:
 	touch_stick = Control.new()
-	touch_stick.position = Vector2(48, 500)
+	touch_stick.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	touch_stick.position = Vector2(34, -160)
 	touch_stick.size = Vector2(128, 128)
 	touch_stick.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	canvas.add_child(touch_stick)
@@ -1290,22 +1368,23 @@ func _interact() -> void:
 
 func _update_stats() -> void:
 	GameState._ensure_resident_records()
-	stats_label.text = "SHELTER 01  ·  Tier %d  ·  Lv.%d\n체력 %d/%d   주민 %d/%d\n🔩 고철 %d   🌿 캣닢 %.1f\n🥫 통조림 %d   🍗 츄르 %d\n꾹꾹이 %d/%d   스크래핑 %d/%d" % [
+	stats_label.text = "SHELTER 01  ·  Tier %d  ·  Lv.%d\n체력 %d/%d   주민 %d/%d\n꾹꾹이 %d/%d   스크래핑 %d/%d" % [
 		GameState.shelter_tier,
 		GameState.player_level,
 		GameState.player_health,
 		GameState.get_max_health(),
 		GameState.rescued_workers,
 		GameState.get_resident_capacity(),
-		GameState.scrap,
-		GameState.catnip,
-		GameState.canned_food,
-		GameState.churu,
 		GameState.get_active_scratcher_workers(),
 		GameState.get_scratcher_worker_slots(),
 		GameState.get_active_catnip_workers(),
 		GameState.get_catnip_worker_slots(),
 	]
+	if shelter_currency_labels.has("scrap"):
+		(shelter_currency_labels["scrap"] as Label).text = "고철  %d" % GameState.scrap
+		(shelter_currency_labels["catnip"] as Label).text = "캣닢  %.1f" % GameState.catnip
+		(shelter_currency_labels["food"] as Label).text = "통조림  %d" % GameState.canned_food
+		(shelter_currency_labels["churu"] as Label).text = "츄르  %d" % GameState.churu
 	if shelter_upgrade_button:
 		var cost := GameState.get_shelter_upgrade_cost()
 		if cost.is_empty():
@@ -1314,7 +1393,7 @@ func _update_stats() -> void:
 		else:
 			var scrap_cost := int(cost.get("scrap", 0))
 			var churu_cost := int(cost.get("churu", 0))
-			shelter_upgrade_button.text = "Tier %d 확장  ·  🔩 고철 %d + 🍗 츄르 %d" % [GameState.shelter_tier + 1, scrap_cost, churu_cost]
+			shelter_upgrade_button.text = "Tier %d 확장  ·  고철 %d + 츄르 %d" % [GameState.shelter_tier + 1, scrap_cost, churu_cost]
 			shelter_upgrade_button.disabled = GameState.scrap < scrap_cost or GameState.churu < churu_cost
 func _refresh_inventory_state() -> void:
 	if inventory_ui == null:
@@ -1324,9 +1403,11 @@ func _refresh_inventory_state() -> void:
 	var stored_weapons := 0
 	for count in GameState.weapon_inventory.values():
 		stored_weapons += int(count)
+	if bool(GameState.has_ak):
+		stored_weapons = maxi(0, stored_weapons - 1)
 	inventory_ui.call("set_weapon_texture", WEAPON_VISUAL_CATALOG.get_weapon_texture(weapon_id))
 	inventory_ui.call("update_state",
-		GameState.get_weapon_count(weapon_id) > 0,
+		bool(GameState.has_ak) and GameState.get_weapon_count(weapon_id) > 0,
 		int(GameState.magazine_ammo),
 		int(GameState.get_ammo_count(GameState.equipped_ammo_id)),
 		str(weapon_definition.get("display_name", weapon_id.to_upper())),
@@ -1355,8 +1436,26 @@ func _on_inventory_weapon_mods_changed() -> void:
 
 
 func _on_inventory_weapon_equipped(weapon_id: String) -> void:
+	if bool(GameState.has_ak) and weapon_id == str(GameState.equipped_weapon_id):
+		return
+	var previous_ammo_id := str(GameState.equipped_ammo_id)
+	if bool(GameState.has_ak) and int(GameState.magazine_ammo) > 0 and not previous_ammo_id.is_empty():
+		GameState.set_ammo_count(previous_ammo_id, GameState.get_ammo_count(previous_ammo_id) + int(GameState.magazine_ammo))
 	if not GameState.equip_weapon(weapon_id):
 		return
+	GameState.save_persistent_state()
+	_refresh_inventory_state()
+
+
+func _on_inventory_weapon_unequipped() -> void:
+	if not bool(GameState.has_ak):
+		return
+	var ammo_id := str(GameState.equipped_ammo_id)
+	if int(GameState.magazine_ammo) > 0 and not ammo_id.is_empty():
+		GameState.set_ammo_count(ammo_id, GameState.get_ammo_count(ammo_id) + int(GameState.magazine_ammo))
+	GameState.magazine_ammo = 0
+	GameState.reserve_ammo = GameState.get_ammo_count(ammo_id)
+	GameState.unequip_weapon()
 	GameState.save_persistent_state()
 	_refresh_inventory_state()
 
@@ -1391,7 +1490,7 @@ func _update_live_shelter_income(delta: float) -> void:
 		shelter_stats_refresh_time = 0.0
 		_update_stats()
 	if gained > 0 and scrap_gain_label:
-		scrap_gain_label.text = "+%d 🔩 고철   %.2f/s" % [gained, GameState.get_scrap_per_second()]
+		scrap_gain_label.text = "+%d 고철   %.2f/s" % [gained, GameState.get_scrap_per_second()]
 		scrap_gain_label.modulate.a = 1.0
 
 
@@ -1564,7 +1663,7 @@ func _build_offline_status_text(progress: Dictionary) -> String:
 	var catnip_gain := float(progress.get("catnip", 0.0))
 	var repair_gain := float(progress.get("repair", 0.0))
 	if scrap_gain > 0 or catnip_gain > 0.01 or repair_gain > 0.01:
-		return "오프라인 정산 · 🔩 고철 +%d · 🌿 캣닢 +%.1f · 내구도 +%.1f%%" % [scrap_gain, catnip_gain, repair_gain]
+		return "오프라인 정산 · 고철 +%d · 캣닢 +%.1f · 내구도 +%.1f%%" % [scrap_gain, catnip_gain, repair_gain]
 	return "쉘터에 복귀했습니다. 생산기에 주민을 배치할 수 있습니다."
 
 

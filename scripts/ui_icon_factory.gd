@@ -113,6 +113,19 @@ static func get_icon(icon_name: String, size := 64, color := Color("#d9e3dc")) -
 			_polygon_fill(image, [_v(13, 15, scale), _v(43, 32, scale), _v(13, 49, scale), _v(22, 32, scale)], color)
 			_line(image, _v(39, 14, scale), _v(54, 14, scale), color, 4.0 * scale)
 			_line(image, _v(44, 25, scale), _v(58, 25, scale), color, 4.0 * scale)
+		"flashlight":
+			_rect(image, Rect2i(_p(9, 24, scale), _p(24, 17, scale)), color)
+			_rect(image, Rect2i(_p(29, 19, scale), _p(12, 27, scale)), color.darkened(0.16))
+			_polygon_fill(image, [_v(40, 18, scale), _v(59, 8, scale), _v(59, 56, scale), _v(40, 46, scale)], Color(color.r, color.g, color.b, 0.48))
+			_line(image, _v(14, 29, scale), _v(14, 36, scale), color.lightened(0.2), 3.0 * scale)
+		"map":
+			_polygon_fill(image, [_v(7, 12, scale), _v(24, 7, scale), _v(40, 13, scale), _v(57, 8, scale), _v(57, 52, scale), _v(40, 57, scale), _v(24, 51, scale), _v(7, 56, scale)], color)
+			_line(image, _v(24, 8, scale), _v(24, 51, scale), color.darkened(0.28), 3.0 * scale)
+			_line(image, _v(40, 13, scale), _v(40, 56, scale), color.darkened(0.28), 3.0 * scale)
+		"loot":
+			_rect(image, Rect2i(_p(10, 22, scale), _p(44, 31, scale)), color)
+			_rect(image, Rect2i(_p(15, 13, scale), _p(34, 12, scale)), color.lightened(0.12))
+			_rect(image, Rect2i(_p(28, 28, scale), _p(8, 13, scale)), color.darkened(0.35))
 		"health":
 			_polygon_fill(image, [_v(32, 55, scale), _v(11, 35, scale), _v(11, 20, scale), _v(20, 11, scale), _v(32, 20, scale), _v(44, 11, scale), _v(53, 20, scale), _v(53, 35, scale)], color)
 		"stamina":

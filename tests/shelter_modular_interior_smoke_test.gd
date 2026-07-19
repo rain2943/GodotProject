@@ -95,6 +95,7 @@ func _run() -> void:
 	assert(training.has_method("interact"))
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)
+	assert(shelter.get("dash_button") is Button)
 	for wall_name in [
 		"NorthWallCollision", "SouthWallCollision",
 		"WestWallCollision", "EastWallCollision",

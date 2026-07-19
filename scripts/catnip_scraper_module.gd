@@ -104,8 +104,8 @@ func _rebuild_ui() -> void:
 	content.add_child(summary)
 	summary.add_child(_summary_card("시설", "Lv.%d · Tier %d" % [GameState.catnip_scraper_level, GameState.shelter_tier]))
 	summary.add_child(_summary_card("배치", "%d / %d명" % [GameState.get_active_catnip_workers(), GameState.get_catnip_worker_slots()]))
-	summary.add_child(_summary_card("시간당 생산", "🌿 %.2f" % GameState.get_catnip_per_hour()))
-	summary.add_child(_summary_card("보유 캣닢", "🌿 %.1f" % GameState.catnip))
+	summary.add_child(_summary_card("시간당 생산", "%.2f" % GameState.get_catnip_per_hour()))
+	summary.add_child(_summary_card("보유 캣닢", "%.1f" % GameState.catnip))
 
 	var body := HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -165,7 +165,7 @@ func _rebuild_ui() -> void:
 	var upgrade := _button(
 		"최고 레벨"
 		if upgrade_cost == 0
-		else "Lv.%d 업그레이드  🔩 %d" % [GameState.catnip_scraper_level + 1, upgrade_cost],
+		else "Lv.%d 업그레이드  고철 %d" % [GameState.catnip_scraper_level + 1, upgrade_cost],
 		"upgrade"
 	)
 	upgrade.custom_minimum_size = Vector2(0, 38)
@@ -173,7 +173,7 @@ func _rebuild_ui() -> void:
 	upgrade.pressed.connect(_upgrade)
 	footer.add_child(upgrade)
 	var remaining: int = GameState.get_catnip_boost_remaining()
-	var status := "부스터 대기" if remaining <= 0 else "🔩 고철 x10  %02d:%02d" % [remaining / 60, remaining % 60]
+	var status := "부스터 대기" if remaining <= 0 else "고철 x10  %02d:%02d" % [remaining / 60, remaining % 60]
 	footer.add_child(_label(status, 15, Color("#cde79e")))
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -196,7 +196,7 @@ func _resident_button(resident_id: String) -> Button:
 	button.expand_icon = true
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.disabled = not available
-	button.text = "%s · %s\n%s  ·  🌿 캣닢 x%.2f" % [
+	button.text = "%s · %s\n%s  ·  캣닢 x%.2f" % [
 		resident_id,
 		trait_data.get("name", "평범한 주민"),
 		"스크래핑 중" if active else "대기",

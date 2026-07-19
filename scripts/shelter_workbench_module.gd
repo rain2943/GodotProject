@@ -514,7 +514,7 @@ func _consume_resource(key: String, amount: int) -> void:
 
 
 func _resource_text() -> String:
-	return "🔩 고철 %d · 렌즈 %d · 고무 %d · 스프링 %d · 🥫 통조림 %d" % [
+	return "고철 %d · 렌즈 %d · 고무 %d · 스프링 %d · 통조림 %d" % [
 		GameState.scrap,
 		GameState.get_mod_component_count("scope_lens"),
 		GameState.get_mod_component_count("rubber_gasket"),
@@ -539,7 +539,7 @@ func _result_text(recipe: Dictionary) -> String:
 	if result.has("weapon"):
 		return "%s x%d" % [_resource_name(str(result["weapon"])), int(result.get("amount", 1))]
 	if result.has("canned_food"):
-		return "🥫 통조림 x%d" % int(result["canned_food"])
+		return "통조림 x%d" % int(result["canned_food"])
 	if result.has("repair"):
 		return "내구도 +%d%%" % int(result["repair"])
 	if result.has("artisan"):
@@ -604,7 +604,7 @@ func _resource_row(key: String, owned: int, needed: int, color: Color) -> Contro
 func _resource_name(key: String) -> String:
 	match key:
 		"scrap":
-			return "🔩 고철"
+			return "고철"
 		"scope_lens":
 			return "스코프 렌즈"
 		"rubber_gasket":
@@ -626,7 +626,7 @@ func _resource_name(key: String) -> String:
 		"double_barrel":
 			return "더블배럴 참치 헌터"
 		"canned_food":
-			return "🥫 통조림"
+			return "통조림"
 	return key
 
 

@@ -108,7 +108,7 @@ func _rebuild_ui() -> void:
 	content.add_child(summary)
 	summary.add_child(_summary_card("시설", "Lv.%d · Tier %d" % [GameState.scratcher_bank_level, GameState.shelter_tier]))
 	summary.add_child(_summary_card("배치", "%d / %d명" % [workers, slots]))
-	summary.add_child(_summary_card("시간당 생산", "🔩 %.0f" % GameState.get_scrap_per_hour()))
+	summary.add_child(_summary_card("시간당 고철 생산", "%.0f" % GameState.get_scrap_per_hour()))
 	summary.add_child(_summary_card("부스터", "x%.0f" % GameState.get_production_multiplier()))
 
 	var body := HBoxContainer.new()
@@ -169,7 +169,7 @@ func _rebuild_ui() -> void:
 	var boost := _button(
 		"부스터 %02d:%02d" % [boost_remaining / 60, boost_remaining % 60]
 		if boost_remaining > 0
-		else "🌿 캣닢 25 · 10분 x10",
+		else "캣닢 25 · 10분 x10",
 		"catnip"
 	)
 	boost.disabled = boost_remaining > 0 or GameState.catnip < GameState.CATNIP_BOOST_COST
@@ -177,7 +177,7 @@ func _rebuild_ui() -> void:
 	boost.pressed.connect(_activate_boost)
 	actions.add_child(boost)
 	var upgrade_cost := int(GameState.SCRATCHER_UPGRADE_COSTS.get(GameState.scratcher_bank_level + 1, 0))
-	var upgrade := _button("최고 레벨" if upgrade_cost == 0 else "Lv.%d 업그레이드  🔩 고철 %d" % [GameState.scratcher_bank_level + 1, upgrade_cost], "upgrade")
+	var upgrade := _button("최고 레벨" if upgrade_cost == 0 else "Lv.%d 업그레이드  고철 %d" % [GameState.scratcher_bank_level + 1, upgrade_cost], "upgrade")
 	upgrade.disabled = upgrade_cost == 0 or GameState.scrap < upgrade_cost
 	upgrade.custom_minimum_size = Vector2(0, 38)
 	upgrade.pressed.connect(_upgrade)
@@ -186,7 +186,7 @@ func _rebuild_ui() -> void:
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	actions.add_child(spacer)
 	actions.add_child(_label("보유 자원", 13, Color("#8fa096")))
-	actions.add_child(_label("🔩 %d   🌿 %.1f\n🥫 %d   🍗 %d" % [
+	actions.add_child(_label("고철 %d   캣닢 %.1f\n통조림 %d   츄르 %d" % [
 		GameState.scrap,
 		GameState.catnip,
 		GameState.canned_food,
@@ -243,7 +243,7 @@ func _worker_slot_button(index: int, slots: int) -> Button:
 	elif resident_id.is_empty():
 		button.text = "빈 주민 슬롯"
 	else:
-		button.text = "%s · %s\n꾹꾹이 x%.2f  🌿 캣닢 x%.2f" % [
+		button.text = "%s · %s\n꾹꾹이 x%.2f  캣닢 x%.2f" % [
 			resident_id,
 			trait_data.get("name", ""),
 			trait_data.get("kneading", 1.0),

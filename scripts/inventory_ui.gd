@@ -3,6 +3,7 @@
 signal open_state_changed(is_open: bool)
 signal weapon_mods_changed
 signal weapon_equipped(weapon_id: String)
+signal weapon_unequipped
 signal equipment_changed
 
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
@@ -68,6 +69,7 @@ var inventory_feedback: Label
 var weapon_title: Label
 var weapon_preview: TextureRect
 var weapon_stats: Label
+var weapon_state_action_button: Button
 var mod_slot_grid: GridContainer
 var weight_label: Label
 var item_detail_icon: TextureRect
@@ -395,6 +397,10 @@ func _build_weapon_panel() -> Control:
 	weapon_title = _label("총기 상세", 22, Color("#f0e8cf"))
 	weapon_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(weapon_title)
+	weapon_state_action_button = _icon_text_button("장착 해제", "현재 무기를 가방으로 내립니다.", "close")
+	weapon_state_action_button.custom_minimum_size = Vector2(94, 34)
+	weapon_state_action_button.pressed.connect(_request_weapon_unequip)
+	header.add_child(weapon_state_action_button)
 	var detail_close := _icon_text_button("접기", "총기 상세 접기", "close")
 	detail_close.custom_minimum_size = Vector2(62, 34)
 	detail_close.pressed.connect(_hide_weapon_detail)
@@ -867,6 +873,8 @@ func _refresh_contents() -> void:
 	for weapon_id_variant in weapon_ids:
 		var weapon_id := str(weapon_id_variant)
 		var count: int = int(game_state.get_weapon_count(weapon_id))
+		if has_weapon_state and weapon_id == game_state.equipped_weapon_id:
+			count -= 1
 		if count <= 0:
 			continue
 		var definition := WEAPON_SYSTEM.get_weapon(weapon_id)
@@ -874,7 +882,7 @@ func _refresh_contents() -> void:
 			"id": weapon_id,
 			"type": "weapon",
 			"title": str(definition.get("display_name", weapon_id)),
-			"description": "현재 장착 중이면 가방에서 즉시 장착됨" if weapon_id == game_state.equipped_weapon_id else "클릭: 장착하려면 가방에서 선택하세요",
+			"description": "가방에 보관 중인 무기입니다. 선택 후 장착하면 현재 주무기와 교체됩니다.",
 			"quantity": count,
 			"texture": weapon_textures.get(weapon_id) as Texture2D,
 		})
@@ -1047,16 +1055,22 @@ func _refresh_weapon_detail() -> void:
 	)
 	weapon_title.text = "%s  +%d" % [weapon_name_state, game_state.get_weapon_enhancement_level(game_state.equipped_weapon_id)]
 	weapon_preview.texture = _weapon_preview_texture()
-	weapon_stats.text = "탄창 %02d / %02d  ·  예비 %03d\n내구도 %.1f%%  ·  탄퍼짐 %.1f°\n피해 %d  ·  반동 %.2f  ·  장전 %.1fs" % [
+	var full_magazines := floori(float(reserve_state) / float(maxi(1, magazine_size_state)))
+	var loose_rounds := reserve_state % maxi(1, magazine_size_state)
+	weapon_stats.text = "현재 탄창 %02d / %02d\n예비 %03d발  ·  완전 탄창 %d개 + 낱탄 %d발\n내구도 %.1f%%  ·  탄퍼짐 %.1f°\n피해 %d  ·  반동 %.2f  ·  장전 %.1fs" % [
 		magazine_state,
 		magazine_size_state,
 		reserve_state,
+		full_magazines,
+		loose_rounds,
 		durability_state,
 		float(stats.get("base_spread_deg", 0.0)),
 		int(stats.get("damage", 0)),
 		float(stats.get("recoil_kick", 0.0)),
 		float(stats.get("reload_time", 0.0)),
 	]
+	if weapon_state_action_button:
+		weapon_state_action_button.visible = has_weapon_state
 	_clear(mod_slot_grid)
 	for slot in SLOT_ORDER:
 		mod_slot_grid.add_child(_build_mod_slot_button(slot))
@@ -1100,12 +1114,14 @@ func _refresh_item_detail() -> void:
 	var item_type := str(selected_item.get("type", ""))
 	if item_type == "weapon":
 		var weapon_id := str(selected_item.get("id", ""))
-		if weapon_id == game_state.equipped_weapon_id:
-			item_action_button.text = "총기 상세"
-			item_action_button.icon = UI_ICONS.get_icon("weapon", 28, Color("#e4d09a"))
+		var is_equipped: bool = has_weapon_state and weapon_id == str(game_state.equipped_weapon_id)
+		if is_equipped:
+			item_detail_description.text = "현재 장착 중인 주무기입니다. 해제하면 가방으로 돌아갑니다."
+			item_action_button.text = "해제"
+			item_action_button.icon = UI_ICONS.get_icon("close", 28, Color("#e4d09a"))
 			item_action_button.visible = true
 		else:
-			item_detail_description.text += "  ·  장착하면 현재 주무기를 교체합니다."
+			item_detail_description.text += "  ·  장착하면 현재 주무기와 교체됩니다."
 			item_action_button.text = "장착"
 			item_action_button.icon = UI_ICONS.get_icon("upgrade", 28, Color("#bce6ca"))
 			item_action_button.visible = true
@@ -1161,11 +1177,11 @@ func _on_selected_item_action() -> void:
 	var item_type := str(selected_item.get("type", ""))
 	var item_id := str(selected_item.get("id", ""))
 	if item_type == "weapon":
-		if item_id == game_state.equipped_weapon_id:
-			_show_weapon_detail()
+		if has_weapon_state and item_id == game_state.equipped_weapon_id:
+			_request_weapon_unequip()
 		else:
 			weapon_equipped.emit(item_id)
-			if game_state.equipped_weapon_id == item_id:
+			if game_state.equipped_weapon_id == item_id and bool(game_state.has_ak):
 				_show_inventory_feedback("%s 장착" % str(selected_item.get("title", item_id)), Color("#a3ff92"))
 				_show_weapon_detail()
 	elif item_type == "mod":
@@ -1187,6 +1203,18 @@ func _on_selected_item_action() -> void:
 		game_state.save_persistent_state()
 		equipment_changed.emit()
 		selected_item = {}
+		_refresh_contents()
+
+
+func _request_weapon_unequip() -> void:
+	if not has_weapon_state:
+		return
+	weapon_unequipped.emit()
+	if not bool(game_state.has_ak):
+		has_weapon_state = false
+		weapon_detail_open = false
+		selected_item = {}
+		_show_inventory_feedback("주무기를 가방에 보관했습니다.", Color("#d9c579"))
 		_refresh_contents()
 
 

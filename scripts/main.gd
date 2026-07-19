@@ -166,6 +166,10 @@ var quick_slot_buttons: Array[Button] = []
 var fire_button: Button
 var melee_button: Button
 var dash_button: Button
+var mobile_context_button: Button
+var mobile_reload_button: Button
+var mobile_flashlight_button: Button
+var mobile_map_button: Button
 var fire_cooldown := 0.0
 var fire_button_held := false
 var mouse_fire_held := false
@@ -446,6 +450,8 @@ func _physics_process(delta: float) -> void:
 		melee_button.disabled = melee_attack_cooldown > 0.0
 	if dash_button:
 		dash_button.disabled = roll_active or roll_stamina < ROLL_STAMINA_COST
+	if mobile_reload_button:
+		mobile_reload_button.disabled = weapon_reloading or not has_ak or reserve_ammo <= 0
 	_update_field_interactions(delta)
 	_update_extraction_discovery()
 	if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
@@ -500,6 +506,7 @@ func _physics_process(delta: float) -> void:
 	player.position.z = clampf(player.position.z, -map_limit, map_limit)
 	_update_pickup(delta)
 	_update_ammo_pickups(delta)
+	_refresh_mobile_context_button()
 	_update_firing(delta)
 	_update_aim_feedback(delta)
 	_update_camera_occluders(delta)
@@ -1119,14 +1126,15 @@ func _update_scope_camera(delta: float) -> void:
 	var scope_active := (
 		laser_aim_held
 		and has_ak
-		and _uses_mouse_aim()
 		and scope_zoom > 1.0
 		and not _is_inventory_open()
+		and not _is_tactical_map_open()
 	)
 	var target_offset := Vector3.ZERO
 	var target_camera_size := BASE_CAMERA_SIZE
 	if scope_active:
-		var aim_direction := locked_aim_direction if locked_aim_direction.length_squared() > 0.01 else _get_mouse_world_direction()
+		var fallback_direction := _get_mouse_world_direction() if _uses_mouse_aim() else _get_current_facing_world_direction()
+		var aim_direction := locked_aim_direction if locked_aim_direction.length_squared() > 0.01 else fallback_direction
 		target_offset = aim_direction.normalized() * float(weapon_stats.get("scope_shift", 0.0))
 		target_camera_size = BASE_CAMERA_SIZE - minf(4.5, (scope_zoom - 1.0) * 1.5)
 	var blend_speed := 1.0 - exp(-8.5 * delta)
@@ -1645,7 +1653,7 @@ func _spawn_ammo_pickups() -> void:
 				_create_loot_pickup(
 					"canned_food",
 					position,
-					{"amount": 1, "display_name": "🥫 통조림"}
+					{"amount": 1, "display_name": "통조림"}
 				)
 			2:
 				var component_index := floori(float(index) / 4.0) % component_ids.size()
@@ -1833,10 +1841,10 @@ func _collect_nearby_ammo() -> void:
 	match loot_type:
 		"canned_food":
 			GameState.canned_food += amount
-			ammo_notice.text = "🥫 통조림 +%d   보유 %d" % [amount, GameState.canned_food]
+			ammo_notice.text = "통조림 +%d   보유 %d" % [amount, GameState.canned_food]
 		"churu":
 			GameState.churu += amount
-			ammo_notice.text = "🍗 희귀 츄르 +%d   보유 %d" % [amount, GameState.churu]
+			ammo_notice.text = "희귀 츄르 +%d   보유 %d" % [amount, GameState.churu]
 		"mod_component":
 			var component_id := str(nearby_ammo_pickup.get_meta("component_id", "rubber_gasket"))
 			GameState.add_mod_component(component_id, amount)
@@ -2235,6 +2243,8 @@ func _build_weapon_hud() -> void:
 	dash_button.visible = DisplayServer.is_touchscreen_available()
 	$HUD.add_child(dash_button)
 
+	_build_mobile_utility_buttons(font)
+
 	ammo_notice = Label.new()
 	ammo_notice.name = "AmmoNotice"
 	ammo_notice.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -2263,8 +2273,122 @@ func _build_weapon_hud() -> void:
 	inventory_ui.connect("open_state_changed", _on_inventory_open_state_changed)
 	inventory_ui.connect("weapon_mods_changed", _on_inventory_weapon_mods_changed)
 	inventory_ui.connect("weapon_equipped", _on_inventory_weapon_equipped)
+	inventory_ui.connect("weapon_unequipped", _on_inventory_weapon_unequipped)
 	inventory_ui.connect("equipment_changed", _on_inventory_equipment_changed)
 	_update_equipment_ui()
+
+
+func _build_mobile_utility_buttons(font: Font) -> void:
+	var touch_enabled := DisplayServer.is_touchscreen_available()
+	mobile_context_button = _make_mobile_utility_button("ContextButton", "줍기", "loot", font, -108.0)
+	mobile_context_button.button_down.connect(_on_mobile_context_button_down)
+	mobile_context_button.button_up.connect(_on_mobile_context_button_up)
+	mobile_context_button.visible = false
+
+	mobile_reload_button = _make_mobile_utility_button("ReloadButton", "장전", "reload", font, -198.0)
+	mobile_reload_button.pressed.connect(_reload_ak47)
+	mobile_reload_button.visible = touch_enabled
+
+	mobile_flashlight_button = _make_mobile_utility_button("FlashlightButton", "후레쉬", "flashlight", font, -288.0)
+	mobile_flashlight_button.toggle_mode = true
+	mobile_flashlight_button.toggled.connect(_on_mobile_flashlight_toggled)
+	mobile_flashlight_button.visible = touch_enabled
+
+	mobile_map_button = _make_mobile_utility_button("MapButton", "지도", "map", font, -378.0)
+	mobile_map_button.pressed.connect(_on_mobile_map_pressed)
+	mobile_map_button.visible = touch_enabled
+
+
+func _make_mobile_utility_button(
+	button_name: String,
+	label: String,
+	icon_name: String,
+	font: Font,
+	right_offset: float
+) -> Button:
+	var button := Button.new()
+	button.name = button_name
+	button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	button.offset_left = right_offset
+	button.offset_top = -194
+	button.offset_right = right_offset + 80
+	button.offset_bottom = -114
+	button.text = label
+	button.icon = UI_ICONS.get_icon(icon_name, 32, Color("#dbe8df"))
+	button.expand_icon = true
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_override("font", font)
+	button.add_theme_font_size_override("font_size", 13)
+	button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.025, 0.035, 0.034, 0.94), Color("#718a7e"), 38))
+	button.add_theme_stylebox_override("hover", _make_panel_style(Color(0.055, 0.08, 0.07, 0.97), Color("#b9d1c4"), 38))
+	button.add_theme_stylebox_override("pressed", _make_panel_style(Color(0.11, 0.17, 0.13, 0.98), Color("#dff0e5"), 38))
+	$HUD.add_child(button)
+	return button
+
+
+func _on_mobile_context_button_down() -> void:
+	if is_instance_valid(nearby_field_interaction):
+		var interaction_type := str(nearby_field_interaction.get_meta("interaction_type", ""))
+		if interaction_type == "extraction":
+			_begin_extraction()
+		else:
+			field_interaction_touch_held = true
+	elif is_instance_valid(nearby_ammo_pickup):
+		_collect_nearby_ammo()
+	elif not has_ak and is_instance_valid(ak_pickup):
+		pickup_touch_held = true
+	if DisplayServer.is_touchscreen_available():
+		Input.vibrate_handheld(16)
+
+
+func _on_mobile_context_button_up() -> void:
+	field_interaction_touch_held = false
+	pickup_touch_held = false
+
+
+func _on_mobile_flashlight_toggled(enabled: bool) -> void:
+	laser_aim_held = enabled
+	if laser_aim_held:
+		var facing_direction := _get_current_facing_world_direction()
+		_lock_aim_direction(facing_direction)
+	if DisplayServer.is_touchscreen_available():
+		Input.vibrate_handheld(12)
+
+
+func _on_mobile_map_pressed() -> void:
+	fire_button_held = false
+	mouse_fire_held = false
+	field_interaction_touch_held = false
+	pickup_touch_held = false
+	if mobile_context_button != null:
+		mobile_context_button.visible = false
+	if _is_inventory_open():
+		_toggle_inventory()
+	if is_instance_valid(tactical_map):
+		tactical_map.call("toggle")
+
+
+func _refresh_mobile_context_button() -> void:
+	if mobile_context_button == null or not DisplayServer.is_touchscreen_available():
+		return
+	var label := ""
+	var icon_name := "loot"
+	if is_instance_valid(nearby_field_interaction):
+		var interaction_type := str(nearby_field_interaction.get_meta("interaction_type", ""))
+		label = "탈출" if interaction_type == "extraction" else "상호작용"
+		icon_name = "raid" if interaction_type == "extraction" else "interact"
+	elif is_instance_valid(nearby_ammo_pickup):
+		label = "줍기"
+	elif not has_ak and is_instance_valid(ak_pickup):
+		var distance := Vector2(player.position.x, player.position.z).distance_to(Vector2(ak_pickup.position.x, ak_pickup.position.z))
+		if distance <= PICKUP_DISTANCE:
+			label = "무기 획득"
+			icon_name = "weapon"
+	mobile_context_button.visible = not label.is_empty() and not _is_inventory_open() and not _is_tactical_map_open()
+	if not mobile_context_button.visible:
+		return
+	mobile_context_button.text = label
+	mobile_context_button.icon = UI_ICONS.get_icon(icon_name, 32, Color("#e8d890"))
 
 
 func _build_quick_slots(font: Font) -> void:
@@ -2317,10 +2441,10 @@ func _on_inventory_weapon_mods_changed() -> void:
 
 
 func _on_inventory_weapon_equipped(weapon_id: String) -> void:
-	if weapon_id == equipped_weapon_id or GameState.get_weapon_count(weapon_id) <= 0:
+	if (weapon_id == equipped_weapon_id and has_ak) or GameState.get_weapon_count(weapon_id) <= 0:
 		return
 	var previous_ammo_id := GameState.equipped_ammo_id
-	if magazine_ammo > 0 and not previous_ammo_id.is_empty():
+	if has_ak and magazine_ammo > 0 and not previous_ammo_id.is_empty():
 		GameState.set_ammo_count(previous_ammo_id, GameState.get_ammo_count(previous_ammo_id) + magazine_ammo)
 	if not GameState.equip_weapon(weapon_id):
 		return
@@ -2335,6 +2459,26 @@ func _on_inventory_weapon_equipped(weapon_id: String) -> void:
 	_refresh_weapon_stats()
 	_rebuild_player_weapon_frames()
 	_update_weapon_pose()
+	_update_equipment_ui()
+	GameState.save_persistent_state()
+
+
+func _on_inventory_weapon_unequipped() -> void:
+	if not has_ak:
+		return
+	var ammo_id := str(GameState.equipped_ammo_id)
+	if magazine_ammo > 0 and not ammo_id.is_empty():
+		GameState.set_ammo_count(ammo_id, GameState.get_ammo_count(ammo_id) + magazine_ammo)
+	magazine_ammo = 0
+	reserve_ammo = GameState.get_ammo_count(ammo_id)
+	GameState.magazine_ammo = 0
+	GameState.reserve_ammo = reserve_ammo
+	GameState.unequip_weapon()
+	has_ak = false
+	weapon_reloading = false
+	laser_aim_held = false
+	if weapon_sprite:
+		weapon_sprite.visible = false
 	_update_equipment_ui()
 	GameState.save_persistent_state()
 
@@ -2702,24 +2846,32 @@ func _show_no_ammo_notice() -> void:
 func _update_equipment_ui() -> void:
 	var weapon_name := str(weapon_stats.get("display_name", "AK-47"))
 	var magazine_size := int(weapon_stats.get("magazine_size", 30))
+	var full_magazines := floori(float(reserve_ammo) / float(maxi(1, magazine_size)))
+	var loose_rounds := reserve_ammo % maxi(1, magazine_size)
 	var mod_names: Array[String] = WEAPON_SYSTEM.get_mod_names(equipped_weapon_mods)
 	var ammo_name := str(WEAPON_SYSTEM.get_ammo(GameState.equipped_ammo_id).get("display_name", GameState.equipped_ammo_id))
 	var enhancement_level := GameState.get_weapon_enhancement_level(equipped_weapon_id)
 	mod_names.push_front(ammo_name)
 	var mod_text := ", ".join(mod_names) if not mod_names.is_empty() else "개조 없음"
 	if equipment_label:
-		equipment_label.text = "%s  +%d" % [weapon_name, enhancement_level]
+		equipment_label.text = "%s  +%d" % [weapon_name, enhancement_level] if has_ak else "주무기 미장착"
 	if equipment_weapon_image:
 		equipment_weapon_image.texture = WEAPON_VISUAL_CATALOG.get_weapon_texture(equipped_weapon_id)
+		equipment_weapon_image.visible = has_ak
 	if equipment_ammo_label:
-		equipment_ammo_label.text = "%02d  /  %03d" % [magazine_ammo, reserve_ammo]
+		equipment_ammo_label.text = "%02d / %02d" % [magazine_ammo, magazine_size] if has_ak else "-- / --"
 	if equipment_condition_label:
-		equipment_condition_label.text = "탄창 %d · 내구도 %.0f%% · 탄퍼짐 %.1f°\n%s" % [
-			magazine_size,
-			weapon_durability,
-			weapon_spread_deg,
-			"재장전 %.1f초" % reload_timer if weapon_reloading else mod_text,
-		]
+		if has_ak:
+			equipment_condition_label.text = "예비 %d발 · 완전 탄창 %d개 + 낱탄 %d발\n내구도 %.0f%% · 탄퍼짐 %.1f° · %s" % [
+				reserve_ammo,
+				full_magazines,
+				loose_rounds,
+				weapon_durability,
+				weapon_spread_deg,
+				"재장전 %.1f초" % reload_timer if weapon_reloading else mod_text,
+			]
+		else:
+			equipment_condition_label.text = "가방을 열어 보유 무기를 선택하고 장착하세요."
 	if equipment_reload_bar:
 		var reload_duration := maxf(0.01, float(weapon_stats.get("reload_time", 2.15)))
 		equipment_reload_bar.value = 1.0 - clampf(reload_timer / reload_duration, 0.0, 1.0) if weapon_reloading else 1.0
@@ -2730,20 +2882,59 @@ func _update_equipment_ui() -> void:
 			"set_weapon_texture",
 			WEAPON_VISUAL_CATALOG.get_weapon_texture(equipped_weapon_id)
 		)
+		inventory_ui.call(
+			"update_state",
+			has_ak,
+			magazine_ammo,
+			reserve_ammo,
+			weapon_name,
+			magazine_size,
+			weapon_durability,
+			equipped_weapon_mods,
+			GameState.canned_food,
+			_get_stored_weapon_count(),
+			GameState.mod_component_inventory,
+			GameState.rescued_workers,
+			fatigue
+		)
+	_refresh_top_status_label()
+
+
+func _refresh_top_status_label() -> void:
+	var top_stats := get_node_or_null("HUD/TopLeft/Margin/VBox/Stats") as Label
+	if top_stats == null:
+		return
+	var magazine_size := int(weapon_stats.get("magazine_size", 30))
+	top_stats.text = "체력 %d/%d  ·  피로 %d%%  ·  탄 %d/%d +%d" % [
+		player_health,
+		GameState.get_max_health(),
+		roundi(fatigue),
+		magazine_ammo if has_ak else 0,
+		magazine_size if has_ak else 0,
+		reserve_ammo if has_ak else 0,
+	]
 
 
 func _update_quick_slot_labels() -> void:
 	if quick_slot_buttons.size() < 4:
 		return
 	var weapon_texture := WEAPON_VISUAL_CATALOG.get_weapon_texture(equipped_weapon_id)
-	quick_slot_buttons[0].icon = weapon_texture if weapon_texture != null else UI_ICONS.get_icon("weapon", 38, Color("#e2cc86"))
-	quick_slot_buttons[0].text = "1  %s\n%d / %d" % [str(weapon_stats.get("category", "무기")), magazine_ammo, reserve_ammo]
+	var magazine_size := int(weapon_stats.get("magazine_size", 30))
+	var full_magazines := floori(float(reserve_ammo) / float(maxi(1, magazine_size)))
+	var loose_rounds := reserve_ammo % maxi(1, magazine_size)
+	quick_slot_buttons[0].icon = weapon_texture if has_ak and weapon_texture != null else UI_ICONS.get_icon("weapon", 38, Color("#e2cc86"))
+	quick_slot_buttons[0].text = "1  %s\n%d/%d · 예비 %d" % [
+		str(weapon_stats.get("category", "무기")) if has_ak else "무기 꺼내기",
+		magazine_ammo if has_ak else 0,
+		magazine_size if has_ak else 0,
+		reserve_ammo if has_ak else 0,
+	]
 	quick_slot_buttons[1].text = "2  응급\n%d개" % GameState.medkits
 	quick_slot_buttons[1].disabled = GameState.medkits <= 0 or player_health >= GameState.get_max_health()
 	quick_slot_buttons[2].text = "3  식량\n%d개" % GameState.canned_food
 	quick_slot_buttons[2].disabled = GameState.canned_food <= 0 or fatigue <= 0.0
-	quick_slot_buttons[3].text = "4  장전\n%d발" % reserve_ammo
-	quick_slot_buttons[3].disabled = weapon_reloading or reserve_ammo <= 0 or magazine_ammo >= int(weapon_stats.get("magazine_size", 30))
+	quick_slot_buttons[3].text = "4  장전\n%d탄창 + %d발" % [full_magazines, loose_rounds]
+	quick_slot_buttons[3].disabled = not has_ak or weapon_reloading or reserve_ammo <= 0 or magazine_ammo >= magazine_size
 
 
 func _activate_quick_slot(slot_index: int) -> void:
@@ -2751,6 +2942,8 @@ func _activate_quick_slot(slot_index: int) -> void:
 		return
 	match slot_index:
 		1:
+			if not has_ak and GameState.get_weapon_count(equipped_weapon_id) > 0:
+				_on_inventory_weapon_equipped(equipped_weapon_id)
 			weapon_sprite.visible = has_ak
 			_update_weapon_pose()
 			_show_quick_slot_notice("%s 준비" % str(weapon_stats.get("display_name", "무기")))
@@ -2775,6 +2968,7 @@ func _use_quick_medkit() -> void:
 	var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
 	if health_bar:
 		health_bar.value = player_health
+	_refresh_top_status_label()
 	_show_quick_slot_notice("응급 처치  체력 +%d" % recovered)
 	GameState.save_persistent_state()
 
@@ -2833,6 +3027,8 @@ func _on_inventory_open_state_changed(is_open: bool) -> void:
 		field_interaction_touch_held = false
 		field_interaction_keyboard_held = false
 		touch_vector = Vector2.ZERO
+		if mobile_flashlight_button:
+			mobile_flashlight_button.set_pressed_no_signal(false)
 
 
 func _spawn_muzzle_light(direction: Vector3) -> void:
@@ -3281,7 +3477,7 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 		var boss_drop := _create_loot_pickup(
 			"churu",
 			drop_position,
-			{"amount": guaranteed_churu, "display_name": "🍗 정예 보상 츄르"}
+			{"amount": guaranteed_churu, "display_name": "정예 보상 츄르"}
 		)
 		_create_loot_pickup(
 			"mod_component",
@@ -3299,7 +3495,7 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 		return _create_loot_pickup(
 			"churu",
 			drop_position,
-			{"amount": 1, "display_name": "🍗 희귀 츄르"}
+			{"amount": 1, "display_name": "희귀 츄르"}
 		)
 	if roll < 0.42 + churu_chance:
 		return _create_loot_pickup(
@@ -3311,7 +3507,7 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 		return _create_loot_pickup(
 			"canned_food",
 			drop_position,
-			{"amount": 2 if spawn_random.randf() < 0.12 else 1, "display_name": "🥫 통조림"}
+			{"amount": 2 if spawn_random.randf() < 0.12 else 1, "display_name": "통조림"}
 		)
 	if roll < 0.85 + churu_chance:
 		return _create_loot_pickup(
@@ -3733,6 +3929,7 @@ func take_damage(amount: int) -> void:
 	var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
 	if health_bar:
 		health_bar.value = player_health
+	_refresh_top_status_label()
 	if ammo_notice:
 		ammo_notice.text = "피격  -%d   체력 %d/%d" % [applied_damage, player_health, GameState.get_max_health()]
 		ammo_notice.visible = true
@@ -4799,7 +4996,7 @@ func _update_fatigue(delta: float, is_moving: bool) -> void:
 	var rate := FATIGUE_MOVING_RATE if is_moving else FATIGUE_IDLE_RATE
 	if rescued_followers.size() > 0 and is_moving:
 		rate *= 1.0 + minf(0.6, rescued_followers.size() * 0.12)
-	if laser_aim_held and has_ak:
+	if laser_aim_held:
 		rate += FATIGUE_AIM_HOLD_RATE
 	_add_fatigue(rate * delta)
 	GameState.fatigue = fatigue
@@ -4834,6 +5031,7 @@ func _refresh_fatigue_hud() -> void:
 	if fatigue_fill_style:
 		fatigue_fill_style.bg_color = color
 		fatigue_fill_style.border_color = color.lightened(0.2)
+	_refresh_top_status_label()
 
 
 func _get_fatigue_speed_multiplier() -> float:
@@ -4978,7 +5176,7 @@ func _input(event: InputEvent) -> void:
 		_handle_combat_mouse_button(mouse_event)
 		get_viewport().set_input_as_handled()
 	elif event is InputEventScreenTouch:
-		if _is_inventory_open():
+		if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
 			return
 		var touch := event as InputEventScreenTouch
 		if _is_inventory_button_at(touch.position):

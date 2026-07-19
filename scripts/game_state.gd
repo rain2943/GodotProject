@@ -155,7 +155,7 @@ const RAID_ZONES := {
 		"threat": 0.15,
 		"enemy_multiplier": 1.0,
 		"boss": false,
-		"reward": "🥫 통조림 · 기초 부품",
+		"reward": "통조림 · 기초 부품",
 	},
 	"namdaemun_market": {
 		"name": "남대문 폐시장",
@@ -164,7 +164,7 @@ const RAID_ZONES := {
 		"threat": 0.35,
 		"enemy_multiplier": 1.25,
 		"boss": true,
-		"reward": "🍗 츄르 · 총기 부품",
+		"reward": "츄르 · 총기 부품",
 	},
 	"euljiro_depths": {
 		"name": "을지로 지하구역",
@@ -173,7 +173,7 @@ const RAID_ZONES := {
 		"threat": 0.55,
 		"enemy_multiplier": 1.55,
 		"boss": true,
-		"reward": "고급 부품 · 🍗 츄르",
+		"reward": "고급 부품 · 츄르",
 	},
 	"yongsan_blockade": {
 		"name": "용산 봉쇄선",
@@ -182,7 +182,7 @@ const RAID_ZONES := {
 		"threat": 0.78,
 		"enemy_multiplier": 1.9,
 		"boss": true,
-		"reward": "특수 모듈 · 🍗 츄르",
+		"reward": "특수 모듈 · 츄르",
 	},
 	"namsan_core": {
 		"name": "남산 오염 핵심부",
@@ -191,7 +191,7 @@ const RAID_ZONES := {
 		"threat": 1.0,
 		"enemy_multiplier": 2.3,
 		"boss": true,
-		"reward": "최상급 부품 · 🍗 대량 츄르",
+		"reward": "최상급 부품 · 대량 츄르",
 	},
 }
 
@@ -409,6 +409,7 @@ func equip_weapon(weapon_id: String) -> bool:
 	if get_weapon_count(weapon_id) <= 0:
 		return false
 	if weapon_id == equipped_weapon_id:
+		has_ak = true
 		return true
 	save_equipped_weapon_loadout()
 	equipped_weapon_id = weapon_id
@@ -419,6 +420,14 @@ func equip_weapon(weapon_id: String) -> bool:
 	magazine_ammo = 0
 	reserve_ammo = get_ammo_count(equipped_ammo_id)
 	has_ak = true
+	return true
+
+
+func unequip_weapon() -> bool:
+	if not has_ak:
+		return false
+	save_equipped_weapon_loadout()
+	has_ak = false
 	return true
 
 

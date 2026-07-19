@@ -61,6 +61,8 @@ var ammo_label: Label
 var fire_button: Button
 var melee_button: Button
 var dash_button: Button
+var reload_button: Button
+var flashlight_button: Button
 var current_interactable: Node3D
 var enemies: Array[CharacterBody3D] = []
 var floor_cells: Array[Vector2i] = []
@@ -136,6 +138,8 @@ func _physics_process(delta: float) -> void:
 		melee_button.disabled = melee_attack_cooldown > 0.0
 	if dash_button != null:
 		dash_button.disabled = roll_active or roll_stamina < ROLL_STAMINA_COST
+	if reload_button != null:
+		reload_button.disabled = weapon_reloading or _get_reserve_ammo() <= 0
 	roll_stamina = minf(ROLL_STAMINA_MAX, roll_stamina + ROLL_STAMINA_RECOVERY * delta)
 	if weapon_reloading:
 		reload_timer = maxf(0.0, reload_timer - delta)
@@ -366,6 +370,8 @@ func _build_interface() -> void:
 		"magazine_spring": MAGAZINE_SPRING_TEXTURE,
 	}, WEAPON_VISUAL_CATALOG.get_inventory_textures())
 	inventory_ui.connect("weapon_mods_changed", _on_inventory_weapon_mods_changed)
+	inventory_ui.connect("weapon_equipped", _on_inventory_weapon_equipped)
+	inventory_ui.connect("weapon_unequipped", _on_inventory_weapon_unequipped)
 	var panel := PanelContainer.new()
 	panel.position = Vector2(18, 18)
 	panel.size = Vector2(332, 104)
@@ -431,7 +437,7 @@ func _build_interface() -> void:
 	quick_slots.position = Vector2(22, -86)
 	quick_slots.add_theme_constant_override("separation", 7)
 	canvas.add_child(quick_slots)
-	var slot_texts := ["소총\n%d" % int(GameState.magazine_ammo), "물\n2", "붕대\n3", "🥫 통조림\n1"]
+	var slot_texts := ["소총\n%d" % int(GameState.magazine_ammo), "물\n2", "붕대\n3", "통조림\n1"]
 	for slot_text in slot_texts:
 		var slot := PanelContainer.new()
 		slot.custom_minimum_size = Vector2(62, 62)
@@ -511,6 +517,29 @@ func _build_interface() -> void:
 	dash_button.add_theme_font_override("font", FONT)
 	dash_button.pressed.connect(_try_start_roll)
 	canvas.add_child(dash_button)
+	reload_button = Button.new()
+	reload_button.name = "ReloadButton"
+	reload_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	reload_button.position = Vector2(-260, -218)
+	reload_button.size = Vector2(104, 76)
+	reload_button.text = "장전"
+	reload_button.icon = UI_ICONS.get_icon("reload", 34, Color("#d8e5de"))
+	reload_button.expand_icon = true
+	reload_button.add_theme_font_override("font", FONT)
+	reload_button.pressed.connect(_start_reload)
+	canvas.add_child(reload_button)
+	flashlight_button = Button.new()
+	flashlight_button.name = "FlashlightButton"
+	flashlight_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	flashlight_button.position = Vector2(-142, -218)
+	flashlight_button.size = Vector2(104, 76)
+	flashlight_button.text = "후레쉬"
+	flashlight_button.icon = UI_ICONS.get_icon("flashlight", 34, Color("#e8df9f"))
+	flashlight_button.expand_icon = true
+	flashlight_button.toggle_mode = true
+	flashlight_button.add_theme_font_override("font", FONT)
+	flashlight_button.toggled.connect(_on_flashlight_toggled)
+	canvas.add_child(flashlight_button)
 	touch_stick = Panel.new()
 	touch_stick.name = "TouchStick"
 	touch_stick.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -580,6 +609,36 @@ func _on_inventory_weapon_mods_changed() -> void:
 	_setup_weapon()
 	_setup_weapon_visual()
 	_update_ammo_label()
+
+
+func _on_inventory_weapon_equipped(weapon_id: String) -> void:
+	if _has_equipped_firearm() and weapon_id == str(GameState.equipped_weapon_id):
+		return
+	var previous_ammo_id := str(GameState.equipped_ammo_id)
+	if _has_equipped_firearm() and int(GameState.magazine_ammo) > 0 and not previous_ammo_id.is_empty():
+		GameState.set_ammo_count(previous_ammo_id, GameState.get_ammo_count(previous_ammo_id) + int(GameState.magazine_ammo))
+	if not GameState.equip_weapon(weapon_id):
+		return
+	_setup_weapon()
+	_setup_weapon_visual()
+	_update_ammo_label()
+	GameState.save_persistent_state()
+
+
+func _on_inventory_weapon_unequipped() -> void:
+	if not _has_equipped_firearm():
+		return
+	var ammo_id := str(GameState.equipped_ammo_id)
+	if int(GameState.magazine_ammo) > 0 and not ammo_id.is_empty():
+		GameState.set_ammo_count(ammo_id, GameState.get_ammo_count(ammo_id) + int(GameState.magazine_ammo))
+	GameState.magazine_ammo = 0
+	GameState.reserve_ammo = GameState.get_ammo_count(ammo_id)
+	GameState.unequip_weapon()
+	weapon_reloading = false
+	laser_aim_held = false
+	_update_weapon_visual()
+	_update_ammo_label()
+	GameState.save_persistent_state()
 
 
 func _build_elevator_menu(canvas: CanvasLayer) -> void:
@@ -983,6 +1042,12 @@ func _interact() -> void:
 		if not result.is_empty(): _show_status(result)
 
 
+func _on_flashlight_toggled(enabled: bool) -> void:
+	laser_aim_held = enabled and _has_equipped_firearm()
+	if DisplayServer.is_touchscreen_available():
+		Input.vibrate_handheld(12)
+
+
 func _fire_at_nearest_enemy() -> void:
 	var facing_direction := _get_facing_world_direction()
 	var closest := _get_mobile_aim_assist_enemy(facing_direction)
@@ -1148,11 +1213,13 @@ func _update_aim_laser() -> void:
 		laser_endpoint.visible = should_show
 	if not should_show or camera == null or player == null:
 		return
-	var target := _screen_point_to_world(get_viewport().get_mouse_position())
-	if not is_finite(target.x):
-		return
-	var direction := target - player.global_position
-	direction.y = 0.0
+	var direction := _get_facing_world_direction()
+	if not DisplayServer.is_touchscreen_available():
+		var target := _screen_point_to_world(get_viewport().get_mouse_position())
+		if not is_finite(target.x):
+			return
+		direction = target - player.global_position
+		direction.y = 0.0
 	if direction.length_squared() <= 0.01:
 		return
 	direction = direction.normalized()
@@ -1271,7 +1338,12 @@ func _update_ammo_label() -> void:
 		if stored_mods is Array:
 			for mod_id in stored_mods:
 				mods.append(str(mod_id))
-		inventory_ui.call("update_state", true, int(GameState.magazine_ammo), _get_reserve_ammo(), str(weapon_stats.get("display_name", "AK-47")), int(weapon_stats.get("magazine_size", 30)), float(GameState.get("weapon_durability") if GameState.get("weapon_durability") != null else 100.0), mods, int(GameState.get("canned_food") if GameState.get("canned_food") != null else 0), 0, GameState.get("mod_component_inventory") if GameState.get("mod_component_inventory") is Dictionary else {}, 0, fatigue)
+		var stored_weapon_count := 0
+		for count in GameState.weapon_inventory.values():
+			stored_weapon_count += int(count)
+		if _has_equipped_firearm():
+			stored_weapon_count = maxi(0, stored_weapon_count - 1)
+		inventory_ui.call("update_state", _has_equipped_firearm(), int(GameState.magazine_ammo), _get_reserve_ammo(), str(weapon_stats.get("display_name", "AK-47")), int(weapon_stats.get("magazine_size", 30)), float(GameState.get("weapon_durability") if GameState.get("weapon_durability") != null else 100.0), mods, int(GameState.get("canned_food") if GameState.get("canned_food") != null else 0), stored_weapon_count, GameState.get("mod_component_inventory") if GameState.get("mod_component_inventory") is Dictionary else {}, 0, fatigue)
 
 
 func _try_start_roll() -> void:

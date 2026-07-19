@@ -67,6 +67,8 @@ func _run() -> void:
 	var ammo_before := int(game_state.call("get_ammo_count", "762_fmj"))
 	shelter.call("_open_merchant_shop")
 	await get_tree().process_frame
+	assert(tree_root.find_child("고철Icon", true, false) is TextureRect, "Merchant currency must use a rendered scrap icon instead of an emoji glyph.")
+	assert(tree_root.find_child("통조림Icon", true, false) is TextureRect, "Merchant currency must use a rendered food icon instead of an emoji glyph.")
 	var shop_list := shelter.get("merchant_shop_list") as VBoxContainer
 	var ammo_buy_button := shop_list.get_node("MerchantGood_762_fmj") as Button
 	assert(ammo_buy_button != null and not ammo_buy_button.disabled)
@@ -78,6 +80,8 @@ func _run() -> void:
 	shelter.call("_set_merchant_shop_mode", "sell")
 	await get_tree().process_frame
 	shop_list = shelter.get("merchant_shop_list") as VBoxContainer
+	assert(shop_list.get_node_or_null("MerchantGood_rubber_gasket") == null, "The sell tab must hide goods the player does not own.")
+	assert(shop_list.get_node_or_null("MerchantGood_magazine_spring") == null, "The sell tab must hide goods the player does not own.")
 	var ammo_sell_button := shop_list.get_node("MerchantGood_762_fmj") as Button
 	var canned_food_before := int(game_state.get("canned_food"))
 	ammo_sell_button.pressed.emit()
