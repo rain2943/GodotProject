@@ -1,8 +1,8 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=16 format=3 uid="uid://7dm40nar4tvh"]
 
-[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
-[ext_resource type="Script" path="res://scripts/procedural_map.gd" id="2_map"]
-[ext_resource type="FontFile" path="res://assets/fonts/Pretendard-Regular.otf" id="4_font"]
+[ext_resource type="Script" uid="uid://yj6kvktvj5ii" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://15ueittqbm4l" path="res://scripts/procedural_map.gd" id="2_map"]
+[ext_resource type="FontFile" uid="uid://b5cd8veegbh1s" path="res://assets/fonts/Pretendard-Regular.otf" id="4_font"]
 [ext_resource type="PackedScene" path="res://scenes/female_cat_companion.tscn" id="5_companion"]
 
 [sub_resource type="Environment" id="Environment_city"]
@@ -17,6 +17,52 @@ fog_enabled = true
 fog_light_color = Color(0.32, 0.36, 0.38, 1)
 fog_light_energy = 0.65
 fog_density = 0.008
+
+[sub_resource type="ParticleProcessMaterial" id="Particles_rain"]
+emission_shape = 3
+emission_box_extents = Vector3(9, 6, 9)
+direction = Vector3(-0.12, -1, -0.08)
+spread = 4.0
+initial_velocity_min = 4.0
+initial_velocity_max = 7.0
+gravity = Vector3(-0.15, -5, -0.12)
+scale_min = 0.65
+scale_max = 1.15
+color = Color(0.62, 0.72, 0.78, 0.45)
+
+[sub_resource type="StandardMaterial3D" id="Material_rain"]
+transparency = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(0.58, 0.68, 0.74, 0.38)
+billboard_mode = 1
+
+[sub_resource type="QuadMesh" id="Mesh_rain"]
+material = SubResource("Material_rain")
+size = Vector2(0.018, 0.42)
+
+[sub_resource type="ParticleProcessMaterial" id="Particles_smoke"]
+emission_shape = 3
+emission_box_extents = Vector3(0.5, 0.15, 0.5)
+direction = Vector3(0.12, 1, 0.08)
+spread = 25.0
+initial_velocity_min = 0.4
+initial_velocity_max = 1.0
+gravity = Vector3(0.05, 0.12, 0.03)
+scale_min = 0.4
+scale_max = 1.4
+color = Color(0.46, 0.48, 0.49, 0.26)
+
+[sub_resource type="StandardMaterial3D" id="Material_smoke"]
+transparency = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(0.28, 0.3, 0.31, 0.24)
+billboard_mode = 1
+
+[sub_resource type="QuadMesh" id="Mesh_smoke"]
+material = SubResource("Material_smoke")
+size = Vector2(1.15, 1.15)
 
 [sub_resource type="CapsuleShape3D" id="Capsule_player"]
 radius = 0.34
@@ -34,52 +80,6 @@ bottom_radius = 0.48
 height = 0.018
 radial_segments = 24
 
-[sub_resource type="StandardMaterial3D" id="Material_rain"]
-transparency = 1
-shading_mode = 0
-vertex_color_use_as_albedo = true
-albedo_color = Color(0.58, 0.68, 0.74, 0.38)
-billboard_mode = 1
-
-[sub_resource type="QuadMesh" id="Mesh_rain"]
-material = SubResource("Material_rain")
-size = Vector2(0.018, 0.42)
-
-[sub_resource type="ParticleProcessMaterial" id="Particles_rain"]
-emission_shape = 3
-emission_box_extents = Vector3(9, 6, 9)
-direction = Vector3(-0.12, -1, -0.08)
-spread = 4.0
-gravity = Vector3(-0.15, -5, -0.12)
-initial_velocity_min = 4.0
-initial_velocity_max = 7.0
-scale_min = 0.65
-scale_max = 1.15
-color = Color(0.62, 0.72, 0.78, 0.45)
-
-[sub_resource type="StandardMaterial3D" id="Material_smoke"]
-transparency = 1
-shading_mode = 0
-vertex_color_use_as_albedo = true
-albedo_color = Color(0.28, 0.3, 0.31, 0.24)
-billboard_mode = 1
-
-[sub_resource type="QuadMesh" id="Mesh_smoke"]
-material = SubResource("Material_smoke")
-size = Vector2(1.15, 1.15)
-
-[sub_resource type="ParticleProcessMaterial" id="Particles_smoke"]
-emission_shape = 3
-emission_box_extents = Vector3(0.5, 0.15, 0.5)
-direction = Vector3(0.12, 1, 0.08)
-spread = 25.0
-gravity = Vector3(0.05, 0.12, 0.03)
-initial_velocity_min = 0.4
-initial_velocity_max = 1.0
-scale_min = 0.4
-scale_max = 1.4
-color = Color(0.46, 0.48, 0.49, 0.26)
-
 [sub_resource type="StyleBoxFlat" id="Panel_dark"]
 bg_color = Color(0.018, 0.022, 0.024, 0.84)
 border_width_left = 1
@@ -92,18 +92,6 @@ corner_radius_top_right = 4
 corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
-[sub_resource type="StyleBoxFlat" id="Slot_style"]
-bg_color = Color(0.025, 0.03, 0.035, 0.9)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.65, 0.7, 0.66, 0.42)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-corner_radius_bottom_right = 3
-corner_radius_bottom_left = 3
-
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
 
@@ -114,7 +102,7 @@ script = ExtResource("2_map")
 environment = SubResource("Environment_city")
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
-rotation_degrees = Vector3(-54, -38, 0)
+transform = Transform3D(0.7880108, 0.4980806, -0.3618768, 0, 0.5877853, 0.809017, 0.6156615, -0.6375141, 0.46318117, 0, 0, 0)
 light_color = Color(0.72, 0.77, 0.8, 1)
 light_energy = 1.15
 shadow_enabled = true
@@ -124,13 +112,13 @@ directional_shadow_max_distance = 45.0
 
 [node name="Camera3D" type="Camera3D" parent="CameraRig"]
 projection = 1
+current = true
 size = 17.5
 near = 0.1
 far = 1200.0
-current = true
 
 [node name="Rain" type="GPUParticles3D" parent="CameraRig"]
-position = Vector3(0, 8, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 0)
 amount = 480
 lifetime = 2.4
 randomness = 1.0
@@ -139,7 +127,7 @@ process_material = SubResource("Particles_rain")
 draw_pass_1 = SubResource("Mesh_rain")
 
 [node name="SmokeA" type="GPUParticles3D" parent="."]
-position = Vector3(31, 0.5, 12)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 31, 0.5, 12)
 amount = 28
 lifetime = 4.5
 randomness = 0.8
@@ -147,7 +135,7 @@ process_material = SubResource("Particles_smoke")
 draw_pass_1 = SubResource("Mesh_smoke")
 
 [node name="SmokeB" type="GPUParticles3D" parent="."]
-position = Vector3(-32, 0.5, -16)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -32, 0.5, -16)
 amount = 22
 lifetime = 4.0
 randomness = 0.85
@@ -155,24 +143,23 @@ process_material = SubResource("Particles_smoke")
 draw_pass_1 = SubResource("Mesh_smoke")
 
 [node name="Player" type="CharacterBody3D" parent="."]
-position = Vector3(0, 0.78, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.78, 0)
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
 shape = SubResource("Capsule_player")
 
 [node name="Shadow" type="MeshInstance3D" parent="Player"]
-position = Vector3(0, -0.7, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.7, 0)
 mesh = SubResource("Mesh_shadow")
 
 [node name="Survivor" type="AnimatedSprite3D" parent="Player"]
-position = Vector3(0, 0.3, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
 pixel_size = 0.0098
 billboard = 1
-shaded = false
 alpha_cut = 1
 
 [node name="FemaleCatCompanion" parent="." instance=ExtResource("5_companion")]
-position = Vector3(-2.4, 0.78, 1.8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.4, 0.78, 1.8)
 target_path = NodePath("../Player")
 
 [node name="HUD" type="CanvasLayer" parent="."]
@@ -226,7 +213,8 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.92, 0.76, 0.32, 1)
 theme_override_fonts/font = ExtResource("4_font")
 theme_override_font_sizes/font_size = 15
-text = "  종로 생존구역 탐색\n  · 남산 송신탑의 신호를 추적하십시오"
+text = "  종로 생존구역 탐색
+  · 남산 송신탑의 신호를 추적하십시오"
 vertical_alignment = 1
 
 [node name="TopRight" type="VBoxContainer" parent="HUD"]
@@ -259,62 +247,9 @@ theme_override_font_sizes/font_size = 14
 text = "흐림  09:42"
 horizontal_alignment = 2
 
-[node name="QuickSlots" type="HBoxContainer" parent="HUD"]
-offset_left = 22.0
-offset_top = 636.0
-offset_right = 416.0
-offset_bottom = 700.0
-theme_override_constants/separation = 7
-
-[node name="Slot1" type="PanelContainer" parent="HUD/QuickSlots"]
-custom_minimum_size = Vector2(62, 62)
-layout_mode = 2
-theme_override_styles/panel = SubResource("Slot_style")
-[node name="Label" type="Label" parent="HUD/QuickSlots/Slot1"]
-layout_mode = 2
-theme_override_fonts/font = ExtResource("4_font")
-theme_override_font_sizes/font_size = 12
-text = "소총\n28"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="Slot2" type="PanelContainer" parent="HUD/QuickSlots"]
-custom_minimum_size = Vector2(62, 62)
-layout_mode = 2
-theme_override_styles/panel = SubResource("Slot_style")
-[node name="Label" type="Label" parent="HUD/QuickSlots/Slot2"]
-layout_mode = 2
-theme_override_fonts/font = ExtResource("4_font")
-theme_override_font_sizes/font_size = 12
-text = "물\n2"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="Slot3" type="PanelContainer" parent="HUD/QuickSlots"]
-custom_minimum_size = Vector2(62, 62)
-layout_mode = 2
-theme_override_styles/panel = SubResource("Slot_style")
-[node name="Label" type="Label" parent="HUD/QuickSlots/Slot3"]
-layout_mode = 2
-theme_override_fonts/font = ExtResource("4_font")
-theme_override_font_sizes/font_size = 12
-text = "붕대\n3"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="Slot4" type="PanelContainer" parent="HUD/QuickSlots"]
-custom_minimum_size = Vector2(62, 62)
-layout_mode = 2
-theme_override_styles/panel = SubResource("Slot_style")
-[node name="Label" type="Label" parent="HUD/QuickSlots/Slot4"]
-layout_mode = 2
-theme_override_fonts/font = ExtResource("4_font")
-theme_override_font_sizes/font_size = 12
-text = "통조림\n1"
-horizontal_alignment = 1
-vertical_alignment = 1
-
 [node name="TouchStick" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 0
 offset_left = 74.0
 offset_top = 500.0
 offset_right = 202.0
@@ -332,6 +267,7 @@ mouse_filter = 2
 color = Color(0.25, 0.28, 0.3, 0.25)
 
 [node name="Knob" type="ColorRect" parent="HUD/TouchStick"]
+layout_mode = 0
 offset_left = 40.0
 offset_top = 40.0
 offset_right = 88.0

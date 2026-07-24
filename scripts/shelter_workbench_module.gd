@@ -32,6 +32,49 @@ const RECIPES := {
 			"cost": {"scrap": 40},
 			"result": {"component": "magazine_spring", "amount": 1},
 		},
+		{
+			"id": "scope_2x",
+			"name": "폐점포 2x 스코프",
+			"desc": "스코프 렌즈를 조립한 완성 조준경입니다.",
+			"cost": {"scrap": 35, "scope_lens": 1},
+			"result": {"weapon_mod": "scope_2x", "amount": 1},
+		},
+		{
+			"id": "muffled_sock",
+			"name": "소리 방지용 양말",
+			"desc": "고무 패킹으로 고정한 임시 소음기입니다.",
+			"cost": {"scrap": 25, "rubber_gasket": 1},
+			"result": {"weapon_mod": "muffled_sock", "amount": 1},
+		},
+		{
+			"id": "sponge_pad",
+			"name": "스펀지 턱받이",
+			"desc": "반동 회복을 돕는 완성 개머리판 패드입니다.",
+			"cost": {"scrap": 45, "rubber_gasket": 1},
+			"result": {"weapon_mod": "sponge_pad", "amount": 1},
+		},
+		{
+			"id": "quick_mag",
+			"name": "테이프 듀얼 탄창",
+			"desc": "탄창 스프링을 사용한 빠른 교체용 탄창입니다.",
+			"cost": {"scrap": 55, "magazine_spring": 1},
+			"result": {"weapon_mod": "quick_mag", "amount": 1},
+		},
+		{
+			"id": "bell_bait",
+			"name": "딸랑이 방울",
+			"desc": "적의 주의를 유도하는 전술 보조공구입니다.",
+			"cost": {"scrap": 20, "magazine_spring": 1},
+			"result": {"weapon_mod": "bell_bait", "amount": 1},
+		},
+		{
+			"id": "ak_precision_receiver",
+			"name": "AK 정밀 단발 리시버",
+			"desc": "AK의 발사 특성을 바꾸는 특수 전술 모듈입니다.",
+			"cost": {"scrap": 160, "scope_lens": 2},
+			"result": {"weapon_mod": "ak_precision_receiver", "amount": 1},
+			"required_workbench": 5,
+		},
 	],
 	"ammo": [
 		{
@@ -415,6 +458,8 @@ func _recipes_for_category(category: String) -> Array:
 func _can_craft(recipe: Dictionary) -> bool:
 	if GameState.shelter_tier < int(recipe.get("required_tier", 1)):
 		return false
+	if GameState.shelter_workbench_level < int(recipe.get("required_workbench", 1)):
+		return false
 	for key in _effective_cost(recipe).keys():
 		if _owned_resource(str(key)) < int(_effective_cost(recipe)[key]):
 			return false
@@ -450,6 +495,8 @@ func _craft(recipe: Dictionary) -> void:
 		_consume_resource(str(key), int(cost[key]))
 	if result.has("component"):
 		GameState.add_mod_component(str(result["component"]), int(result.get("amount", 1)))
+	elif result.has("weapon_mod"):
+		GameState.add_weapon_mod(str(result["weapon_mod"]), int(result.get("amount", 1)))
 	elif result.has("ammo"):
 		var ammo_id := str(result["ammo"])
 		GameState.set_ammo_count(ammo_id, GameState.get_ammo_count(ammo_id) + int(result.get("amount", 1)))
@@ -534,6 +581,12 @@ func _result_text(recipe: Dictionary) -> String:
 	var result: Dictionary = recipe.get("result", {})
 	if result.has("component"):
 		return "%s x%d" % [_resource_name(str(result["component"])), int(result.get("amount", 1))]
+	if result.has("weapon_mod"):
+		var mod_id := str(result["weapon_mod"])
+		return "%s x%d" % [
+			str(WeaponSystem.get_mod(mod_id).get("display_name", mod_id)),
+			int(result.get("amount", 1)),
+		]
 	if result.has("ammo"):
 		return "%s x%d" % [_resource_name(str(result["ammo"])), int(result.get("amount", 1))]
 	if result.has("weapon"):
@@ -561,6 +614,8 @@ func _recipe_icon(recipe: Dictionary) -> Texture2D:
 		return AMMO_TEXTURE
 	if result.has("component"):
 		return _resource_icon(str(result["component"]))
+	if result.has("weapon_mod"):
+		return UI_ICONS.get_icon("mod", 72, Color("#e2a962"))
 	if result.has("canned_food"):
 		return UI_ICONS.get_icon("food", 72, Color("#e6b65c"))
 	if result.has("repair"):

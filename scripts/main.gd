@@ -1,4 +1,4 @@
-extends Node3D
+﻿extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const MOVE_SPEED := 5.2
@@ -119,6 +119,60 @@ const FATIGUE_ROLL_GAIN := 0.45
 const FATIGUE_DAMAGE_PER_POINT := 0.045
 const FATIGUE_SPEED_MIN := 0.58
 const ESCORT_SPEED_PENALTY := 0.07
+const FIELD_MISSION_COUNT := 6
+const FIELD_MISSION_TRIGGER_RADIUS := 4.6
+const FIELD_MISSION_FAIL_RADIUS := 18.0
+const FIELD_MISSION_RESULT_DURATION := 2.8
+const FIELD_MISSION_TEMPLATES := [
+	{
+		"type": "defense",
+		"title": "교차로 봉쇄선 사수",
+		"description": "현장을 지키며 몰려오는 약탈대를 버티십시오.",
+		"duration": 20.0,
+		"enemy_count": 7,
+		"reward": {"canned_food": 2, "ammo": 24},
+	},
+	{
+		"type": "defense",
+		"title": "비상 발전기 재가동",
+		"description": "발전기가 켜질 때까지 현장을 방어하십시오.",
+		"duration": 16.0,
+		"enemy_count": 5,
+		"reward": {"medkits": 1, "ammo": 18},
+	},
+	{
+		"type": "eliminate",
+		"title": "약탈대 거점 소탕",
+		"description": "구역을 장악한 적을 모두 제거하십시오.",
+		"target_count": 6,
+		"enemy_count": 6,
+		"reward": {"canned_food": 2, "component": 1},
+	},
+	{
+		"type": "eliminate",
+		"title": "무장 정찰조 차단",
+		"description": "지원 요청 전에 정찰조를 제압하십시오.",
+		"target_count": 5,
+		"enemy_count": 5,
+		"reward": {"ammo": 30, "component": 1},
+	},
+	{
+		"type": "collect",
+		"title": "흩어진 보급 표식 회수",
+		"description": "구역 안의 보급 표식 3개를 회수하십시오.",
+		"target_count": 3,
+		"enemy_count": 4,
+		"reward": {"canned_food": 3, "ammo": 15},
+	},
+	{
+		"type": "collect",
+		"title": "통신 기록 수집",
+		"description": "파손된 기록 장치 3개를 확보하십시오.",
+		"target_count": 3,
+		"enemy_count": 5,
+		"reward": {"medkits": 1, "component": 1},
+	},
+]
 const DIRECTION_VECTORS := {
 	"n": Vector2(0, -1),
 	"ne": Vector2(1, -1),
@@ -141,6 +195,9 @@ const DIRECTION_VECTORS := {
 @onready var location_label: Label = $HUD/TopRight/Location
 @onready var state_label: Label = $HUD/TopRight/State
 @onready var time_label: Label = $HUD/TopRight/Time
+@onready var objective_panel: PanelContainer = $HUD/Objective
+@onready var objective_label: Label = $HUD/Objective/Text
+@onready var top_left_status_panel: PanelContainer = $HUD/TopLeft
 @onready var sun: DirectionalLight3D = $Sun
 @onready var world_environment: WorldEnvironment = $WorldEnvironment
 @onready var BuildingRunState: Node = get_node("/root/BuildingRunState")
@@ -166,11 +223,11 @@ var equipment_weapon_image: TextureRect
 var equipment_ammo_label: Label
 var equipment_condition_label: Label
 var equipment_reload_bar: ProgressBar
-var quick_slot_buttons: Array[Button] = []
 var fire_button: Button
 var melee_button: Button
 var dash_button: Button
 var mobile_context_button: Button
+var mobile_medkit_button: Button
 var mobile_reload_button: Button
 var mobile_flashlight_button: Button
 var mobile_map_button: Button
@@ -314,10 +371,20 @@ var run_kills := 0
 var run_boss_kills := 0
 var run_damage_dealt := 0
 var raid_start_snapshot := {}
+var corpse_recovery_point: Node3D
 var game_over_canvas: CanvasLayer
 var game_over_fade: ColorRect
 var game_over_label: Label
 var raid_zone_data: Dictionary = {}
+var field_mission_sites: Array[Node3D] = []
+var active_field_mission: Node3D
+var active_mission_collectibles: Array[Node3D] = []
+var field_mission_elapsed := 0.0
+var field_mission_wave_timer := 0.0
+var field_mission_spawned_enemies := 0
+var field_mission_kills := 0
+var field_mission_collected := 0
+var field_mission_result_timer := 0.0
 
 
 func _ready() -> void:
@@ -327,6 +394,11 @@ func _ready() -> void:
 	night_intensity = _get_night_intensity(world_time_hours)
 	spawn_random.seed = GameState.map_seed + 9137
 	weapon_random.seed = GameState.map_seed + 44123
+	# A run interrupted during the death transition can leave zero HP in the
+	# persistent save. Revive before field systems read the invalid state.
+	if GameState.player_health <= 0:
+		GameState.player_health = GameState.get_max_health()
+		GameState.save_persistent_state()
 	player_health = clampi(GameState.player_health, 0, GameState.get_max_health())
 	roll_stamina = GameState.get_max_stamina()
 	magazine_ammo = GameState.magazine_ammo
@@ -342,7 +414,9 @@ func _ready() -> void:
 	GameState.reserve_ammo = reserve_ammo
 	has_ak = bool(GameState.has_ak)
 	camera.size = BASE_CAMERA_SIZE
+	player.collision_layer = 1
 	player.collision_mask = 3
+	player.add_to_group("player")
 	camera.position = Vector3.ONE * CAMERA_DIAGONAL_OFFSET
 	camera.look_at(Vector3.ZERO)
 	$SmokeA.emitting = false
@@ -353,6 +427,13 @@ func _ready() -> void:
 	survivor.no_depth_test = true
 	if not companion_active:
 		_deactivate_companion()
+	top_left_status_panel.visible = false
+	objective_panel.visible = false
+	objective_panel.offset_left = 18.0
+	objective_panel.offset_top = 18.0
+	objective_panel.offset_right = 408.0
+	objective_panel.offset_bottom = 104.0
+	objective_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
 	_build_sprite_frames()
 	_setup_weapon_layer()
@@ -386,6 +467,8 @@ func _ready() -> void:
 		)
 	_setup_extraction_site(world)
 	_setup_field_objectives(world)
+	_setup_procedural_field_missions(world)
+	_setup_corpse_recovery(world)
 	_register_building_entrance_interactions()
 	_setup_tactical_map(world)
 	var health_bar := get_node_or_null("HUD/TopLeft/Margin/VBox/Health") as ProgressBar
@@ -436,10 +519,7 @@ func _physics_process(delta: float) -> void:
 	_update_day_night(delta)
 	_update_lightning(delta)
 	_update_enemy_pressure(delta)
-	var previous_melee_cooldown := melee_attack_cooldown
 	melee_attack_cooldown = maxf(0.0, melee_attack_cooldown - delta)
-	if previous_melee_cooldown > 0.0 and melee_attack_cooldown <= 0.0:
-		_update_quick_slot_labels()
 	_update_melee_attack(delta)
 	aim_hold_time = maxf(0.0, aim_hold_time - delta)
 	player_hit_stun_time = maxf(0.0, player_hit_stun_time - delta)
@@ -464,6 +544,7 @@ func _physics_process(delta: float) -> void:
 		mobile_reload_button.disabled = weapon_reloading or not has_ak or reserve_ammo <= 0
 	_update_field_interactions(delta)
 	_update_extraction_discovery()
+	_update_combat_overlay_visibility()
 	if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
 		player.velocity = Vector3.ZERO
 		player.move_and_slide()
@@ -471,6 +552,7 @@ func _physics_process(delta: float) -> void:
 		_update_visibility_fog()
 		_update_enemy_visibility(delta)
 		return
+	_update_field_missions(delta)
 	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if Input.is_key_pressed(KEY_A): input_vector.x -= 1.0
 	if Input.is_key_pressed(KEY_D): input_vector.x += 1.0
@@ -503,7 +585,7 @@ func _physics_process(delta: float) -> void:
 	else:
 		player.velocity = recoil_velocity
 		_set_motion_state("idle")
-		state_label.text = "식빵 자세 · 반동 제어" if loafing else "경계 중"
+		state_label.text = "식빵 자세 대기" if loafing else "경계 중"
 
 	if not roll_active and aim_is_locked and locked_aim_direction.length_squared() > 0.01:
 		_set_facing_from_world_direction(locked_aim_direction)
@@ -631,7 +713,7 @@ func _finish_roll() -> void:
 	roll_elapsed = 0.0
 	player.velocity = roll_direction * ROLL_END_SPEED
 	_set_motion_state("idle")
-	state_label.text = "구르기 재정비"
+	state_label.text = "경계 중"
 
 
 func _spawn_roll_afterimage() -> void:
@@ -962,7 +1044,7 @@ func _try_melee_attack() -> void:
 	_play_directional_animation()
 	_show_melee_fan(melee_attack_direction)
 	_play_bat_swing(attack_direction)
-	state_label.text = "근접 공격 준비"
+	state_label.text = "근접 공격"
 
 
 func _update_melee_attack(delta: float) -> void:
@@ -1297,7 +1379,16 @@ func _update_weapon_ballistics(delta: float, is_moving: bool) -> void:
 			var reload_duration := maxf(0.01, float(weapon_stats.get("reload_time", 2.15)))
 			equipment_reload_bar.value = 1.0 - clampf(reload_timer / reload_duration, 0.0, 1.0)
 		if equipment_condition_label:
-			equipment_condition_label.text = "재장전 중  %.1f초" % reload_timer
+			var reload_ammo_name := str(
+				WEAPON_SYSTEM.get_ammo(GameState.equipped_ammo_id).get(
+					"display_name",
+					GameState.equipped_ammo_id
+				)
+			)
+			equipment_condition_label.text = "재장전 %.1f초 · 사용 탄환  %s" % [
+				reload_timer,
+				reload_ammo_name,
+			]
 		if reload_timer <= 0.0:
 			_finish_reload()
 
@@ -1520,16 +1611,113 @@ func _capture_raid_start_snapshot() -> void:
 		"magazine_ammo": GameState.magazine_ammo,
 		"reserve_ammo": GameState.reserve_ammo,
 		"ammo_inventory": GameState.ammo_inventory.duplicate(true),
+		"medkits": GameState.medkits,
 		"canned_food": GameState.canned_food,
 		"churu": GameState.churu,
 		"mod_component_inventory": GameState.mod_component_inventory.duplicate(true),
 		"weapon_mod_inventory": GameState.weapon_mod_inventory.duplicate(true),
 		"weapon_inventory": GameState.weapon_inventory.duplicate(true),
+		"equipment_inventory": GameState.equipment_inventory.duplicate(true),
+		"equipped_body_armor_id": GameState.equipped_body_armor_id,
+		"equipped_head_armor_id": GameState.equipped_head_armor_id,
 		"weapon_durability": GameState.weapon_durability,
 		"equipped_weapon_id": GameState.equipped_weapon_id,
 		"equipped_weapon_mods": GameState.equipped_weapon_mods.duplicate(),
+		"weapon_mod_loadouts": GameState.weapon_mod_loadouts.duplicate(true),
+		"equipped_magazine_id": GameState.equipped_magazine_id,
+		"equipped_ammo_id": GameState.equipped_ammo_id,
+		"has_ak": GameState.has_ak,
 		"fatigue": GameState.fatigue,
 	}
+
+
+func _positive_dictionary_delta(current: Dictionary, baseline: Dictionary) -> Dictionary:
+	var delta := {}
+	for key in current.keys():
+		var gained := int(current.get(key, 0)) - int(baseline.get(key, 0))
+		if gained > 0:
+			delta[str(key)] = gained
+	return delta
+
+
+func _equipment_total_counts(inventory: Dictionary, body_id: String, head_id: String) -> Dictionary:
+	var totals := inventory.duplicate(true)
+	for equipped_id in [body_id, head_id]:
+		if equipped_id.is_empty():
+			continue
+		totals[equipped_id] = int(totals.get(equipped_id, 0)) + 1
+	return totals
+
+
+func _build_death_corpse_loot() -> Dictionary:
+	if raid_start_snapshot.is_empty():
+		return {}
+	var current_equipment_totals := _equipment_total_counts(
+		GameState.equipment_inventory,
+		GameState.equipped_body_armor_id,
+		GameState.equipped_head_armor_id
+	)
+	var starting_equipment_totals := _equipment_total_counts(
+		raid_start_snapshot.get("equipment_inventory", {}) as Dictionary,
+		str(raid_start_snapshot.get("equipped_body_armor_id", "")),
+		str(raid_start_snapshot.get("equipped_head_armor_id", ""))
+	)
+	var loot := {
+		"ammo_inventory": _positive_dictionary_delta(
+			GameState.ammo_inventory,
+			raid_start_snapshot.get("ammo_inventory", {}) as Dictionary
+		),
+		"medkits": maxi(0, GameState.medkits - int(raid_start_snapshot.get("medkits", 0))),
+		"canned_food": maxi(0, GameState.canned_food - int(raid_start_snapshot.get("canned_food", 0))),
+		"churu": maxi(0, GameState.churu - int(raid_start_snapshot.get("churu", 0))),
+		"mod_component_inventory": _positive_dictionary_delta(
+			GameState.mod_component_inventory,
+			raid_start_snapshot.get("mod_component_inventory", {}) as Dictionary
+		),
+		"weapon_mod_inventory": _positive_dictionary_delta(
+			GameState.weapon_mod_inventory,
+			raid_start_snapshot.get("weapon_mod_inventory", {}) as Dictionary
+		),
+		"weapon_inventory": _positive_dictionary_delta(
+			GameState.weapon_inventory,
+			raid_start_snapshot.get("weapon_inventory", {}) as Dictionary
+		),
+		"equipment_inventory": _positive_dictionary_delta(
+			current_equipment_totals,
+			starting_equipment_totals
+		),
+	}
+	return loot
+
+
+func _corpse_loot_item_count(loot: Dictionary) -> int:
+	var total := 0
+	for scalar_key in ["medkits", "canned_food", "churu"]:
+		total += maxi(0, int(loot.get(scalar_key, 0)))
+	for dictionary_key in [
+		"ammo_inventory",
+		"mod_component_inventory",
+		"weapon_mod_inventory",
+		"weapon_inventory",
+		"equipment_inventory",
+	]:
+		var values := loot.get(dictionary_key, {}) as Dictionary
+		for amount in values.values():
+			total += maxi(0, int(amount))
+	return total
+
+
+func _store_death_corpse() -> void:
+	var loot := _build_death_corpse_loot()
+	if _corpse_loot_item_count(loot) <= 0:
+		GameState.clear_pending_corpse_recovery()
+		return
+	GameState.set_pending_corpse_recovery({
+		"map_seed": GameState.map_seed,
+		"raid_zone": GameState.selected_raid_zone,
+		"position": [player.global_position.x, player.global_position.y, player.global_position.z],
+		"loot": loot,
+	})
 
 
 func _restore_raid_start_snapshot_after_death() -> void:
@@ -1538,14 +1726,22 @@ func _restore_raid_start_snapshot_after_death() -> void:
 	GameState.magazine_ammo = int(raid_start_snapshot.get("magazine_ammo", 30))
 	GameState.reserve_ammo = int(raid_start_snapshot.get("reserve_ammo", 90))
 	GameState.ammo_inventory = (raid_start_snapshot.get("ammo_inventory", {}) as Dictionary).duplicate(true)
+	GameState.medkits = int(raid_start_snapshot.get("medkits", GameState.medkits))
 	GameState.canned_food = int(raid_start_snapshot.get("canned_food", GameState.canned_food))
 	GameState.churu = int(raid_start_snapshot.get("churu", GameState.churu))
 	GameState.mod_component_inventory = (raid_start_snapshot.get("mod_component_inventory", {}) as Dictionary).duplicate(true)
 	GameState.weapon_mod_inventory = (raid_start_snapshot.get("weapon_mod_inventory", {}) as Dictionary).duplicate(true)
 	GameState.weapon_inventory = (raid_start_snapshot.get("weapon_inventory", {}) as Dictionary).duplicate(true)
+	GameState.equipment_inventory = (raid_start_snapshot.get("equipment_inventory", {}) as Dictionary).duplicate(true)
+	GameState.equipped_body_armor_id = str(raid_start_snapshot.get("equipped_body_armor_id", ""))
+	GameState.equipped_head_armor_id = str(raid_start_snapshot.get("equipped_head_armor_id", ""))
 	GameState.weapon_durability = float(raid_start_snapshot.get("weapon_durability", 100.0))
 	GameState.equipped_weapon_id = str(raid_start_snapshot.get("equipped_weapon_id", "ak47"))
 	GameState.equipped_weapon_mods.assign(raid_start_snapshot.get("equipped_weapon_mods", []) as Array)
+	GameState.weapon_mod_loadouts = (raid_start_snapshot.get("weapon_mod_loadouts", {}) as Dictionary).duplicate(true)
+	GameState.equipped_magazine_id = str(raid_start_snapshot.get("equipped_magazine_id", "ak_30rnd"))
+	GameState.equipped_ammo_id = str(raid_start_snapshot.get("equipped_ammo_id", "762_fmj"))
+	GameState.has_ak = bool(raid_start_snapshot.get("has_ak", true))
 	GameState.fatigue = minf(float(raid_start_snapshot.get("fatigue", 0.0)) + 18.0, FATIGUE_MAX)
 	GameState.player_health = 82
 	GameState.returning_from_shelter = false
@@ -1563,6 +1759,7 @@ func _begin_player_death_sequence() -> void:
 	if player_death_sequence_active:
 		return
 	player_death_sequence_active = true
+	_store_death_corpse()
 	fire_button_held = false
 	mouse_fire_held = false
 	laser_aim_held = false
@@ -1665,7 +1862,7 @@ func _spawn_ammo_pickups() -> void:
 				_create_loot_pickup(
 					"canned_food",
 					position,
-					{"amount": 1, "display_name": "통조림"}
+					{"amount": 1, "display_name": "Canned Food"}
 				)
 			2:
 				var component_index := floori(float(index) / 4.0) % component_ids.size()
@@ -1682,11 +1879,25 @@ func _spawn_ammo_pickups() -> void:
 			4:
 				var field_weapon_ids := ["m1911", "mp5", "double_barrel"]
 				var field_weapon_id: String = field_weapon_ids[floori(float(index) / 6.0) % field_weapon_ids.size()]
-				_create_loot_pickup("weapon", position, {
-					"weapon_id": field_weapon_id,
-					"amount": 1,
-					"display_name": _get_loot_weapon_name(field_weapon_id),
-				})
+				_create_loot_pickup(
+					"weapon",
+					position,
+					{
+						"weapon_id": field_weapon_id,
+						"amount": 1,
+						"display_name": _get_loot_weapon_name(field_weapon_id),
+					}
+				)
+			5:
+				if spawn_random.randf() < 0.26:
+					_create_loot_pickup(
+						"medkit",
+						position,
+						{"amount": 1, "display_name": "구급약"}
+					)
+				else:
+					var armor_drop := _get_random_armor_drop(index)
+					_create_loot_pickup("armor", position, armor_drop)
 			_:
 				var armor_drop := _get_random_armor_drop(index)
 				_create_loot_pickup("armor", position, armor_drop)
@@ -1719,6 +1930,10 @@ func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dicti
 			sprite.texture = CHURU_TEXTURE
 			sprite.pixel_size = 0.0011
 			highlight_color = Color("#f2bd55")
+		"medkit":
+			sprite.texture = UI_ICONS.get_icon("medkit", 96, Color("#f4eee2"))
+			sprite.pixel_size = 0.0062
+			highlight_color = Color("#f2b16a")
 		"mod_component":
 			var component_id := str(data.get("component_id", "rubber_gasket"))
 			sprite.texture = _get_mod_component_texture(component_id)
@@ -1841,7 +2056,7 @@ func _update_ammo_pickups(delta: float) -> void:
 			and not is_instance_valid(nearby_field_interaction)
 		)
 	if ammo_pickup_button and is_instance_valid(nearby_ammo_pickup):
-		ammo_pickup_button.text = "%s 획득  [E]" % str(nearby_ammo_pickup.get_meta("display_name", "전리품"))
+		ammo_pickup_button.text = "%s  [E]" % str(nearby_ammo_pickup.get_meta("display_name", "Ammo"))
 
 
 func _collect_nearby_ammo() -> void:
@@ -1857,6 +2072,9 @@ func _collect_nearby_ammo() -> void:
 		"churu":
 			GameState.churu += amount
 			ammo_notice.text = "희귀 츄르 +%d   보유 %d" % [amount, GameState.churu]
+		"medkit":
+			GameState.medkits += amount
+			ammo_notice.text = "구급약 +%d   보유 %d" % [amount, GameState.medkits]
 		"mod_component":
 			var component_id := str(nearby_ammo_pickup.get_meta("component_id", "rubber_gasket"))
 			GameState.add_mod_component(component_id, amount)
@@ -1898,6 +2116,7 @@ func _collect_nearby_ammo() -> void:
 	ammo_notice.visible = true
 	ammo_notice_time = 2.2
 	_update_equipment_ui()
+	_update_medkit_button()
 	ammo_pickups.erase(nearby_ammo_pickup)
 	nearby_ammo_pickup.queue_free()
 	nearby_ammo_pickup = null
@@ -2141,8 +2360,8 @@ func _build_weapon_hud() -> void:
 	equipment_panel = PanelContainer.new()
 	equipment_panel.name = "EquipmentPanel"
 	equipment_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	equipment_panel.offset_left = -382
-	equipment_panel.offset_top = -268
+	equipment_panel.offset_left = -342
+	equipment_panel.offset_top = -236
 	equipment_panel.offset_right = -22
 	equipment_panel.offset_bottom = -124
 	equipment_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.012, 0.018, 0.019, 0.96), Color("#8da997"), 8))
@@ -2158,7 +2377,7 @@ func _build_weapon_hud() -> void:
 	equipment_row.add_theme_constant_override("separation", 13)
 	equipment_margin.add_child(equipment_row)
 	equipment_weapon_image = TextureRect.new()
-	equipment_weapon_image.custom_minimum_size = Vector2(132, 92)
+	equipment_weapon_image.custom_minimum_size = Vector2(104, 72)
 	equipment_weapon_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	equipment_weapon_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	equipment_row.add_child(equipment_weapon_image)
@@ -2173,10 +2392,14 @@ func _build_weapon_hud() -> void:
 	weapon_text_box.add_child(equipment_label)
 	equipment_ammo_label = Label.new()
 	equipment_ammo_label.add_theme_font_override("font", font)
-	equipment_ammo_label.add_theme_font_size_override("font_size", 26)
+	equipment_ammo_label.add_theme_font_size_override("font_size", 22)
 	equipment_ammo_label.add_theme_color_override("font_color", Color("#f1ce70"))
 	weapon_text_box.add_child(equipment_ammo_label)
 	equipment_condition_label = Label.new()
+	equipment_condition_label.custom_minimum_size = Vector2(0, 22)
+	equipment_condition_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	equipment_condition_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	equipment_condition_label.clip_text = true
 	equipment_condition_label.add_theme_font_override("font", font)
 	equipment_condition_label.add_theme_font_size_override("font_size", 12)
 	equipment_condition_label.add_theme_color_override("font_color", Color("#9fb0a7"))
@@ -2188,8 +2411,6 @@ func _build_weapon_hud() -> void:
 	equipment_reload_bar.add_theme_stylebox_override("background", _make_panel_style(Color("#171d1b"), Color("#3e4944"), 4))
 	equipment_reload_bar.add_theme_stylebox_override("fill", _make_panel_style(Color("#d6b653"), Color("#f0d77d"), 4))
 	weapon_text_box.add_child(equipment_reload_bar)
-
-	_build_quick_slots(font)
 
 	fire_button = Button.new()
 	fire_button.name = "FireButton"
@@ -2222,7 +2443,7 @@ func _build_weapon_hud() -> void:
 	melee_button.offset_top = -104
 	melee_button.offset_right = -118
 	melee_button.offset_bottom = -24
-	melee_button.text = "타격"
+	melee_button.text = "Melee"
 	melee_button.icon = UI_ICONS.get_icon("melee", 36, Color("#dbe9df"))
 	melee_button.expand_icon = true
 	melee_button.tooltip_text = "야구 방망이 휘두르기"
@@ -2245,10 +2466,10 @@ func _build_weapon_hud() -> void:
 	dash_button.offset_top = -104
 	dash_button.offset_right = -208
 	dash_button.offset_bottom = -24
-	dash_button.text = "대시"
+	dash_button.text = "Dash"
 	dash_button.icon = UI_ICONS.get_icon("dash", 36, Color("#d8e5de"))
 	dash_button.expand_icon = true
-	dash_button.tooltip_text = "회피 대시"
+	dash_button.tooltip_text = "Dash"
 	dash_button.focus_mode = Control.FOCUS_NONE
 	dash_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	dash_button.z_index = 90
@@ -2307,14 +2528,24 @@ func _build_mobile_utility_buttons(font: Font) -> void:
 	mobile_reload_button.pressed.connect(_reload_ak47)
 	mobile_reload_button.visible = touch_enabled
 
-	mobile_flashlight_button = _make_mobile_utility_button("FlashlightButton", "후레쉬", "flashlight", font, -288.0)
+	mobile_flashlight_button = _make_mobile_utility_button("FlashlightButton", "Flash", "flashlight", font, -288.0)
 	mobile_flashlight_button.toggle_mode = true
 	mobile_flashlight_button.toggled.connect(_on_mobile_flashlight_toggled)
 	mobile_flashlight_button.visible = touch_enabled
 
-	mobile_map_button = _make_mobile_utility_button("MapButton", "지도", "map", font, -378.0)
+	mobile_map_button = _make_mobile_utility_button("MapButton", "Map", "map", font, -378.0)
 	mobile_map_button.pressed.connect(_on_mobile_map_pressed)
 	mobile_map_button.visible = touch_enabled
+
+	mobile_medkit_button = _make_mobile_utility_button_left(
+		"MedkitButton",
+		"MEDI",
+		"medkit",
+		font
+	)
+	mobile_medkit_button.pressed.connect(_use_quick_medkit)
+	mobile_medkit_button.visible = true
+	_update_medkit_button()
 
 
 func _make_mobile_utility_button(
@@ -2344,6 +2575,54 @@ func _make_mobile_utility_button(
 	button.add_theme_stylebox_override("pressed", _make_panel_style(Color(0.11, 0.17, 0.13, 0.98), Color("#dff0e5"), 38))
 	$HUD.add_child(button)
 	return button
+
+
+func _make_mobile_utility_button_left(
+	button_name: String,
+	label: String,
+	icon_name: String,
+	font: Font
+) -> Button:
+	var button := Button.new()
+	button.name = button_name
+	button.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	button.offset_left = -226
+	button.offset_top = -94
+	button.offset_right = -128
+	button.offset_bottom = -18
+	button.text = label
+	button.icon = UI_ICONS.get_icon(icon_name, 34, Color("#dbe8df"))
+	button.expand_icon = true
+	button.add_theme_constant_override("icon_max_width", 34)
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.z_index = 90
+	button.add_theme_font_override("font", font)
+	button.add_theme_font_size_override("font_size", 12)
+	button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.018, 0.025, 0.025, 0.94), Color("#718a7e"), 7))
+	button.add_theme_stylebox_override("hover", _make_panel_style(Color(0.055, 0.08, 0.07, 0.97), Color("#b9d1c4"), 7))
+	button.add_theme_stylebox_override("pressed", _make_panel_style(Color(0.11, 0.17, 0.13, 0.98), Color("#dff0e5"), 7))
+	$HUD.add_child(button)
+	return button
+
+
+func _update_medkit_button() -> void:
+	if mobile_medkit_button == null:
+		return
+	mobile_medkit_button.text = (
+		"구급약\nx%d" % GameState.medkits
+		if DisplayServer.is_touchscreen_available()
+		else "SHIFT\n구급약 x%d" % GameState.medkits
+	)
+	mobile_medkit_button.disabled = player_health <= 0 or player_health >= GameState.get_max_health() or GameState.medkits <= 0
+	if GameState.medkits <= 0:
+		mobile_medkit_button.tooltip_text = "보유한 구급약이 없습니다"
+	elif player_health >= GameState.get_max_health():
+		mobile_medkit_button.tooltip_text = "체력이 이미 가득 찼습니다"
+	else:
+		mobile_medkit_button.tooltip_text = "구급약 사용 (Shift)"
 
 
 func _on_mobile_context_button_down() -> void:
@@ -2409,48 +2688,6 @@ func _refresh_mobile_context_button() -> void:
 		return
 	mobile_context_button.text = label
 	mobile_context_button.icon = UI_ICONS.get_icon(icon_name, 32, Color("#e8d890"))
-
-
-func _build_quick_slots(font: Font) -> void:
-	var quick_slots := get_node_or_null("HUD/QuickSlots") as HBoxContainer
-	if quick_slots == null:
-		return
-	for child in quick_slots.get_children():
-		child.queue_free()
-	quick_slots.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	quick_slots.offset_left = -226
-	quick_slots.offset_top = -94
-	quick_slots.offset_right = 226
-	quick_slots.offset_bottom = -18
-	quick_slots.alignment = BoxContainer.ALIGNMENT_CENTER
-	quick_slots.add_theme_constant_override("separation", 8)
-	quick_slot_buttons.clear()
-	var definitions := [
-		{"title": "1  주무기", "icon": "weapon", "color": Color("#e2cc86")},
-		{"title": "2  응급키트", "icon": "medkit", "color": Color("#db756e")},
-		{"title": "3  근접", "icon": "melee", "color": Color("#d6bd68")},
-		{"title": "4  재장전", "icon": "reload", "color": Color("#82bda0")},
-	]
-	for index in definitions.size():
-		var definition: Dictionary = definitions[index]
-		var button := Button.new()
-		button.name = "QuickSlot%d" % (index + 1)
-		button.custom_minimum_size = Vector2(98, 70)
-		button.text = str(definition["title"])
-		button.icon = UI_ICONS.get_icon(str(definition["icon"]), 38, definition["color"])
-		button.expand_icon = true
-		button.add_theme_constant_override("icon_max_width", 38)
-		button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-		button.focus_mode = Control.FOCUS_NONE
-		button.add_theme_font_override("font", font)
-		button.add_theme_font_size_override("font_size", 12)
-		button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.018, 0.025, 0.025, 0.94), Color("#56655f"), 7))
-		button.add_theme_stylebox_override("hover", _make_panel_style(Color(0.04, 0.065, 0.055, 0.97), Color("#c6b66f"), 7))
-		button.add_theme_stylebox_override("pressed", _make_panel_style(Color(0.09, 0.12, 0.09, 0.98), Color("#ecd578"), 7))
-		button.pressed.connect(_activate_quick_slot.bind(index + 1))
-		quick_slots.add_child(button)
-		quick_slot_buttons.append(button)
 
 
 func _on_inventory_weapon_mods_changed() -> void:
@@ -2826,7 +3063,10 @@ func _reload_ak47() -> void:
 	reload_timer = float(weapon_stats.get("reload_time", 2.15))
 	fire_cooldown = reload_timer
 	_add_fatigue(FATIGUE_RELOAD_GAIN)
-	ammo_notice.text = "%s 재장전 중 · %.1f초\n장전 중 이동·사격 제한" % [str(weapon_stats.get("display_name", "무기")), reload_timer]
+	ammo_notice.text = "%s 재장전 중 · %.1f초\n장전 중 이동·사격 제한" % [
+		str(weapon_stats.get("display_name", "무기")),
+		reload_timer,
+	]
 	ammo_notice.visible = true
 	ammo_notice_time = reload_timer
 	_update_equipment_ui()
@@ -2866,37 +3106,28 @@ func _show_no_ammo_notice() -> void:
 func _update_equipment_ui() -> void:
 	var weapon_name := str(weapon_stats.get("display_name", "AK-47"))
 	var magazine_size := int(weapon_stats.get("magazine_size", 30))
-	var full_magazines := floori(float(reserve_ammo) / float(maxi(1, magazine_size)))
-	var loose_rounds := reserve_ammo % maxi(1, magazine_size)
-	var mod_names: Array[String] = WEAPON_SYSTEM.get_mod_names(equipped_weapon_mods)
 	var ammo_name := str(WEAPON_SYSTEM.get_ammo(GameState.equipped_ammo_id).get("display_name", GameState.equipped_ammo_id))
 	var enhancement_level := GameState.get_weapon_enhancement_level(equipped_weapon_id)
-	mod_names.push_front(ammo_name)
-	var mod_text := ", ".join(mod_names) if not mod_names.is_empty() else "개조 없음"
+	var total_ammo := magazine_ammo + reserve_ammo if has_ak else 0
 	if equipment_label:
-		equipment_label.text = "%s  +%d" % [weapon_name, enhancement_level] if has_ak else "주무기 미장착"
+		equipment_label.text = "%s +%d" % [weapon_name, enhancement_level] if has_ak else "무기 없음"
 	if equipment_weapon_image:
 		equipment_weapon_image.texture = WEAPON_VISUAL_CATALOG.get_weapon_texture(equipped_weapon_id)
 		equipment_weapon_image.visible = has_ak
 	if equipment_ammo_label:
-		equipment_ammo_label.text = "%02d / %02d" % [magazine_ammo, magazine_size] if has_ak else "-- / --"
+		equipment_ammo_label.text = "남은 탄환 %d발" % total_ammo if has_ak else "탄환 없음"
 	if equipment_condition_label:
 		if has_ak:
-			equipment_condition_label.text = "예비 %d발 · 완전 탄창 %d개 + 낱탄 %d발\n내구도 %.0f%% · 탄퍼짐 %.1f° · %s" % [
-				reserve_ammo,
-				full_magazines,
-				loose_rounds,
-				weapon_durability,
-				weapon_spread_deg,
-				"재장전 %.1f초" % reload_timer if weapon_reloading else mod_text,
+			equipment_condition_label.text = "%s · 사용 탄환  %s" % [
+				"재장전 중" if weapon_reloading else "사격 준비",
+				ammo_name,
 			]
 		else:
 			equipment_condition_label.text = "가방을 열어 보유 무기를 선택하고 장착하세요."
 	if equipment_reload_bar:
 		var reload_duration := maxf(0.01, float(weapon_stats.get("reload_time", 2.15)))
 		equipment_reload_bar.value = 1.0 - clampf(reload_timer / reload_duration, 0.0, 1.0) if weapon_reloading else 1.0
-		equipment_reload_bar.modulate = Color.WHITE if weapon_reloading else Color(0.55, 0.65, 0.6, 0.62)
-	_update_quick_slot_labels()
+		equipment_reload_bar.visible = weapon_reloading and has_ak
 	if inventory_ui:
 		inventory_ui.call(
 			"set_weapon_texture",
@@ -2925,60 +3156,22 @@ func _refresh_top_status_label() -> void:
 	if top_stats == null:
 		return
 	var magazine_size := int(weapon_stats.get("magazine_size", 30))
-	top_stats.text = "체력 %d/%d  ·  피로 %d%%  ·  탄 %d/%d +%d" % [
+	top_stats.text = "체력 %d/%d  피로 %d%%  총알 %d/%d +%d  구급약 %d" % [
 		player_health,
 		GameState.get_max_health(),
 		roundi(fatigue),
 		magazine_ammo if has_ak else 0,
 		magazine_size if has_ak else 0,
 		reserve_ammo if has_ak else 0,
+		GameState.medkits,
 	]
-
-
-func _update_quick_slot_labels() -> void:
-	if quick_slot_buttons.size() < 4:
-		return
-	var weapon_texture := WEAPON_VISUAL_CATALOG.get_weapon_texture(equipped_weapon_id)
-	var magazine_size := int(weapon_stats.get("magazine_size", 30))
-	var full_magazines := floori(float(reserve_ammo) / float(maxi(1, magazine_size)))
-	var loose_rounds := reserve_ammo % maxi(1, magazine_size)
-	quick_slot_buttons[0].icon = weapon_texture if has_ak and weapon_texture != null else UI_ICONS.get_icon("weapon", 38, Color("#e2cc86"))
-	quick_slot_buttons[0].text = "1  %s\n%d/%d  +%d" % [
-		str(weapon_stats.get("category", "주무기")) if has_ak else "주무기",
-		magazine_ammo if has_ak else 0,
-		magazine_size if has_ak else 0,
-		reserve_ammo if has_ak else 0,
-	]
-	quick_slot_buttons[0].tooltip_text = "보유한 다음 주무기로 전환"
-	quick_slot_buttons[0].disabled = _get_owned_weapon_ids().is_empty()
-	quick_slot_buttons[1].text = "2  응급키트\n%d개" % GameState.medkits
-	quick_slot_buttons[1].disabled = GameState.medkits <= 0 or player_health >= GameState.get_max_health()
-	var melee_ready := melee_attack_cooldown <= 0.0 and not melee_attack_active
-	quick_slot_buttons[2].text = "3  근접 공격\n%s" % ("준비" if melee_ready else "%.1f초" % melee_attack_cooldown)
-	quick_slot_buttons[2].disabled = not melee_ready or roll_active or player_health <= 0
-	quick_slot_buttons[3].text = "4  재장전\n%d탄창  +%d" % [full_magazines, loose_rounds]
-	quick_slot_buttons[3].disabled = not has_ak or weapon_reloading or reserve_ammo <= 0 or magazine_ammo >= magazine_size
-
-
-func _activate_quick_slot(slot_index: int) -> void:
-	if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
-		return
-	match slot_index:
-		1:
-			_cycle_quick_weapon()
-		2:
-			_use_quick_medkit()
-		3:
-			_try_melee_attack()
-		4:
-			_reload_ak47()
-	_update_equipment_ui()
+	_update_medkit_button()
 
 
 func _use_quick_medkit() -> void:
 	var maximum_health := GameState.get_max_health()
 	if GameState.medkits <= 0 or player_health >= maximum_health:
-		_show_quick_slot_notice("사용할 응급 키트가 없거나 체력이 가득 찼습니다.")
+		_show_action_notice("구급약이 없습니다.")
 		return
 	GameState.medkits -= 1
 	var recovered := mini(38, maximum_health - player_health)
@@ -2988,36 +3181,12 @@ func _use_quick_medkit() -> void:
 	if health_bar:
 		health_bar.value = player_health
 	_refresh_top_status_label()
-	_show_quick_slot_notice("응급 처치  체력 +%d" % recovered)
+	_show_action_notice("구급약 회복 +%d" % recovered)
+	_update_medkit_button()
 	GameState.save_persistent_state()
 
 
-func _get_owned_weapon_ids() -> Array[String]:
-	var owned: Array[String] = []
-	for weapon_id in WEAPON_SYSTEM.WEAPONS.keys():
-		var id := str(weapon_id)
-		if GameState.get_weapon_count(id) > 0:
-			owned.append(id)
-	return owned
-
-
-func _cycle_quick_weapon() -> void:
-	var owned := _get_owned_weapon_ids()
-	if owned.is_empty():
-		_show_quick_slot_notice("보유한 주무기가 없습니다.")
-		return
-	var next_id := owned[0]
-	var current_index := owned.find(equipped_weapon_id)
-	if owned.size() > 1 and current_index >= 0:
-		next_id = owned[(current_index + 1) % owned.size()]
-	if not has_ak or next_id != equipped_weapon_id:
-		_on_inventory_weapon_equipped(next_id)
-	weapon_sprite.visible = has_ak
-	_update_weapon_pose()
-	_show_quick_slot_notice("%s 장착" % str(weapon_stats.get("display_name", "주무기")))
-
-
-func _show_quick_slot_notice(message: String) -> void:
+func _show_action_notice(message: String) -> void:
 	if ammo_notice:
 		ammo_notice.text = message
 		ammo_notice.visible = true
@@ -3062,6 +3231,17 @@ func _on_inventory_open_state_changed(is_open: bool) -> void:
 		touch_vector = Vector2.ZERO
 		if mobile_flashlight_button:
 			mobile_flashlight_button.set_pressed_no_signal(false)
+	_update_combat_overlay_visibility()
+
+
+func _update_combat_overlay_visibility() -> void:
+	if aim_canvas:
+		aim_canvas.visible = (
+			not _is_inventory_open()
+			and not _is_tactical_map_open()
+			and not extraction_transition_active
+			and not player_death_sequence_active
+		)
 
 
 func _spawn_muzzle_light(direction: Vector3) -> void:
@@ -3369,7 +3549,7 @@ func _spawn_rocket_boss_at(
 	boss.set_meta("zone_id", GameState.selected_raid_zone)
 	var marker := Label3D.new()
 	marker.name = "BossMarker"
-	marker.text = "로켓 약탈단장"
+	marker.text = "로켓 약탈대장"
 	marker.position = Vector3(0.0, 3.55, 0.0)
 	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	marker.no_depth_test = true
@@ -3426,7 +3606,7 @@ func _spawn_test_boss_near_player() -> void:
 	)
 	if boss.has_method("receive_reinforcement_order"):
 		boss.call("receive_reinforcement_order", player.global_position)
-	_show_field_notice("테스트 보스 출현 · 로켓 약탈단장이 접근합니다.")
+	_show_field_notice("테스트 보스 출현 · 로켓 약탈대장이 접근합니다.")
 
 
 func _find_distributed_enemy_position(
@@ -3489,6 +3669,12 @@ func _spawn_enemy(kind: String, spawn_position: Vector3, threat: float) -> Chara
 
 func _on_enemy_died(enemy: CharacterBody3D) -> void:
 	run_kills += 1
+	if (
+		is_instance_valid(active_field_mission)
+		and int(enemy.get_meta("field_mission_id", -1))
+		== int(active_field_mission.get_meta("mission_id", 0))
+	):
+		field_mission_kills += 1
 	if bool(enemy.get_meta("raid_boss", false)):
 		run_boss_kills += 1
 	if enemy == active_reinforcement_caller:
@@ -3519,7 +3705,7 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 		var boss_drop := _create_loot_pickup(
 			"churu",
 			drop_position,
-			{"amount": guaranteed_churu, "display_name": "정예 보상 츄르"}
+			{"amount": guaranteed_churu, "display_name": "보스 보상 츄르"}
 		)
 		_create_loot_pickup(
 			"mod_component",
@@ -3533,6 +3719,12 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 		return boss_drop
 	var roll := spawn_random.randf()
 	var churu_chance := 0.01 + night_intensity * 0.015 + float(raid_zone_data.get("threat", 0.0)) * 0.018
+	if roll < 0.03 + churu_chance * 0.4:
+		return _create_loot_pickup(
+			"medkit",
+			drop_position,
+			{"amount": 1, "display_name": "구급약"}
+		)
 	if roll < churu_chance:
 		return _create_loot_pickup(
 			"churu",
@@ -3549,7 +3741,7 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 		return _create_loot_pickup(
 			"canned_food",
 			drop_position,
-			{"amount": 2 if spawn_random.randf() < 0.12 else 1, "display_name": "통조림"}
+			{"amount": 2 if spawn_random.randf() < 0.12 else 1, "display_name": "Canned Food"}
 		)
 	if roll < 0.85 + churu_chance:
 		return _create_loot_pickup(
@@ -3576,7 +3768,7 @@ func _get_random_armor_drop(seed_hint: int = 0) -> Dictionary:
 	return {
 		"amount": 1,
 		"equipment_id": equipment_id,
-		"display_name": str(definition.get("display_name", "방어구")),
+		"display_name": str(definition.get("display_name", "Armor")),
 	}
 
 
@@ -3596,8 +3788,8 @@ func _get_loot_weapon_name(weapon_id: String) -> String:
 	match weapon_id:
 		"m1911": return "M1911"
 		"mp5": return "MP5"
-		"double_barrel": return "더블배럴 산탄총"
-		"baseball_bat": return "야구방망이"
+		"double_barrel": return "Shotgun"
+		"baseball_bat": return "Bat"
 		_: return "AK-47"
 
 
@@ -4481,7 +4673,7 @@ func _build_extraction_progress_ui() -> void:
 	extraction_xp_label.add_theme_color_override("font_color", Color("#a9bcb2"))
 	content.add_child(extraction_xp_label)
 	extraction_level_choice_title = Label.new()
-	extraction_level_choice_title.text = "레벨 상승 · 이번 레이드에서 강화할 능력을 선택하세요"
+	extraction_level_choice_title.text = "Run Summary"
 	extraction_level_choice_title.add_theme_font_override("font", FONT)
 	extraction_level_choice_title.add_theme_font_size_override("font_size", 21)
 	extraction_level_choice_title.add_theme_color_override("font_color", Color("#e8d18a"))
@@ -4497,7 +4689,7 @@ func _show_extraction_result(rescued_count: int) -> void:
 	var xp_reward := GameState.get_raid_experience_reward(run_kills, run_boss_kills)
 	pending_extraction_xp_result = GameState.add_raid_experience(xp_reward)
 	extraction_result_title.text = "탈출 성공 · Lv.%d" % int(pending_extraction_xp_result.get("new_level", GameState.player_level))
-	extraction_result_summary.text = "처치 %d명 · 보스 %d명 · 주민 후송 %d명 · 경험치 +%d" % [
+	extraction_result_summary.text = "처치 %d명 · 보스 %d명 · 주민 후송 %d명 · 경험치 +%d\n획득품은 쉘터 창고에 보관되었습니다." % [
 		run_kills,
 		run_boss_kills,
 		rescued_count,
@@ -4571,7 +4763,7 @@ func _create_extraction_beacon(world_position: Vector3, index: int) -> Node3D:
 	add_child(site)
 	site.global_position = Vector3(world_position.x, 0.08, world_position.z)
 	site.set_meta("interaction_type", "extraction")
-	site.set_meta("display_name", "하수구 탈출 지점")
+	site.set_meta("display_name", "Sewer Exit")
 	site.set_meta("hold_duration", 0.0)
 	site.set_meta("interaction_distance", FIELD_INTERACTION_DISTANCE)
 	site.set_meta("extraction_index", index)
@@ -4690,6 +4882,468 @@ func _find_stratified_map_position(
 func _setup_field_objectives(world: ProceduralCityMap) -> void:
 	_setup_salvage_points(world)
 	_setup_rescue_points(world)
+
+
+func _setup_procedural_field_missions(world: ProceduralCityMap) -> void:
+	field_mission_sites.clear()
+	active_field_mission = null
+	active_mission_collectibles.clear()
+	objective_panel.visible = false
+	var occupied_positions: Array[Vector3] = []
+	for site in extraction_sites:
+		if is_instance_valid(site):
+			occupied_positions.append(site.global_position)
+	for interaction in field_interactions:
+		if is_instance_valid(interaction):
+			occupied_positions.append(interaction.global_position)
+	for index in FIELD_MISSION_COUNT:
+		var mission_position := _find_stratified_map_position(
+			world,
+			index,
+			FIELD_MISSION_COUNT,
+			24.0,
+			22.0,
+			occupied_positions,
+			0.08
+		)
+		occupied_positions.append(mission_position)
+		var template_index := posmod(
+			index + spawn_random.randi_range(0, FIELD_MISSION_TEMPLATES.size() - 1),
+			FIELD_MISSION_TEMPLATES.size()
+		)
+		var definition := (FIELD_MISSION_TEMPLATES[template_index] as Dictionary).duplicate(true)
+		var mission_site := Node3D.new()
+		mission_site.name = "FieldMission_%02d" % (index + 1)
+		add_child(mission_site)
+		mission_site.global_position = mission_position
+		mission_site.set_meta("mission_id", index + 1)
+		mission_site.set_meta("status", "waiting")
+		for key in definition:
+			mission_site.set_meta(str(key), definition[key])
+		mission_site.add_to_group("field_mission_site")
+		field_mission_sites.append(mission_site)
+		_build_field_mission_marker(mission_site)
+
+
+func _build_field_mission_marker(site: Node3D) -> void:
+	var marker_material := StandardMaterial3D.new()
+	marker_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	marker_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	marker_material.albedo_color = Color(0.33, 0.78, 0.72, 0.16)
+	marker_material.emission_enabled = true
+	marker_material.emission = Color("#5eb9ad")
+	marker_material.emission_energy_multiplier = 1.2
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 2.5
+	ring_mesh.outer_radius = 2.64
+	ring_mesh.rings = 32
+	ring_mesh.ring_segments = 12
+	ring_mesh.material = marker_material
+	var ring := MeshInstance3D.new()
+	ring.name = "MissionBoundary"
+	ring.mesh = ring_mesh
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	site.add_child(ring)
+	site.set_meta("marker_material", marker_material)
+
+	var marker_label := Label3D.new()
+	marker_label.name = "MissionMarkerLabel"
+	marker_label.text = "현장 신호"
+	marker_label.position = Vector3(0.0, 1.15, 0.0)
+	marker_label.font = FONT
+	marker_label.font_size = 28
+	marker_label.modulate = Color("#9bcfc2")
+	marker_label.outline_size = 7
+	marker_label.outline_modulate = Color(0.01, 0.02, 0.018, 0.94)
+	marker_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	marker_label.no_depth_test = true
+	site.add_child(marker_label)
+
+
+func _update_field_missions(delta: float) -> void:
+	if field_mission_result_timer > 0.0:
+		field_mission_result_timer = maxf(0.0, field_mission_result_timer - delta)
+		if field_mission_result_timer <= 0.0 and not is_instance_valid(active_field_mission):
+			objective_panel.visible = false
+	if not is_instance_valid(active_field_mission):
+		for site in field_mission_sites:
+			if (
+				is_instance_valid(site)
+				and str(site.get_meta("status", "waiting")) == "waiting"
+				and player.global_position.distance_to(site.global_position) <= FIELD_MISSION_TRIGGER_RADIUS
+			):
+				_start_field_mission(site)
+				break
+		return
+
+	var distance_to_site := player.global_position.distance_to(active_field_mission.global_position)
+	if distance_to_site > FIELD_MISSION_FAIL_RADIUS:
+		_fail_field_mission("작전 구역을 너무 멀리 이탈했습니다.")
+		return
+
+	var mission_type := str(active_field_mission.get_meta("type", "defense"))
+	match mission_type:
+		"defense":
+			_update_defense_mission(delta, distance_to_site)
+		"eliminate":
+			_update_eliminate_mission()
+		"collect":
+			_update_collect_mission()
+
+
+func _start_field_mission(site: Node3D) -> void:
+	active_field_mission = site
+	site.set_meta("status", "active")
+	field_mission_elapsed = 0.0
+	field_mission_wave_timer = 0.0
+	field_mission_spawned_enemies = 0
+	field_mission_kills = 0
+	field_mission_collected = 0
+	field_mission_result_timer = 0.0
+	_clear_active_mission_collectibles()
+	_set_field_mission_site_state(site, "active")
+	var mission_type := str(site.get_meta("type", "defense"))
+	match mission_type:
+		"defense":
+			_spawn_field_mission_enemies(2)
+			field_mission_wave_timer = 3.2
+		"eliminate":
+			_spawn_field_mission_enemies(int(site.get_meta("enemy_count", 5)))
+		"collect":
+			_spawn_field_mission_collectibles(int(site.get_meta("target_count", 3)))
+			_spawn_field_mission_enemies(int(site.get_meta("enemy_count", 4)))
+	_set_field_mission_objective(
+		str(site.get_meta("title", "현장 임무")),
+		str(site.get_meta("description", "현장 목표를 수행하십시오.")),
+		Color("#efd06f")
+	)
+	_show_field_notice("현장 임무 시작 · %s" % str(site.get_meta("title", "현장 임무")))
+
+
+func _update_defense_mission(delta: float, distance_to_site: float) -> void:
+	var hold_radius := FIELD_MISSION_TRIGGER_RADIUS + 2.0
+	var inside_hold_area := distance_to_site <= hold_radius
+	if inside_hold_area:
+		field_mission_elapsed += delta
+	field_mission_wave_timer -= delta
+	var enemy_count := int(active_field_mission.get_meta("enemy_count", 6))
+	if field_mission_spawned_enemies < enemy_count and field_mission_wave_timer <= 0.0:
+		_spawn_field_mission_enemies(mini(2, enemy_count - field_mission_spawned_enemies))
+		field_mission_wave_timer = 3.2
+	var duration := float(active_field_mission.get_meta("duration", 18.0))
+	var remaining := maxf(0.0, duration - field_mission_elapsed)
+	var detail := (
+		"구역 방어  %.1f초 · 접근 중인 적 %d명"
+		% [remaining, maxi(0, enemy_count - field_mission_spawned_enemies)]
+		if inside_hold_area
+		else "방어 구역으로 복귀하십시오 · 이탈 %.0fm"
+		% distance_to_site
+	)
+	_set_field_mission_objective(
+		str(active_field_mission.get_meta("title", "구역 방어")),
+		detail,
+		Color("#efd06f") if inside_hold_area else Color("#ff9b77")
+	)
+	if field_mission_elapsed >= duration:
+		_complete_field_mission()
+
+
+func _update_eliminate_mission() -> void:
+	var target_count := int(active_field_mission.get_meta("target_count", 5))
+	_set_field_mission_objective(
+		str(active_field_mission.get_meta("title", "적 소탕")),
+		"임무 대상 제거  %d / %d" % [mini(field_mission_kills, target_count), target_count],
+		Color("#efd06f")
+	)
+	if field_mission_kills >= target_count:
+		_complete_field_mission()
+
+
+func _update_collect_mission() -> void:
+	for collectible in active_mission_collectibles.duplicate():
+		if not is_instance_valid(collectible):
+			active_mission_collectibles.erase(collectible)
+			continue
+		if player.global_position.distance_to(collectible.global_position) <= 1.35:
+			field_mission_collected += 1
+			active_mission_collectibles.erase(collectible)
+			collectible.queue_free()
+			_show_field_notice("임무 물자 회수 · %d개" % field_mission_collected)
+	var target_count := int(active_field_mission.get_meta("target_count", 3))
+	_set_field_mission_objective(
+		str(active_field_mission.get_meta("title", "물자 회수")),
+		"현장 목표물 회수  %d / %d" % [mini(field_mission_collected, target_count), target_count],
+		Color("#efd06f")
+	)
+	if field_mission_collected >= target_count:
+		_complete_field_mission()
+
+
+func _spawn_field_mission_enemies(count: int) -> void:
+	if not is_instance_valid(active_field_mission):
+		return
+	var world := $World as ProceduralCityMap
+	var mission_id := int(active_field_mission.get_meta("mission_id", 0))
+	for index in count:
+		var spawn_position := _find_field_mission_enemy_position(world, active_field_mission.global_position)
+		var loadout_roll := posmod(field_mission_spawned_enemies + index + mission_id, 7)
+		var enemy_kind := "grenadier" if loadout_roll == 6 else ("melee" if loadout_roll == 4 else "pistol")
+		var threat := maxf(
+			night_intensity,
+			float(raid_zone_data.get("threat", 0.0)) + 0.22
+		)
+		var enemy := _spawn_enemy(enemy_kind, spawn_position, threat)
+		enemy.set_meta("field_mission_id", mission_id)
+		field_mission_spawned_enemies += 1
+		if enemy.has_method("receive_reinforcement_order"):
+			enemy.call("receive_reinforcement_order", active_field_mission.global_position)
+
+
+func _find_field_mission_enemy_position(
+	world: ProceduralCityMap,
+	mission_position: Vector3
+) -> Vector3:
+	var fallback := world.find_nearest_physically_open_position(
+		mission_position + Vector3(11.0, 0.0, 0.0),
+		0.72,
+		[player.get_rid()]
+	)
+	for attempt in 20:
+		var angle := spawn_random.randf_range(0.0, TAU)
+		var distance := spawn_random.randf_range(10.0, 15.0)
+		var candidate := world.find_nearest_physically_open_position(
+			mission_position + Vector3(cos(angle), 0.0, sin(angle)) * distance,
+			0.72,
+			[player.get_rid()]
+		)
+		candidate.y = 0.08
+		fallback = candidate
+		if candidate.distance_to(player.global_position) >= 7.0 and not world.is_position_in_safe_zone(candidate):
+			return candidate
+	return fallback
+
+
+func _spawn_field_mission_collectibles(count: int) -> void:
+	if not is_instance_valid(active_field_mission):
+		return
+	var world := $World as ProceduralCityMap
+	for index in count:
+		var angle := TAU * float(index) / float(maxi(1, count)) + spawn_random.randf_range(-0.35, 0.35)
+		var requested := active_field_mission.global_position + Vector3(cos(angle), 0.0, sin(angle)) * 3.4
+		var position := world.find_nearest_physically_open_position(
+			requested,
+			0.52,
+			[player.get_rid()]
+		)
+		var collectible := Node3D.new()
+		collectible.name = "MissionCollectible_%02d" % (index + 1)
+		add_child(collectible)
+		collectible.global_position = Vector3(position.x, 0.08, position.z)
+		_build_field_mission_collectible(collectible)
+		active_mission_collectibles.append(collectible)
+
+
+func _build_field_mission_collectible(collectible: Node3D) -> void:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color("#e2c56a")
+	material.emission_enabled = true
+	material.emission = Color("#f2cf69")
+	material.emission_energy_multiplier = 2.2
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.22
+	mesh.bottom_radius = 0.28
+	mesh.height = 0.42
+	mesh.radial_segments = 12
+	mesh.material = material
+	var prop := MeshInstance3D.new()
+	prop.name = "SignalCache"
+	prop.position.y = 0.24
+	prop.mesh = mesh
+	collectible.add_child(prop)
+	_add_interaction_marker(collectible, Color("#efd06f"), 0.68, false)
+	var label := Label3D.new()
+	label.text = "회수"
+	label.position = Vector3(0.0, 0.94, 0.0)
+	label.font = FONT
+	label.font_size = 24
+	label.modulate = Color("#ffe79a")
+	label.outline_size = 6
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	collectible.add_child(label)
+
+
+func _complete_field_mission() -> void:
+	if not is_instance_valid(active_field_mission):
+		return
+	var completed_site := active_field_mission
+	completed_site.set_meta("status", "completed")
+	var reward_text := _grant_field_mission_reward(
+		completed_site.get_meta("reward", {}) as Dictionary
+	)
+	_set_field_mission_site_state(completed_site, "completed")
+	_set_field_mission_objective(
+		"임무 완료 · %s" % str(completed_site.get_meta("title", "현장 임무")),
+		"보상  %s" % reward_text,
+		Color("#7de0a8")
+	)
+	_show_field_notice("임무 완료 · %s" % reward_text)
+	field_mission_result_timer = FIELD_MISSION_RESULT_DURATION
+	active_field_mission = null
+	_clear_active_mission_collectibles()
+
+
+func _fail_field_mission(reason: String) -> void:
+	if not is_instance_valid(active_field_mission):
+		return
+	var failed_site := active_field_mission
+	failed_site.set_meta("status", "failed")
+	_set_field_mission_site_state(failed_site, "failed")
+	_set_field_mission_objective(
+		"임무 실패 · %s" % str(failed_site.get_meta("title", "현장 임무")),
+		reason,
+		Color("#ef796f")
+	)
+	_show_field_notice("임무 실패 · %s" % reason)
+	field_mission_result_timer = FIELD_MISSION_RESULT_DURATION
+	active_field_mission = null
+	_clear_active_mission_collectibles()
+
+
+func _grant_field_mission_reward(reward: Dictionary) -> String:
+	var reward_parts: Array[String] = []
+	var canned_food_reward := int(reward.get("canned_food", 0))
+	var medkit_reward := int(reward.get("medkits", 0))
+	var ammo_reward := int(reward.get("ammo", 0))
+	if canned_food_reward > 0:
+		GameState.canned_food += canned_food_reward
+		reward_parts.append("통조림 %d" % canned_food_reward)
+	if medkit_reward > 0:
+		GameState.medkits += medkit_reward
+		reward_parts.append("구급약 %d" % medkit_reward)
+	if ammo_reward > 0:
+		var ammo_id := GameState.equipped_ammo_id
+		GameState.set_ammo_count(ammo_id, GameState.get_ammo_count(ammo_id) + ammo_reward)
+		reserve_ammo = GameState.get_ammo_count(ammo_id)
+		GameState.reserve_ammo = reserve_ammo
+		reward_parts.append("%s %d발" % [
+			str(WEAPON_SYSTEM.get_ammo(ammo_id).get("display_name", "탄환")),
+			ammo_reward,
+		])
+	if int(reward.get("component", 0)) > 0:
+		var component_ids := ["rubber_gasket", "scope_lens", "magazine_spring"]
+		var component_names := ["고무 패킹", "스코프 렌즈", "탄창 스프링"]
+		var component_index := spawn_random.randi_range(0, component_ids.size() - 1)
+		GameState.add_mod_component(component_ids[component_index], 1)
+		reward_parts.append(component_names[component_index])
+	GameState.save_persistent_state()
+	_update_equipment_ui()
+	return ", ".join(reward_parts) if not reward_parts.is_empty() else "현장 보급품"
+
+
+func _set_field_mission_site_state(site: Node3D, state: String) -> void:
+	var color := Color("#5eb9ad")
+	var label_text := str(site.get_meta("title", "현장 임무"))
+	match state:
+		"completed":
+			color = Color("#69d89c")
+			label_text = "완료"
+		"failed":
+			color = Color("#d35f5f")
+			label_text = "실패"
+	var marker_material := site.get_meta("marker_material", null) as StandardMaterial3D
+	if marker_material:
+		marker_material.albedo_color = Color(color.r, color.g, color.b, 0.24)
+		marker_material.emission = color
+	var marker_label := site.get_node_or_null("MissionMarkerLabel") as Label3D
+	if marker_label:
+		marker_label.text = label_text
+		marker_label.modulate = color
+
+
+func _set_field_mission_objective(title: String, detail: String, color: Color) -> void:
+	objective_panel.visible = true
+	objective_label.text = "  %s\n  %s" % [title, detail]
+	objective_label.add_theme_color_override("font_color", color)
+
+
+func _clear_active_mission_collectibles() -> void:
+	for collectible in active_mission_collectibles:
+		if is_instance_valid(collectible):
+			collectible.queue_free()
+	active_mission_collectibles.clear()
+
+
+func _setup_corpse_recovery(world: ProceduralCityMap) -> void:
+	if not GameState.corpse_recovery_attempt_active or GameState.pending_corpse_recovery.is_empty():
+		return
+	var position_data := GameState.pending_corpse_recovery.get("position", []) as Array
+	if position_data.size() < 3:
+		GameState.clear_pending_corpse_recovery()
+		return
+	var requested_position := Vector3(
+		float(position_data[0]),
+		float(position_data[1]),
+		float(position_data[2])
+	)
+	var recovery_position := world.find_nearest_physically_open_position(
+		requested_position,
+		0.68,
+		[player.get_rid()]
+	)
+	recovery_position.y = 0.08
+	corpse_recovery_point = _create_field_interaction(
+		"corpse_recovery",
+		recovery_position,
+		"이전 탐사 장비 회수",
+		1.4
+	)
+	corpse_recovery_point.set_meta("interaction_distance", 3.1)
+	_build_corpse_recovery_prop(corpse_recovery_point)
+	_add_interaction_marker(corpse_recovery_point, Color("#e4b65b"), 1.15, false)
+
+
+func _build_corpse_recovery_prop(point: Node3D) -> void:
+	var pack_material := StandardMaterial3D.new()
+	pack_material.albedo_color = Color("#323a36")
+	pack_material.metallic = 0.22
+	pack_material.roughness = 0.9
+	var pack_mesh := BoxMesh.new()
+	pack_mesh.size = Vector3(0.9, 0.32, 0.68)
+	pack_mesh.material = pack_material
+	var pack := MeshInstance3D.new()
+	pack.name = "LostFieldPack"
+	pack.position.y = 0.18
+	pack.rotation_degrees.y = 18.0
+	pack.mesh = pack_mesh
+	point.add_child(pack)
+
+	var strap_material := StandardMaterial3D.new()
+	strap_material.albedo_color = Color("#b78a45")
+	strap_material.roughness = 0.82
+	var strap_mesh := BoxMesh.new()
+	strap_mesh.size = Vector3(0.12, 0.36, 0.74)
+	strap_mesh.material = strap_material
+	var strap := MeshInstance3D.new()
+	strap.name = "PackStrap"
+	strap.position = Vector3(0.0, 0.19, 0.0)
+	strap.rotation_degrees.y = 18.0
+	strap.mesh = strap_mesh
+	point.add_child(strap)
+
+	var label := Label3D.new()
+	label.name = "RecoveryLabel"
+	label.text = "분실 장비"
+	label.position = Vector3(0.0, 1.05, 0.0)
+	label.font = FONT
+	label.font_size = 34
+	label.modulate = Color("#f2d27a")
+	label.outline_size = 8
+	label.outline_modulate = Color(0.03, 0.025, 0.015, 0.94)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	point.add_child(label)
 
 
 func _setup_salvage_points(world: ProceduralCityMap) -> void:
@@ -5066,7 +5720,7 @@ func _complete_field_interaction(point: Node3D) -> void:
 	if interaction_type == "rescue":
 		var occupied_after_escort: int = GameState.rescued_workers + rescued_followers.size()
 		if occupied_after_escort >= GameState.get_resident_capacity():
-			_show_field_notice("쉘터 수용량 부족 · 침대를 확장해야 구조할 수 있습니다")
+			_show_field_notice("쉘터 수용량 부족 · 시설을 확장해야 구조할 수 있습니다.")
 			field_interaction_hold_time = 0.0
 			return
 	point.set_meta("completed", true)
@@ -5074,11 +5728,13 @@ func _complete_field_interaction(point: Node3D) -> void:
 		"salvage":
 			_add_fatigue(FATIGUE_SALVAGE_GAIN)
 			_spawn_salvage_rewards(point.global_position)
-			_show_field_notice("분해 완료 · 총기 개조 부품이 떨어졌습니다")
+			_show_field_notice("분해 완료 · 총기 개조 부품이 떨어졌습니다.")
 		"rescue":
 			_add_fatigue(FATIGUE_RESCUE_GAIN)
 			_add_rescued_follower(point.global_position)
-			_show_field_notice("피난민 구조 · 호송 중 이동 속도 감소")
+			_show_field_notice("피난민 구조 · 호송 중 이동 속도가 감소합니다.")
+		"corpse_recovery":
+			_recover_previous_corpse()
 	field_interactions.erase(point)
 	nearby_field_interaction = null
 	field_interaction_hold_time = 0.0
@@ -5088,6 +5744,49 @@ func _complete_field_interaction(point: Node3D) -> void:
 		field_interaction_panel.visible = false
 	point.queue_free()
 	_update_equipment_ui()
+
+
+func _add_dictionary_loot(target: Dictionary, recovered: Dictionary) -> void:
+	for key in recovered.keys():
+		var item_id := str(key)
+		target[item_id] = int(target.get(item_id, 0)) + maxi(0, int(recovered[key]))
+
+
+func _recover_previous_corpse() -> void:
+	var corpse_data := GameState.pending_corpse_recovery
+	var loot := corpse_data.get("loot", {}) as Dictionary
+	var recovered_count := _corpse_loot_item_count(loot)
+	if recovered_count <= 0:
+		GameState.clear_pending_corpse_recovery()
+		_show_field_notice("회수할 장비가 남아 있지 않습니다.")
+		return
+	_add_dictionary_loot(
+		GameState.ammo_inventory,
+		loot.get("ammo_inventory", {}) as Dictionary
+	)
+	GameState.medkits += maxi(0, int(loot.get("medkits", 0)))
+	GameState.canned_food += maxi(0, int(loot.get("canned_food", 0)))
+	GameState.churu += maxi(0, int(loot.get("churu", 0)))
+	_add_dictionary_loot(
+		GameState.mod_component_inventory,
+		loot.get("mod_component_inventory", {}) as Dictionary
+	)
+	_add_dictionary_loot(
+		GameState.weapon_mod_inventory,
+		loot.get("weapon_mod_inventory", {}) as Dictionary
+	)
+	var recovered_weapons := loot.get("weapon_inventory", {}) as Dictionary
+	for weapon_id in recovered_weapons.keys():
+		GameState.add_weapon(str(weapon_id), maxi(0, int(recovered_weapons[weapon_id])))
+	var recovered_equipment := loot.get("equipment_inventory", {}) as Dictionary
+	for equipment_id in recovered_equipment.keys():
+		GameState.add_equipment(str(equipment_id), maxi(0, int(recovered_equipment[equipment_id])))
+	reserve_ammo = GameState.get_ammo_count(GameState.equipped_ammo_id)
+	GameState.reserve_ammo = reserve_ammo
+	GameState.clear_pending_corpse_recovery()
+	GameState.save_persistent_state()
+	_show_field_notice("분실 장비 회수 완료 · %d개 품목을 되찾았습니다." % recovered_count)
+	_update_medkit_button()
 
 
 func _spawn_salvage_rewards(origin: Vector3) -> void:
@@ -5195,6 +5894,7 @@ func _begin_extraction() -> void:
 	extraction_prompt.visible = false
 	var rescued_count := _commit_rescued_followers()
 	extraction_success_label.text = "탈출 성공"
+	GameState.finish_corpse_recovery_attempt()
 	_save_run_state()
 	var tween := create_tween()
 	tween.tween_property(extraction_fade, "color:a", 1.0, 0.65)
@@ -5294,10 +5994,9 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 	if _mobile_button_contains(mobile_map_button, touch.position):
 		_on_mobile_map_pressed()
 		return true
-	for index in quick_slot_buttons.size():
-		if _mobile_button_contains(quick_slot_buttons[index], touch.position):
-			_activate_quick_slot(index + 1)
-			return true
+	if _mobile_button_contains(mobile_medkit_button, touch.position):
+		_use_quick_medkit()
+		return true
 	return false
 
 
@@ -5326,12 +6025,12 @@ func _input(event: InputEvent) -> void:
 			return
 		if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
 			return
-		if key_event.pressed and key == KEY_4:
+		if key_event.pressed and key == KEY_F5:
 			_spawn_test_boss_near_player()
 			get_viewport().set_input_as_handled()
 			return
-		if key_event.pressed and key in [KEY_1, KEY_2, KEY_3]:
-			_activate_quick_slot(key - KEY_1 + 1)
+		if key_event.pressed and key == KEY_SHIFT:
+			_use_quick_medkit()
 			get_viewport().set_input_as_handled()
 			return
 		if key == KEY_E:
@@ -5419,5 +6118,12 @@ func _unhandled_input(_event: InputEvent) -> void:
 
 func _exit_tree() -> void:
 	Engine.time_scale = 1.0
+	for audio_player in gunshot_players:
+		if is_instance_valid(audio_player):
+			audio_player.stop()
+	if is_instance_valid(roll_audio_player):
+		roll_audio_player.stop()
+	if is_instance_valid(bgm_player):
+		bgm_player.stop()
 	if not DisplayServer.is_touchscreen_available():
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)

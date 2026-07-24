@@ -37,15 +37,15 @@ const MELEE_WINDUP_TIME := 0.46
 const MELEE_STRIKE_TIME := 0.16
 const MELEE_RECOVERY_TIME := 0.34
 const HIT_STAGGER_TIME := 0.13
-const MELEE_VISION_RANGE := 18.0
-const RANGED_VISION_RANGE := 27.0
-const GRENADIER_VISION_RANGE := 30.0
-const VISION_RANGE_THREAT_BONUS := 9.0
+const MELEE_VISION_RANGE := 22.0
+const RANGED_VISION_RANGE := 34.0
+const GRENADIER_VISION_RANGE := 36.0
+const VISION_RANGE_THREAT_BONUS := 12.0
 const VISION_HALF_ANGLE_DEGREES := 55.0
 const COMBAT_MEMORY_BASE := 20.0
 const COMBAT_MEMORY_THREAT_BONUS := 16.0
-const MELEE_DISENGAGE_DISTANCE := 46.0
-const RANGED_DISENGAGE_DISTANCE := 62.0
+const MELEE_DISENGAGE_DISTANCE := 52.0
+const RANGED_DISENGAGE_DISTANCE := 76.0
 const GRENADE_WINDUP_TIME := 0.72
 const GRENADE_RECOVERY_TIME := 0.9
 
@@ -105,6 +105,9 @@ var reinforcement_call_duration := 4.6
 var tactical_waypoint := Vector3.INF
 var tactical_repath_timer := 0.0
 var hold_position_timer := 0.0
+var has_current_line_of_sight := false
+var lost_sight_time := 0.0
+var target_stationary_time := 0.0
 var health_ratio := 1.0
 var damage_trail_ratio := 1.0
 var damage_trail_delay := 0.0
@@ -226,7 +229,7 @@ func _ready() -> void:
 
 	threat_marker = Label3D.new()
 	threat_marker.name = "ThreatMarker"
-	threat_marker.text = "!"
+	threat_marker.text = "◆"
 	threat_marker.position = Vector3(0, THREAT_MARKER_Y, 0)
 	threat_marker.font_size = 72
 	threat_marker.outline_size = 18
@@ -251,24 +254,30 @@ func _physics_process(delta: float) -> void:
 	tactical_repath_timer = maxf(0.0, tactical_repath_timer - delta)
 	hold_position_timer = maxf(0.0, hold_position_timer - delta)
 	if dying:
+		has_current_line_of_sight = false
 		velocity = velocity.move_toward(Vector3.ZERO, 7.0 * delta)
 		move_and_slide()
 		return
 	if backstab_stunned:
+		has_current_line_of_sight = false
 		velocity = Vector3.ZERO
 		move_and_slide()
 		return
 	if combat_state == "stagger":
+		has_current_line_of_sight = alerted and is_instance_valid(target) and _has_line_of_sight()
 		_update_stagger(delta)
 		return
+	has_current_line_of_sight = alerted and is_instance_valid(target) and _has_line_of_sight()
 	if combat_state != "normal":
 		_update_combat_state(delta)
 		return
 	if not is_instance_valid(target):
+		has_current_line_of_sight = false
 		velocity = Vector3.ZERO
 		_set_motion_state("idle")
 		return
 	if _target_is_in_safe_zone():
+		has_current_line_of_sight = false
 		combat_state = "normal"
 		_clear_alert()
 		_update_patrol(delta)
@@ -280,6 +289,7 @@ func _physics_process(delta: float) -> void:
 	var distance := offset.length()
 	var vision_range := _get_vision_range()
 	var has_line_of_sight := _has_line_of_sight()
+	has_current_line_of_sight = alerted and has_line_of_sight
 	if alerted and distance > _get_disengage_distance():
 		_clear_alert()
 		_update_patrol(delta)
@@ -295,8 +305,15 @@ func _physics_process(delta: float) -> void:
 	if alerted and has_line_of_sight:
 		last_known_position = target.global_position
 		pursuit_time = COMBAT_MEMORY_BASE + COMBAT_MEMORY_THREAT_BONUS * threat_level
+		lost_sight_time = 0.0
+		if target.velocity.length_squared() <= 0.16:
+			target_stationary_time += delta
+		else:
+			target_stationary_time = maxf(0.0, target_stationary_time - delta * 2.5)
 	elif alerted and pursuit_time > 0.0:
 		pursuit_time = maxf(0.0, pursuit_time - delta)
+		lost_sight_time += delta
+		target_stationary_time = maxf(0.0, target_stationary_time - delta * 0.35)
 		_pursue_last_known_position()
 		move_and_slide()
 		return
@@ -680,11 +697,7 @@ func _become_alerted() -> void:
 	alerted = true
 	visual_contact_confirmed = true
 	_update_vision_fan_visual()
-	alert_marker_time = 1.25
-	threat_marker.text = "!"
-	threat_marker.modulate = _with_player_visibility(Color("#ff4d3d"))
-	threat_marker.visible = true
-	threat_marker.scale = Vector3.ONE * 1.45
+	alert_marker_time = 0.0
 
 
 func receive_reinforcement_order(world_position: Vector3) -> void:
@@ -703,18 +716,19 @@ func _with_player_visibility(color: Color) -> Color:
 func _clear_alert() -> void:
 	alerted = false
 	visual_contact_confirmed = false
+	has_current_line_of_sight = false
 	pursuit_time = 0.0
+	lost_sight_time = 0.0
+	target_stationary_time = 0.0
 	_update_vision_fan_visual()
-	if combat_state != "melee_windup":
+	if threat_marker and combat_state not in ["melee_windup", "grenade_windup"]:
 		threat_marker.visible = false
 
 
 func _update_alert_marker(delta: float) -> void:
 	if alert_marker_time > 0.0:
 		alert_marker_time = maxf(0.0, alert_marker_time - delta)
-		threat_marker.visible = true
-		_update_threat_marker()
-	elif combat_state != "melee_windup":
+	if threat_marker and combat_state not in ["melee_windup", "grenade_windup"]:
 		threat_marker.visible = false
 
 
@@ -727,11 +741,11 @@ func _pursue_last_known_position() -> void:
 		var direct := last_known_position - global_position
 		direct.y = 0.0
 		var side := Vector3(-direct.z, 0.0, direct.x).normalized() if direct.length_squared() > 0.01 else Vector3.RIGHT
-		tactical_waypoint = last_known_position + side * strafe_sign * randf_range(2.0, 4.2)
+		var flank_distance := randf_range(5.5, 9.5) if lost_sight_time >= 2.0 else randf_range(2.5, 4.8)
+		var overshoot := direct.normalized() * minf(3.5, lost_sight_time * 0.7) if direct.length_squared() > 0.01 else Vector3.ZERO
+		tactical_waypoint = last_known_position + side * strafe_sign * flank_distance + overshoot
 		strafe_sign *= -1.0
-		var world := get_parent().get_node_or_null("World") if get_parent() != null else null
-		if world != null and world.has_method("find_nearest_open_position"):
-			tactical_waypoint = world.call("find_nearest_open_position", tactical_waypoint)
+		tactical_waypoint = _resolve_tactical_waypoint(tactical_waypoint)
 		tactical_repath_timer = randf_range(1.1, 2.0)
 	var offset := tactical_waypoint - global_position
 	offset.y = 0.0
@@ -746,15 +760,67 @@ func _pursue_last_known_position() -> void:
 	_set_motion_state("walk")
 
 
+func _update_stationary_target_flank(direction: Vector3, distance: float) -> bool:
+	if (
+		target_stationary_time < 3.8
+		or distance < 7.5
+		or enemy_kind == "melee"
+		or posmod(get_instance_id(), 3) == 0
+	):
+		return false
+	if tactical_repath_timer <= 0.0 or tactical_waypoint == Vector3.INF:
+		var side := Vector3(-direction.z, 0.0, direction.x)
+		var flank_distance := weapon_random.randf_range(7.0, 11.0)
+		# `direction` points from this enemy to the player, so continuing along it
+		# places the waypoint beyond the player's current position.
+		var rear_offset := direction * weapon_random.randf_range(1.5, 3.5)
+		tactical_waypoint = target.global_position + side * strafe_sign * flank_distance + rear_offset
+		strafe_sign *= -1.0
+		tactical_waypoint = _resolve_tactical_waypoint(tactical_waypoint)
+		tactical_repath_timer = weapon_random.randf_range(2.2, 3.4)
+	var offset := tactical_waypoint - global_position
+	offset.y = 0.0
+	if offset.length() <= 1.0:
+		tactical_waypoint = Vector3.INF
+		target_stationary_time = 1.4
+		return false
+	var flank_direction := _steer_around_obstacles(offset.normalized())
+	if flank_direction.length_squared() <= 0.01:
+		tactical_waypoint = Vector3.INF
+		tactical_repath_timer = 0.0
+		return false
+	velocity = flank_direction * PISTOL_SPEED * lerpf(1.25, 1.65, threat_level)
+	_set_facing_from_world_direction(direction)
+	_set_motion_state("walk")
+	return true
+
+
+func _resolve_tactical_waypoint(requested_position: Vector3) -> Vector3:
+	var world := get_parent().get_node_or_null("World") if get_parent() != null else null
+	if world == null:
+		return requested_position
+	if world.has_method("find_nearest_physically_open_position"):
+		return world.call(
+			"find_nearest_physically_open_position",
+			requested_position,
+			0.58,
+			[get_rid()]
+		)
+	if world.has_method("find_nearest_open_position"):
+		return world.call("find_nearest_open_position", requested_position)
+	return requested_position
+
+
 func _steer_around_obstacles(desired_direction: Vector3) -> Vector3:
 	if desired_direction.length_squared() <= 0.01:
 		return Vector3.ZERO
 	var desired := desired_direction.normalized()
-	var angles := [0.0, 32.0, -32.0, 64.0, -64.0, 96.0, -96.0]
+	var angles := [0.0, 24.0, -24.0, 48.0, -48.0, 76.0, -76.0, 112.0, -112.0]
 	var from := global_position + Vector3(0, 0.32, 0)
 	for angle in angles:
 		var candidate := desired.rotated(Vector3.UP, deg_to_rad(angle))
-		var query := PhysicsRayQueryParameters3D.create(from, from + candidate * 1.65, 1)
+		var probe_distance := 3.1 if is_zero_approx(angle) else 2.35
+		var query := PhysicsRayQueryParameters3D.create(from, from + candidate * probe_distance, 1)
 		query.exclude = [get_rid()]
 		if get_world_3d().direct_space_state.intersect_ray(query).is_empty():
 			return candidate
@@ -966,6 +1032,8 @@ func _update_pistol(direction: Vector3, distance: float, delta: float) -> void:
 		"double_barrel":
 			preferred_min = 4.0
 			preferred_max = 9.0
+	if _update_stationary_target_flank(direction, distance):
+		return
 	strafe_switch_time = maxf(0.0, strafe_switch_time - delta)
 	if distance > preferred_max:
 		velocity = _steer_around_obstacles(direction) * movement_speed
@@ -997,7 +1065,7 @@ func _update_grenadier(direction: Vector3, distance: float, delta: float) -> voi
 		velocity = Vector3.ZERO
 		pending_attack_direction = direction
 		_set_motion_state("attack")
-		threat_marker.text = "!"
+		threat_marker.text = "◆"
 		threat_marker.modulate = _with_player_visibility(Color("#ffb84f"))
 		threat_marker.visible = true
 		return
@@ -1030,9 +1098,9 @@ func _throw_grenade() -> void:
 func _get_weapon_engagement_range() -> float:
 	match weapon_id:
 		"mp5":
-			return 30.0
-		"ak47":
 			return 38.0
+		"ak47":
+			return 48.0
 		"double_barrel":
 			return 12.0
 		_:
@@ -1042,6 +1110,18 @@ func _get_weapon_engagement_range() -> float:
 func _update_combat_state(delta: float) -> void:
 	state_timer = maxf(0.0, state_timer - delta)
 	velocity = Vector3.ZERO
+	if combat_state == "pistol_burst" and is_instance_valid(target):
+		var target_direction := target.global_position - global_position
+		target_direction.y = 0.0
+		if target_direction.length_squared() > 0.01:
+			target_direction = target_direction.normalized()
+			var burst_strafe := Vector3(-target_direction.z, 0.0, target_direction.x) * strafe_sign
+			velocity = (
+				_steer_around_obstacles(burst_strafe)
+				* PISTOL_SPEED
+				* lerpf(0.42, 0.68, threat_level)
+			)
+			_set_facing_from_world_direction(target_direction)
 	if combat_state == "reinforcement_call":
 		_update_reinforcement_call(delta)
 	elif combat_state == "reloading":
@@ -1144,9 +1224,9 @@ func _target_is_in_safe_zone() -> bool:
 
 func _get_weapon_burst_size() -> int:
 	match weapon_id:
-		"mp5": return 5 + roundi(4.0 * threat_level)
-		"ak47": return 3 + roundi(3.0 * threat_level)
-		"m1911": return 1 + roundi(threat_level)
+		"mp5": return magazine_size
+		"ak47": return magazine_size
+		"m1911": return mini(magazine_size, 3 + roundi(3.0 * threat_level))
 		"double_barrel": return 1
 	return 1
 
@@ -1158,8 +1238,8 @@ func _get_enemy_fire_interval() -> float:
 
 func _get_weapon_burst_cooldown() -> float:
 	match weapon_id:
-		"mp5": return lerpf(1.15, 0.5, threat_level)
-		"ak47": return lerpf(1.4, 0.62, threat_level)
+		"mp5": return lerpf(0.72, 0.34, threat_level)
+		"ak47": return lerpf(0.88, 0.4, threat_level)
 		"double_barrel": return lerpf(2.3, 1.25, threat_level)
 	return lerpf(1.05, 0.58, threat_level)
 

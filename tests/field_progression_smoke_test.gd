@@ -100,10 +100,28 @@ func _run() -> void:
 	aim_shape.shape = aim_box
 	aim_probe.add_child(aim_shape)
 	main.add_child(aim_probe)
-	aim_probe.global_position = player.global_position + Vector3.RIGHT * 3.0 + Vector3.UP * 0.45
-	await physics_frame
 	main.set("laser_aim_held", true)
-	main.set("locked_aim_direction", Vector3.RIGHT)
+	var clear_aim_direction := Vector3.ZERO
+	for candidate_direction in [
+		Vector3.RIGHT,
+		Vector3.LEFT,
+		Vector3.FORWARD,
+		Vector3.BACK,
+		Vector3(1.0, 0.0, 1.0).normalized(),
+		Vector3(-1.0, 0.0, 1.0).normalized(),
+		Vector3(1.0, 0.0, -1.0).normalized(),
+		Vector3(-1.0, 0.0, -1.0).normalized(),
+	]:
+		main.set("locked_aim_direction", candidate_direction)
+		if main.call("_get_aimed_camera_occluder") == null:
+			clear_aim_direction = candidate_direction
+			break
+	if clear_aim_direction == Vector3.ZERO:
+		_fail("no clear direction remained for the aim transparency probe")
+		return
+	aim_probe.global_position = player.global_position + clear_aim_direction * 3.0 + Vector3.UP * 0.45
+	await physics_frame
+	main.set("locked_aim_direction", clear_aim_direction)
 	var aimed_occluder := main.call("_get_aimed_camera_occluder") as Node3D
 	if aimed_occluder != aim_probe:
 		_fail("aim ray did not identify the building it touched (got %s)" % [aimed_occluder.name if aimed_occluder else "null"])

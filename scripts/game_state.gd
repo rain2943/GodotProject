@@ -43,6 +43,14 @@ var mod_component_inventory: Dictionary = {
 	"scope_lens": 0,
 	"magazine_spring": 0,
 }
+var weapon_mod_inventory: Dictionary = {
+	"scope_2x": 0,
+	"muffled_sock": 0,
+	"sponge_pad": 0,
+	"quick_mag": 0,
+	"bell_bait": 0,
+	"ak_precision_receiver": 0,
+}
 var weapon_inventory: Dictionary = {"ak47": 1}
 var equipment_inventory: Dictionary = {
 	"scav_vest": 0,
@@ -68,6 +76,8 @@ var ammo_inventory: Dictionary = {
 }
 var secure_dog_slots: int = 1
 var secure_dog_items: Array[Dictionary] = []
+var pending_corpse_recovery: Dictionary = {}
+var corpse_recovery_attempt_active: bool = false
 var shelter_workbench_level: int = 1
 var shelter_tier: int = 1
 var scratcher_bank_level: int = 1
@@ -245,10 +255,33 @@ func randomize_map() -> void:
 
 func start_new_raid() -> void:
 	process_shelter_progress()
-	randomize_map()
+	var corpse_zone := str(pending_corpse_recovery.get("raid_zone", ""))
+	var corpse_seed := int(pending_corpse_recovery.get("map_seed", 0))
+	if not pending_corpse_recovery.is_empty() and corpse_zone == selected_raid_zone and corpse_seed != 0:
+		raid_serial += 1
+		map_seed = corpse_seed
+		corpse_recovery_attempt_active = true
+	else:
+		randomize_map()
+		corpse_recovery_attempt_active = false
 	world_time_hours = 9.0
 	fatigue = 0.0
 	save_persistent_state()
+
+
+func set_pending_corpse_recovery(data: Dictionary) -> void:
+	pending_corpse_recovery = data.duplicate(true)
+	corpse_recovery_attempt_active = false
+
+
+func clear_pending_corpse_recovery() -> void:
+	pending_corpse_recovery.clear()
+	corpse_recovery_attempt_active = false
+
+
+func finish_corpse_recovery_attempt() -> void:
+	if corpse_recovery_attempt_active:
+		clear_pending_corpse_recovery()
 
 
 func register_shelter_return() -> void:
@@ -452,6 +485,17 @@ func claim_workbench_starter_parts() -> bool:
 
 func get_mod_component_count(component_id: String) -> int:
 	return int(mod_component_inventory.get(component_id, 0))
+
+
+func add_weapon_mod(mod_id: String, amount: int = 1) -> void:
+	weapon_mod_inventory[mod_id] = maxi(
+		0,
+		int(weapon_mod_inventory.get(mod_id, 0)) + amount
+	)
+
+
+func get_weapon_mod_count(mod_id: String) -> int:
+	return int(weapon_mod_inventory.get(mod_id, 0))
 
 
 func get_supported_worker_count() -> int:
@@ -1082,6 +1126,7 @@ func save_persistent_state() -> bool:
 		"assigned_catnip_worker_ids": assigned_catnip_worker_ids,
 		"resident_traits": resident_traits,
 		"mod_component_inventory": mod_component_inventory,
+		"weapon_mod_inventory": weapon_mod_inventory,
 		"weapon_inventory": weapon_inventory,
 		"equipment_inventory": equipment_inventory,
 		"equipped_body_armor_id": equipped_body_armor_id,
@@ -1095,6 +1140,8 @@ func save_persistent_state() -> bool:
 		"equipped_magazine_id": equipped_magazine_id,
 		"equipped_ammo_id": equipped_ammo_id,
 		"ammo_inventory": ammo_inventory,
+		"pending_corpse_recovery": pending_corpse_recovery,
+		"corpse_recovery_attempt_active": corpse_recovery_attempt_active,
 		"shelter_workbench_level": shelter_workbench_level,
 		"shelter_tier": shelter_tier,
 		"scratcher_bank_level": scratcher_bank_level,
@@ -1166,6 +1213,10 @@ func load_persistent_state() -> bool:
 	assigned_catnip_worker_ids = _to_string_array(data.get("assigned_catnip_worker_ids", []))
 	resident_traits = (data.get("resident_traits", {}) as Dictionary).duplicate(true)
 	mod_component_inventory = (data.get("mod_component_inventory", mod_component_inventory) as Dictionary).duplicate(true)
+	weapon_mod_inventory = (data.get("weapon_mod_inventory", weapon_mod_inventory) as Dictionary).duplicate(true)
+	for mod_id in WEAPON_SYSTEM.MODS.keys():
+		if not weapon_mod_inventory.has(mod_id):
+			weapon_mod_inventory[mod_id] = 0
 	weapon_inventory = (data.get("weapon_inventory", weapon_inventory) as Dictionary).duplicate(true)
 	equipment_inventory = (data.get("equipment_inventory", equipment_inventory) as Dictionary).duplicate(true)
 	for equipment_id in EQUIPMENT_DEFINITIONS:
@@ -1184,6 +1235,8 @@ func load_persistent_state() -> bool:
 	equipped_magazine_id = str(data.get("equipped_magazine_id", equipped_magazine_id))
 	equipped_ammo_id = str(data.get("equipped_ammo_id", equipped_ammo_id))
 	ammo_inventory = (data.get("ammo_inventory", ammo_inventory) as Dictionary).duplicate(true)
+	pending_corpse_recovery = (data.get("pending_corpse_recovery", {}) as Dictionary).duplicate(true)
+	corpse_recovery_attempt_active = bool(data.get("corpse_recovery_attempt_active", false))
 	shelter_workbench_level = clampi(int(data.get("shelter_workbench_level", shelter_workbench_level)), 1, 5)
 	shelter_tier = clampi(int(data.get("shelter_tier", shelter_tier)), 1, 5)
 	scratcher_bank_level = clampi(int(data.get("scratcher_bank_level", scratcher_bank_level)), 1, 5)
@@ -1266,6 +1319,14 @@ func reset_run() -> void:
 		"scope_lens": 0,
 		"magazine_spring": 0,
 	}
+	weapon_mod_inventory = {
+		"scope_2x": 0,
+		"muffled_sock": 0,
+		"sponge_pad": 0,
+		"quick_mag": 0,
+		"bell_bait": 0,
+		"ak_precision_receiver": 0,
+	}
 	weapon_inventory = {"ak47": 1}
 	equipment_inventory = {
 		"scav_vest": 0,
@@ -1291,6 +1352,8 @@ func reset_run() -> void:
 	}
 	secure_dog_slots = 1
 	secure_dog_items.clear()
+	pending_corpse_recovery.clear()
+	corpse_recovery_attempt_active = false
 	shelter_workbench_level = 1
 	shelter_tier = 1
 	scratcher_bank_level = 1

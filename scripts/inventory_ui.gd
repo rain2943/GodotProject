@@ -300,7 +300,6 @@ func _build_inventory_panel() -> Control:
 	bag_help.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	bag_header.add_child(bag_help)
 
-	box.add_child(_build_bag_filter_bar())
 	inventory_feedback = _label("", 11, Color("#f2d27a"))
 	inventory_feedback.visible = false
 	inventory_feedback.add_theme_font_size_override("font_size", 11)
@@ -321,7 +320,7 @@ func _build_inventory_panel() -> Control:
 	bag_grid.add_theme_constant_override("v_separation", 6)
 	bag_scroll.add_child(bag_grid)
 
-	bag_empty_hint = _label("현재 분류에 표시할 아이템이 없습니다.", 11, Color("#8ca5a0"))
+	bag_empty_hint = _label("가방에 보관 중인 아이템이 없습니다.", 11, Color("#8ca5a0"))
 	bag_empty_hint.add_theme_font_size_override("font_size", 12)
 	bag_empty_hint.add_theme_color_override("font_color", Color("#8eb0a5"))
 	bag_empty_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -581,10 +580,7 @@ func _get_filter_display_name(filter_id: String) -> String:
 
 
 func _should_show_bag_item(item: Dictionary) -> bool:
-	return (
-		int(item.get("quantity", 0)) > 0
-		and _bag_filter_matches_item(bag_filter, item.get("type", ""))
-	)
+	return int(item.get("quantity", 0)) > 0
 
 
 func _bag_filter_matches_item(filter_id: String, item_type: String) -> bool:
@@ -851,7 +847,6 @@ func _refresh_contents() -> void:
 	_clear(bag_grid)
 	_clear(mod_slot_grid)
 	visible_bag_items = 0
-	_refresh_bag_filter_buttons()
 
 	equipped_grid.add_child(_equipment_button("주무기", weapon_texture, has_weapon_state, _show_weapon_detail))
 	var body_id := str(game_state.equipped_body_armor_id)
@@ -982,7 +977,7 @@ func _update_bag_empty_hint() -> void:
 		return
 	var empty := visible_bag_items <= 0
 	if empty:
-		bag_empty_hint.text = "%s 분류에 표시할 아이템이 없습니다." % _get_filter_display_name(bag_filter)
+		bag_empty_hint.text = "가방에 보관 중인 아이템이 없습니다."
 		if not bag_empty_hint.visible:
 			bag_empty_hint.modulate = Color(1, 1, 1, 0)
 			bag_empty_hint.scale = Vector2(0.98, 0.98)

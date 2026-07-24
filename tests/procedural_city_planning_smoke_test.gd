@@ -115,6 +115,14 @@ func _run() -> void:
 			var debug_mesh := cover.get_node("CoverCollisionDebug") as MeshInstance3D
 			var debug_plane := debug_mesh.mesh as PlaneMesh
 			assert(debug_plane.size == Vector2(cover_shape.size.x, cover_shape.size.z))
+		var blocked_cover := road_covers[0] as Node3D
+		var physically_open: Vector3 = city.call(
+			"find_nearest_physically_open_position",
+			blocked_cover.global_position,
+			0.62,
+			[]
+		)
+		assert(physically_open.distance_to(blocked_cover.global_position) > 0.5)
 		_assert_sealed_landmark(city, playgrounds[0], "UrbanPlaygroundCollision")
 		assert(apartment_cells.size() == 5)
 		assert(get_nodes_in_group("urban_apartment_complex").size() == 1)

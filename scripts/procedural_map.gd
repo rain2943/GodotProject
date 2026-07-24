@@ -20,8 +20,8 @@ const APARTMENT_HIGH_RISE_BUFFER_CELLS := 2
 const FAR_DEPTH_OPEN_CELL := Vector2i(GRID_SIZE - 1, GRID_SIZE - 1)
 const ROAD_SETBACK_MODULES := 4
 const INTERIOR_SETBACK_MODULES := 1
-const ROAD_VEHICLE_CHANCE := 0.34
-const ROAD_COVER_OBSTACLE_CHANCE := 0.24
+const ROAD_VEHICLE_CHANCE := 0.46
+const ROAD_COVER_OBSTACLE_CHANCE := 0.52
 const DISTRICT_RADIUS_CELLS := 2
 const DISTRICT_MIN_SEPARATION_CELLS := 6
 const ROAD_COVER_DEFINITIONS := {
@@ -344,6 +344,10 @@ func _is_subway_vehicle_clearance_cell(cell: Vector2i) -> bool:
 	return _distance_to_cells(cell, subway_cells) <= 1
 
 
+func _is_apartment_gate_clearance_cell(cell: Vector2i) -> bool:
+	return apartment_origin.x >= 0 and cell == apartment_origin + Vector2i(2, 0)
+
+
 func _block_distance(a: Vector2i, b: Vector2i) -> int:
 	return maxi(absi(a.x - b.x), absi(a.y - b.y))
 
@@ -560,13 +564,25 @@ func _build_road_cell(cell: Vector2i, center: Vector3, vertical: bool, horizonta
 		_add_lane_dash(center, true)
 	else:
 		_add_lane_dash(center, false)
-	if vertical != horizontal and not _is_subway_vehicle_clearance_cell(cell):
+	if (
+		vertical != horizontal
+		and not _is_subway_vehicle_clearance_cell(cell)
+		and not _is_apartment_gate_clearance_cell(cell)
+		and not _is_road_cover_clearance_cell(cell, vertical)
+	):
 		if district_signature_road_cells.get("luxury_core", Vector2i(-1, -1)) == cell:
 			_spawn_road_cover_vehicle(center, vertical, "luxury_core", true)
 		elif rng.randf() < ROAD_VEHICLE_CHANCE:
 			_spawn_road_cover_vehicle(center, vertical, _road_district(cell))
 		elif rng.randf() < ROAD_COVER_OBSTACLE_CHANCE:
 			_spawn_road_cover_obstacle(cell, center, vertical)
+
+
+func _is_road_cover_clearance_cell(cell: Vector2i, vertical: bool) -> bool:
+	# Keep regular gaps on every long road so procedural cover never seals a lane.
+	var lane_index := cell.y if vertical else cell.x
+	var cross_index := cell.x if vertical else cell.y
+	return posmod(lane_index + cross_index * 2, 5) == 0
 
 
 func _road_district(cell: Vector2i) -> String:
@@ -1323,6 +1339,48 @@ func find_nearest_open_position(world_position: Vector3) -> Vector3:
 					result.y = world_position.y
 					return result
 	return Vector3(0, world_position.y, 0)
+
+
+func find_nearest_physically_open_position(
+	world_position: Vector3,
+	clearance_radius: float = 0.72,
+	excluded_rids: Array = []
+) -> Vector3:
+	var base_position := find_nearest_open_position(world_position)
+	if _is_physical_space_open(base_position, clearance_radius, excluded_rids):
+		return base_position
+	for ring in range(1, 11):
+		var radius := float(ring) * 0.9
+		var sample_count := maxi(10, ring * 8)
+		for sample in sample_count:
+			var angle := TAU * float(sample) / float(sample_count)
+			var requested := base_position + Vector3(cos(angle), 0.0, sin(angle)) * radius
+			var candidate := find_nearest_open_position(requested)
+			candidate.y = world_position.y
+			if _is_physical_space_open(candidate, clearance_radius, excluded_rids):
+				return candidate
+	return base_position
+
+
+func _is_physical_space_open(
+	world_position: Vector3,
+	clearance_radius: float,
+	excluded_rids: Array
+) -> bool:
+	var cell := _world_to_cell(world_position)
+	if not _cell_in_bounds(cell) or _is_river_cell(cell) or building_cells.has(cell):
+		return false
+	var shape := SphereShape3D.new()
+	shape.radius = maxf(0.25, clearance_radius)
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.transform = Transform3D(
+		Basis.IDENTITY,
+		world_position + Vector3(0.0, maxf(0.42, clearance_radius + 0.18), 0.0)
+	)
+	query.collision_mask = 1
+	query.exclude = excluded_rids
+	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
 
 
 func _is_road_cell(cell: Vector2i) -> bool:
