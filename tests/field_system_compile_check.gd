@@ -19,6 +19,7 @@ const SCRIPTS := [
 	"res://scripts/scratcher_bank_module.gd",
 	"res://scripts/catnip_scraper_module.gd",
 	"res://scripts/shelter_training_module.gd",
+	"res://scripts/resident_portrait_catalog.gd",
 	"res://scripts/shelter_resident_cat.gd",
 	"res://scripts/shelter_interior.gd",
 	"res://scripts/tactical_map.gd",

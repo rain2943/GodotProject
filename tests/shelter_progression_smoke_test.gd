@@ -7,6 +7,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var game_state := root.get_node("GameState")
+	game_state.set("persistence_enabled", false)
 	game_state.call("reset_run")
 	game_state.set("scrap", 2_000_000)
 	game_state.set("canned_food", 200)
@@ -62,6 +63,23 @@ func _run() -> void:
 		_fail("shelter module root is missing")
 	if module_root.get_node_or_null("SurvivalTrainingFacility") == null:
 		_fail("shelter training facility module is missing")
+	var training := module_root.get_node("SurvivalTrainingFacility") as Node
+	training.call("interact")
+	await process_frame
+	var training_layer := root.find_child("TrainingFacilityUILayer", true, false) as CanvasLayer
+	var training_close := training_layer.find_child("CloseButton", true, false) as Button
+	if training_close == null or not training_close.text.is_empty() or training_close.custom_minimum_size.x > 44.0:
+		_fail("training facility close control is not a compact icon button")
+	training_layer.queue_free()
+	await process_frame
+	shelter.call("_open_raid_zone_select")
+	await process_frame
+	var raid_layer := root.find_child("RaidZoneSelectLayer", true, false) as CanvasLayer
+	var raid_close := raid_layer.find_child("CloseButton", true, false) as Button
+	if raid_close == null or not raid_close.text.is_empty() or raid_close.custom_minimum_size.x > 44.0:
+		_fail("raid zone close control is not a compact icon button")
+	shelter.call("_close_raid_zone_select")
+	await process_frame
 	var player_bed_count := 0
 	for child in module_root.get_children():
 		if child.name == "PlayerBed":

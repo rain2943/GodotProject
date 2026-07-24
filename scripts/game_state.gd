@@ -255,6 +255,16 @@ const RESIDENT_TRAIT_PRESETS := [
 	{"name": "밤샘 체질", "kneading": 1.05, "catnip": 1.10},
 	{"name": "평범한 주민", "kneading": 1.00, "catnip": 1.00},
 ]
+const RESIDENT_NAME_POOL: Array[String] = [
+	"보리", "두부", "호두", "감자", "밤이", "구름", "탄이", "콩이",
+	"모카", "치즈", "소금", "후추", "달이", "별이", "봄이", "여름",
+	"가을", "겨울", "라떼", "쿠키", "설탕", "참깨", "들깨", "누룽지",
+	"만두", "찹쌀", "팥이", "토리", "마루", "나비", "복실", "몽이",
+	"뭉치", "초코", "우유", "크림", "연탄", "까미", "백설", "자두",
+	"앵두", "매실", "도담", "다온", "하루", "새벽", "노을", "이슬",
+	"단추", "양말", "꼬리", "수박", "참외", "호박", "미소", "단비",
+]
+const RESIDENT_PORTRAIT_COUNT := 5
 
 
 func _ready() -> void:
@@ -606,6 +616,33 @@ func get_catnip_efficiency_total() -> float:
 	return total
 
 
+func get_worker_production_per_second(worker_id: String, production_kind: String) -> float:
+	if canned_food <= 0:
+		return 0.0
+	var trait_data := get_resident_trait(worker_id)
+	match production_kind:
+		"scratcher", "kneading":
+			if not assigned_worker_ids.has(worker_id):
+				return 0.0
+			return (
+				float(trait_data.get("kneading", 1.0))
+				* BASE_SCRAP_PER_WORKER_HOUR
+				* scratcher_multiplier
+				* get_production_multiplier()
+				/ 3600.0
+			)
+		"catnip":
+			if not assigned_catnip_worker_ids.has(worker_id):
+				return 0.0
+			return (
+				float(trait_data.get("catnip", 1.0))
+				* BASE_CATNIP_PER_WORKER_HOUR
+				* catnip_scraper_multiplier
+				/ 3600.0
+			)
+	return 0.0
+
+
 func get_catnip_boost_remaining() -> int:
 	return maxi(0, catnip_boost_end_time - int(Time.get_unix_time_from_system()))
 
@@ -676,14 +713,50 @@ func _ensure_resident_records() -> void:
 		var next_index := resident_cat_ids.size() + 1
 		var resident_id := "resident_%03d" % next_index
 		resident_cat_ids.append(resident_id)
-		resident_traits[resident_id] = RESIDENT_TRAIT_PRESETS[(next_index - 1) % RESIDENT_TRAIT_PRESETS.size()].duplicate(true)
+		var new_record: Dictionary = RESIDENT_TRAIT_PRESETS[
+			(next_index - 1) % RESIDENT_TRAIT_PRESETS.size()
+		].duplicate(true)
+		resident_traits[resident_id] = _ensure_resident_identity(resident_id, new_record)
 	if resident_cat_ids.size() > rescued_workers:
 		resident_cat_ids.resize(rescued_workers)
 	for resident_id in resident_cat_ids:
-		if not resident_traits.has(resident_id):
+		var record: Dictionary
+		if resident_traits.has(resident_id):
+			record = (resident_traits[resident_id] as Dictionary).duplicate(true)
+		else:
 			var resident_index := maxi(0, int(resident_id.trim_prefix("resident_")) - 1)
-			resident_traits[resident_id] = RESIDENT_TRAIT_PRESETS[resident_index % RESIDENT_TRAIT_PRESETS.size()].duplicate(true)
+			record = RESIDENT_TRAIT_PRESETS[resident_index % RESIDENT_TRAIT_PRESETS.size()].duplicate(true)
+		resident_traits[resident_id] = _ensure_resident_identity(resident_id, record)
 	_sanitize_assigned_workers()
+
+
+func _ensure_resident_identity(resident_id: String, record: Dictionary) -> Dictionary:
+	if str(record.get("display_name", "")).is_empty():
+		var used_names: Array[String] = []
+		for resident_value in resident_traits.values():
+			var resident_record := resident_value as Dictionary
+			var used_name := str(resident_record.get("display_name", ""))
+			if not used_name.is_empty():
+				used_names.append(used_name)
+		var start_index := posmod(hash("%s:%d" % [resident_id, map_seed]), RESIDENT_NAME_POOL.size())
+		var selected_name := ""
+		for offset in RESIDENT_NAME_POOL.size():
+			var candidate := RESIDENT_NAME_POOL[(start_index + offset) % RESIDENT_NAME_POOL.size()]
+			if not used_names.has(candidate):
+				selected_name = candidate
+				break
+		if selected_name.is_empty():
+			selected_name = "%s %02d" % [
+				RESIDENT_NAME_POOL[start_index],
+				resident_cat_ids.find(resident_id) + 1,
+			]
+		record["display_name"] = selected_name
+	if not record.has("portrait_index"):
+		record["portrait_index"] = posmod(
+			hash("portrait:%s:%d" % [resident_id, map_seed]),
+			RESIDENT_PORTRAIT_COUNT
+		)
+	return record
 
 
 func _sanitize_assigned_workers() -> void:
@@ -852,6 +925,13 @@ func get_workbench_slot_limit() -> int:
 	if shelter_workbench_level >= 3:
 		return 5
 	return 4
+
+
+func get_workbench_upgrade_cost() -> Dictionary:
+	var next_level := shelter_workbench_level + 1
+	if next_level > 5:
+		return {}
+	return {"scrap": int(WORKBENCH_UPGRADE_COSTS.get(next_level, 0))}
 
 
 func can_mod_weapon(weapon_id: String) -> bool:

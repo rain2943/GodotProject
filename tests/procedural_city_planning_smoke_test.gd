@@ -111,10 +111,29 @@ func _run() -> void:
 			var cover_shape := cover_collision.shape as BoxShape3D
 			assert(maxf(cover_shape.size.x, cover_shape.size.z) <= 4.3)
 			assert(minf(cover_shape.size.x, cover_shape.size.z) <= 1.2)
+			var cover_type := str(cover.get_meta("cover_type"))
+			if cover_type.ends_with("axis_a"):
+				assert(cover_shape.size.z > cover_shape.size.x)
+			elif cover_type.ends_with("axis_b"):
+				assert(cover_shape.size.x > cover_shape.size.z)
 			assert(cover.get_node("CoverSprite") is Sprite3D)
 			var debug_mesh := cover.get_node("CoverCollisionDebug") as MeshInstance3D
 			var debug_plane := debug_mesh.mesh as PlaneMesh
 			assert(debug_plane.size == Vector2(cover_shape.size.x, cover_shape.size.z))
+			var projectile_cross_axis := (
+				Vector3(0.0, 0.0, 1.0)
+				if cover_shape.size.x >= cover_shape.size.z
+				else Vector3(1.0, 0.0, 0.0)
+			)
+			var projectile_cross_distance := minf(cover_shape.size.x, cover_shape.size.z) * 0.5 + 0.7
+			var projectile_query := PhysicsRayQueryParameters3D.create(
+				(cover as Node3D).global_position - projectile_cross_axis * projectile_cross_distance + Vector3(0.0, 0.45, 0.0),
+				(cover as Node3D).global_position + projectile_cross_axis * projectile_cross_distance + Vector3(0.0, 0.45, 0.0),
+				1
+			)
+			var projectile_hit := city.get_world_3d().direct_space_state.intersect_ray(projectile_query)
+			assert(not projectile_hit.is_empty())
+			assert(projectile_hit.get("collider") == cover)
 		var blocked_cover := road_covers[0] as Node3D
 		var physically_open: Vector3 = city.call(
 			"find_nearest_physically_open_position",

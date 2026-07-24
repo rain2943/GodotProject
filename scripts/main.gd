@@ -90,11 +90,14 @@ const DEEP_NIGHT_HOUR := 22.0
 const BASE_ENEMY_COUNT := 17
 const MAX_NIGHT_ENEMY_COUNT := 34
 const BASE_FIELD_LOOT_COUNT := 16
+const RAID_ENTRY_ENEMY_SAFE_RADIUS := 30.0
 const MELEE_ATTACK_COOLDOWN := 0.72
 const MELEE_ATTACK_RANGE := 2.2
 const MELEE_ATTACK_DAMAGE := 38
-const MOBILE_AIM_ASSIST_MAX_DISTANCE := 30.0
-const MOBILE_AIM_ASSIST_HALF_ANGLE_DEG := 55.0
+const MOBILE_AIM_ASSIST_MAX_DISTANCE := 34.0
+const MOBILE_AIM_ASSIST_HALF_ANGLE_DEG := 42.0
+const MOBILE_AIM_ASSIST_ANGLE_WEIGHT := 24.0
+const MOBILE_AIM_ASSIST_DISTANCE_WEIGHT := 0.32
 const REINFORCEMENT_CALL_TRIGGER_TIME := 30.0
 const REINFORCEMENT_HIDDEN_TRIGGER_TIME := 14.0
 const REINFORCEMENT_CALL_DURATION := 4.6
@@ -123,6 +126,12 @@ const FIELD_MISSION_COUNT := 6
 const FIELD_MISSION_TRIGGER_RADIUS := 4.6
 const FIELD_MISSION_FAIL_RADIUS := 18.0
 const FIELD_MISSION_RESULT_DURATION := 2.8
+const FIELD_MISSION_START_HOLD_DURATION := 0.65
+const FIELD_MISSION_PREPARE_DURATION := 5.0
+const FIELD_MISSION_FIRST_WAVE_DELAY := 1.8
+const FIELD_MISSION_ENEMY_MIN_PLAYER_DISTANCE := 20.0
+const FIELD_MISSION_ENEMY_MIN_SITE_DISTANCE := 22.0
+const FIELD_MISSION_ENEMY_MAX_SITE_DISTANCE := 30.0
 const FIELD_MISSION_TEMPLATES := [
 	{
 		"type": "defense",
@@ -434,6 +443,8 @@ var active_field_mission: Node3D
 var active_mission_collectibles: Array[Node3D] = []
 var field_mission_elapsed := 0.0
 var field_mission_wave_timer := 0.0
+var field_mission_prepare_timer := 0.0
+var field_mission_phase := "idle"
 var field_mission_spawned_enemies := 0
 var field_mission_kills := 0
 var field_mission_collected := 0
@@ -477,6 +488,16 @@ func _ready() -> void:
 	player.add_to_group("player")
 	camera.position = Vector3.ONE * CAMERA_DIAGONAL_OFFSET
 	camera.look_at(Vector3.ZERO)
+	var world := $World as ProceduralCityMap
+	if GameState.returning_from_shelter:
+		player.position = world.get_shelter_exit_position()
+		GameState.returning_from_shelter = false
+	else:
+		player.position = world.find_nearest_physically_open_position(
+			player.position,
+			0.62,
+			[player.get_rid()]
+		)
 	$SmokeA.emitting = false
 	$SmokeB.emitting = false
 	survivor.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
@@ -511,16 +532,6 @@ func _ready() -> void:
 	_update_day_night(0.0)
 	_update_enemy_visibility()
 	_set_facing("s")
-	var world := $World as ProceduralCityMap
-	if GameState.returning_from_shelter:
-		player.position = world.get_shelter_exit_position()
-		GameState.returning_from_shelter = false
-	else:
-		player.position = world.find_nearest_physically_open_position(
-			player.position,
-			0.62,
-			[player.get_rid()]
-		)
 	_setup_extraction_site(world)
 	_setup_field_objectives(world)
 	_setup_procedural_field_missions(world)
@@ -588,11 +599,6 @@ func _physics_process(delta: float) -> void:
 	if (laser_aim_held or mouse_fire_held) and has_ak and _uses_mouse_aim():
 		_lock_aim_direction(_get_mouse_world_direction())
 	_update_scope_camera(delta)
-	var aim_is_locked := (
-		melee_attack_active
-		or (has_ak and (fire_button_held or mouse_fire_held or laser_aim_held))
-		or aim_hold_time > 0.0
-	)
 	if melee_button:
 		melee_button.disabled = melee_attack_cooldown > 0.0
 	if dash_button:
@@ -625,6 +631,17 @@ func _physics_process(delta: float) -> void:
 	_update_weapon_ballistics(delta, input_vector.length_squared() > 0.01)
 
 	var world_direction := Vector3(input_vector.x + input_vector.y, 0, -input_vector.x + input_vector.y)
+	if (
+		has_ak
+		and not _uses_mouse_aim()
+		and (laser_aim_held or fire_button_held)
+	):
+		_update_mobile_aim_direction(world_direction)
+	var aim_is_locked := (
+		melee_attack_active
+		or (has_ak and (fire_button_held or mouse_fire_held or laser_aim_held))
+		or aim_hold_time > 0.0
+	)
 	if roll_active:
 		_update_roll(delta)
 	elif world_direction.length_squared() > 0.01:
@@ -2978,7 +2995,7 @@ func _on_mobile_flashlight_toggled(enabled: bool) -> void:
 	laser_aim_held = enabled
 	if laser_aim_held:
 		var facing_direction := _get_current_facing_world_direction()
-		_lock_aim_direction(facing_direction)
+		_lock_aim_direction(_get_mobile_aim_assist_direction(facing_direction))
 	if DisplayServer.is_touchscreen_available():
 		Input.vibrate_handheld(12)
 
@@ -3000,8 +3017,16 @@ func _refresh_mobile_context_button() -> void:
 	var icon_name := "loot"
 	if is_instance_valid(nearby_field_interaction):
 		var interaction_type := str(nearby_field_interaction.get_meta("interaction_type", ""))
-		label = "탈출" if interaction_type == "extraction" else "상호작용"
-		icon_name = "raid" if interaction_type == "extraction" else "interact"
+		match interaction_type:
+			"extraction":
+				label = "탈출"
+				icon_name = "raid"
+			"mission_start":
+				label = "작전 수락"
+				icon_name = "interact"
+			_:
+				label = "상호작용"
+				icon_name = "interact"
 	elif is_instance_valid(nearby_ammo_pickup):
 		label = "줍기"
 	elif not has_ak and is_instance_valid(ak_pickup):
@@ -3266,8 +3291,12 @@ func _get_current_fire_direction() -> Vector3:
 
 
 func _get_mobile_aim_assist_direction(facing_direction: Vector3) -> Vector3:
-	var closest_enemy: CharacterBody3D
-	var closest_distance := INF
+	facing_direction.y = 0.0
+	if facing_direction.length_squared() <= 0.01:
+		facing_direction = _get_current_facing_world_direction()
+	facing_direction = facing_direction.normalized()
+	var best_enemy: CharacterBody3D
+	var best_score := INF
 	var minimum_dot := cos(deg_to_rad(MOBILE_AIM_ASSIST_HALF_ANGLE_DEG))
 	for enemy in enemies:
 		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
@@ -3280,25 +3309,42 @@ func _get_mobile_aim_assist_direction(facing_direction: Vector3) -> Vector3:
 		if distance <= 0.05 or distance > MOBILE_AIM_ASSIST_MAX_DISTANCE:
 			continue
 		var enemy_direction := offset / distance
-		if facing_direction.dot(enemy_direction) < minimum_dot:
+		var direction_dot := facing_direction.dot(enemy_direction)
+		if direction_dot < minimum_dot:
 			continue
 		var query := PhysicsRayQueryParameters3D.create(
 			player.global_position + Vector3(0, 0.45, 0),
 			enemy.global_position + Vector3(0, 0.45, 0),
-			3
+			1
 		)
-		query.exclude = [player.get_rid()]
-		var hit := player.get_world_3d().direct_space_state.intersect_ray(query)
-		if hit.is_empty() or hit.get("collider") != enemy:
+		query.exclude = [player.get_rid(), enemy.get_rid()]
+		if not player.get_world_3d().direct_space_state.intersect_ray(query).is_empty():
 			continue
-		if distance < closest_distance:
-			closest_distance = distance
-			closest_enemy = enemy
-	if closest_enemy == null:
+		var angle_error := acos(clampf(direction_dot, -1.0, 1.0))
+		var score := (
+			angle_error * MOBILE_AIM_ASSIST_ANGLE_WEIGHT
+			+ distance * MOBILE_AIM_ASSIST_DISTANCE_WEIGHT
+		)
+		if score < best_score:
+			best_score = score
+			best_enemy = enemy
+	if best_enemy == null:
 		return facing_direction
-	var assisted_direction := closest_enemy.global_position - player.global_position
+	var assisted_direction := best_enemy.global_position - player.global_position
 	assisted_direction.y = 0.0
 	return assisted_direction.normalized()
+
+
+func _update_mobile_aim_direction(movement_world_direction: Vector3) -> void:
+	var base_direction := movement_world_direction
+	base_direction.y = 0.0
+	if base_direction.length_squared() <= 0.01:
+		base_direction = (
+			locked_aim_direction
+			if locked_aim_direction.length_squared() > 0.01
+			else _get_current_facing_world_direction()
+		)
+	_lock_aim_direction(_get_mobile_aim_assist_direction(base_direction.normalized()))
 
 
 func _update_weapon_pose() -> void:
@@ -3846,6 +3892,7 @@ func _spawn_enemies() -> void:
 	var spawned_count := 0
 	for squad_index in squad_sizes.size():
 		var squad_anchor := _find_distributed_enemy_position(world, squad_index, squad_sizes.size())
+		squad_anchor = _ensure_initial_enemy_safe_anchor(world, squad_anchor, squad_index)
 		var kinds: Array[String] = []
 		for member_index in squad_sizes[squad_index]:
 			var enemy_index := spawned_count + member_index
@@ -3966,7 +4013,10 @@ func _find_distributed_enemy_position(
 		var map_limit := world.get_map_limit() - 8.0
 		for attempt in 16:
 			var angle := TAU * float(attempt) / 16.0 + spawn_random.randf_range(-0.12, 0.12)
-			var requested := player.global_position + Vector3(cos(angle), 0.0, sin(angle)) * 28.0
+			var requested := (
+				player.global_position
+				+ Vector3(cos(angle), 0.0, sin(angle)) * (RAID_ENTRY_ENEMY_SAFE_RADIUS + 8.0)
+			)
 			requested.x = clampf(requested.x, -map_limit, map_limit)
 			requested.z = clampf(requested.z, -map_limit, map_limit)
 			requested.y = 0.78
@@ -3976,17 +4026,49 @@ func _find_distributed_enemy_position(
 				[player.get_rid()]
 			)
 			nearby_candidate.y = 0.78
-			if nearby_candidate.distance_to(player.global_position) >= 16.0:
+			if nearby_candidate.distance_to(player.global_position) >= RAID_ENTRY_ENEMY_SAFE_RADIUS + 3.0:
 				return nearby_candidate
 	return _find_stratified_map_position(
 		world,
 		index - 1,
 		total_count - 1,
-		16.0,
+		RAID_ENTRY_ENEMY_SAFE_RADIUS + 3.0,
 		7.0,
 		occupied_positions,
 		0.78
 	)
+
+
+func _ensure_initial_enemy_safe_anchor(
+	world: ProceduralCityMap,
+	requested_anchor: Vector3,
+	squad_index: int
+) -> Vector3:
+	if requested_anchor.distance_to(player.global_position) >= RAID_ENTRY_ENEMY_SAFE_RADIUS + 3.0:
+		return requested_anchor
+	var map_limit := world.get_map_limit() - 8.0
+	for attempt in 32:
+		var angle := (
+			TAU * float(attempt) / 32.0
+			+ float(squad_index) * 0.73
+			+ spawn_random.randf_range(-0.08, 0.08)
+		)
+		var distance := RAID_ENTRY_ENEMY_SAFE_RADIUS + spawn_random.randf_range(6.0, 18.0)
+		var requested := player.global_position + Vector3(cos(angle), 0.0, sin(angle)) * distance
+		requested.x = clampf(requested.x, -map_limit, map_limit)
+		requested.z = clampf(requested.z, -map_limit, map_limit)
+		var candidate := world.find_nearest_physically_open_position(
+			requested,
+			0.62,
+			[player.get_rid()]
+		)
+		candidate.y = 0.78
+		if (
+			candidate.distance_to(player.global_position) >= RAID_ENTRY_ENEMY_SAFE_RADIUS + 3.0
+			and not world.is_position_in_safe_zone(candidate)
+		):
+			return candidate
+	return requested_anchor
 
 
 func _build_enemy_squad_sizes(total_count: int) -> Array[int]:
@@ -4604,14 +4686,6 @@ func _enemy_player_visibility_factor(
 	var near_radius := lerpf(112.0, 64.0, night_intensity)
 	var fan_cos := lerpf(0.06, 0.34, night_intensity)
 	if laser_aim_held and screen_distance > near_radius and enemy_screen_direction.dot(facing_screen_direction) < fan_cos:
-		return 0.0
-	var query := PhysicsRayQueryParameters3D.create(
-		player.global_position + Vector3(0, 0.42, 0),
-		enemy.global_position + Vector3(0, 0.42, 0),
-		1
-	)
-	query.exclude = [player.get_rid(), enemy.get_rid()]
-	if not player.get_world_3d().direct_space_state.intersect_ray(query).is_empty():
 		return 0.0
 	if screen_distance <= fully_visible_radius:
 		return 1.0
@@ -5381,10 +5455,17 @@ func _setup_procedural_field_missions(world: ProceduralCityMap) -> void:
 		mission_site.global_position = mission_position
 		mission_site.set_meta("mission_id", index + 1)
 		mission_site.set_meta("status", "waiting")
+		mission_site.set_meta("interaction_type", "mission_start")
+		mission_site.set_meta("display_name", "작전 수락 · %s" % str(definition.get("title", "현장 임무")))
+		mission_site.set_meta("hold_duration", FIELD_MISSION_START_HOLD_DURATION)
+		mission_site.set_meta("interaction_distance", FIELD_INTERACTION_DISTANCE + 0.45)
+		mission_site.set_meta("completed", false)
 		for key in definition:
 			mission_site.set_meta(str(key), definition[key])
 		mission_site.add_to_group("field_mission_site")
+		mission_site.add_to_group("field_interaction")
 		field_mission_sites.append(mission_site)
+		field_interactions.append(mission_site)
 		_build_field_mission_marker(mission_site)
 
 
@@ -5404,17 +5485,17 @@ func _pick_field_mission_definition(index: int) -> Dictionary:
 func _build_field_mission_marker(site: Node3D) -> void:
 	var mission_type := str(site.get_meta("type", "defense"))
 	var marker_color := Color("#5eb9ad")
-	var marker_text := "현장 신호"
+	var marker_text := "E · 작전 수락"
 	match mission_type:
 		"stealth":
 			marker_color = Color("#6aa8b9")
-			marker_text = "은신 지점"
+			marker_text = "E · 은신 작전"
 		"investigate":
 			marker_color = Color("#c5a964")
-			marker_text = "조사 신호"
+			marker_text = "E · 조사 작전"
 		"stealth_reach":
 			marker_color = Color("#78b59a")
-			marker_text = "우회 경로"
+			marker_text = "E · 우회 작전"
 	var marker_material := StandardMaterial3D.new()
 	marker_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	marker_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -5455,14 +5536,6 @@ func _update_field_missions(delta: float) -> void:
 		if field_mission_result_timer <= 0.0 and not is_instance_valid(active_field_mission):
 			objective_panel.visible = false
 	if not is_instance_valid(active_field_mission):
-		for site in field_mission_sites:
-			if (
-				is_instance_valid(site)
-				and str(site.get_meta("status", "waiting")) == "waiting"
-				and player.global_position.distance_to(site.global_position) <= FIELD_MISSION_TRIGGER_RADIUS
-			):
-				_start_field_mission(site)
-				break
 		return
 
 	var distance_to_site := player.global_position.distance_to(active_field_mission.global_position)
@@ -5470,7 +5543,19 @@ func _update_field_missions(delta: float) -> void:
 		_fail_field_mission("작전 구역을 너무 멀리 이탈했습니다.")
 		return
 
+	if field_mission_phase == "preparing":
+		field_mission_prepare_timer = maxf(0.0, field_mission_prepare_timer - delta)
+		_set_field_mission_objective(
+			"작전 준비 · %s" % str(active_field_mission.get_meta("title", "현장 임무")),
+			"시작까지 %.1f초 · 주변을 확인하고 엄폐하십시오." % field_mission_prepare_timer,
+			Color("#f0c96d")
+		)
+		if field_mission_prepare_timer <= 0.0:
+			_activate_field_mission()
+		return
+
 	field_mission_runtime += delta
+	_update_field_mission_waves(delta)
 	var mission_type := str(active_field_mission.get_meta("type", "defense"))
 	match mission_type:
 		"defense":
@@ -5491,7 +5576,9 @@ func _start_field_mission(site: Node3D) -> void:
 	active_field_mission = site
 	site.set_meta("status", "active")
 	field_mission_elapsed = 0.0
-	field_mission_wave_timer = 0.0
+	field_mission_wave_timer = FIELD_MISSION_FIRST_WAVE_DELAY
+	field_mission_prepare_timer = FIELD_MISSION_PREPARE_DURATION
+	field_mission_phase = "preparing"
 	field_mission_spawned_enemies = 0
 	field_mission_kills = 0
 	field_mission_collected = 0
@@ -5502,31 +5589,80 @@ func _start_field_mission(site: Node3D) -> void:
 	field_mission_investigation_target = null
 	field_mission_noise_breached = false
 	_clear_active_mission_collectibles()
-	_set_field_mission_site_state(site, "active")
-	var mission_type := str(site.get_meta("type", "defense"))
-	match mission_type:
-		"defense":
-			_spawn_field_mission_enemies(2)
-			field_mission_wave_timer = 3.2
-		"eliminate":
-			_spawn_field_mission_enemies(int(site.get_meta("enemy_count", 5)))
-		"collect":
-			_spawn_field_mission_collectibles(int(site.get_meta("target_count", 3)))
-			_spawn_field_mission_enemies(int(site.get_meta("enemy_count", 4)))
-		"stealth":
-			_spawn_field_mission_patrols(int(site.get_meta("guard_count", 4)))
-		"investigate":
-			_spawn_field_mission_investigation_points(int(site.get_meta("target_count", 3)))
-			_spawn_field_mission_patrols(int(site.get_meta("guard_count", 2)))
-		"stealth_reach":
-			_spawn_field_mission_reach_target(float(site.get_meta("target_distance", 13.5)))
-			_spawn_field_mission_patrols(int(site.get_meta("guard_count", 4)))
+	_set_field_mission_site_state(site, "preparing")
 	_set_field_mission_objective(
-		str(site.get_meta("title", "현장 임무")),
-		str(site.get_meta("description", "현장 목표를 수행하십시오.")),
+		"작전 준비 · %s" % str(site.get_meta("title", "현장 임무")),
+		"시작까지 %.1f초 · 준비가 끝나기 전에는 적이 투입되지 않습니다." % field_mission_prepare_timer,
+		Color("#f0c96d")
+	)
+	_show_field_notice("작전 수락 · %d초 후 시작" % ceili(FIELD_MISSION_PREPARE_DURATION))
+
+
+func _activate_field_mission() -> void:
+	if not is_instance_valid(active_field_mission):
+		return
+	field_mission_phase = "active"
+	field_mission_prepare_timer = 0.0
+	field_mission_wave_timer = FIELD_MISSION_FIRST_WAVE_DELAY
+	field_mission_runtime = 0.0
+	_set_field_mission_site_state(active_field_mission, "active")
+	var mission_type := str(active_field_mission.get_meta("type", "defense"))
+	match mission_type:
+		"collect":
+			_spawn_field_mission_collectibles(int(active_field_mission.get_meta("target_count", 3)))
+		"investigate":
+			_spawn_field_mission_investigation_points(int(active_field_mission.get_meta("target_count", 3)))
+		"stealth_reach":
+			_spawn_field_mission_reach_target(float(active_field_mission.get_meta("target_distance", 13.5)))
+	_set_field_mission_objective(
+		str(active_field_mission.get_meta("title", "현장 임무")),
+		str(active_field_mission.get_meta("description", "현장 목표를 수행하십시오.")),
 		Color("#efd06f")
 	)
-	_show_field_notice("현장 임무 시작 · %s" % str(site.get_meta("title", "현장 임무")))
+	_show_field_notice("현장 임무 시작 · 첫 위협 접근 %.1f초" % FIELD_MISSION_FIRST_WAVE_DELAY)
+
+
+func _get_field_mission_enemy_total() -> int:
+	if not is_instance_valid(active_field_mission):
+		return 0
+	var mission_type := str(active_field_mission.get_meta("type", "defense"))
+	if mission_type in ["stealth", "investigate", "stealth_reach"]:
+		return int(active_field_mission.get_meta("guard_count", 0))
+	return int(active_field_mission.get_meta("enemy_count", 0))
+
+
+func _update_field_mission_waves(delta: float) -> void:
+	if field_mission_phase != "active" or not is_instance_valid(active_field_mission):
+		return
+	var total_enemies := _get_field_mission_enemy_total()
+	if total_enemies <= 0 or field_mission_spawned_enemies >= total_enemies:
+		return
+	field_mission_wave_timer = maxf(0.0, field_mission_wave_timer - delta)
+	if field_mission_wave_timer > 0.0:
+		return
+	var progress := float(field_mission_spawned_enemies) / float(maxi(1, total_enemies))
+	var wave_size := 3 if progress >= 0.55 else 2
+	wave_size = mini(wave_size, total_enemies - field_mission_spawned_enemies)
+	var mission_type := str(active_field_mission.get_meta("type", "defense"))
+	if mission_type in ["stealth", "investigate", "stealth_reach"]:
+		_spawn_field_mission_patrols(wave_size, progress)
+	else:
+		_spawn_field_mission_enemies(wave_size, progress)
+	field_mission_wave_timer = lerpf(6.0, 3.2, progress)
+
+
+func _get_field_mission_wave_status() -> String:
+	var total_enemies := _get_field_mission_enemy_total()
+	if total_enemies <= 0:
+		return ""
+	var stage := clampi(
+		1 + floori(3.0 * float(field_mission_spawned_enemies) / float(maxi(1, total_enemies))),
+		1,
+		3
+	)
+	if field_mission_spawned_enemies < total_enemies:
+		return "다음 접근 %.1f초 · 위협 %d단계" % [field_mission_wave_timer, stage]
+	return "현장 투입 완료 · 위협 %d단계" % stage
 
 
 func _update_defense_mission(delta: float, distance_to_site: float) -> void:
@@ -5534,11 +5670,7 @@ func _update_defense_mission(delta: float, distance_to_site: float) -> void:
 	var inside_hold_area := distance_to_site <= hold_radius
 	if inside_hold_area:
 		field_mission_elapsed += delta
-	field_mission_wave_timer -= delta
 	var enemy_count := int(active_field_mission.get_meta("enemy_count", 6))
-	if field_mission_spawned_enemies < enemy_count and field_mission_wave_timer <= 0.0:
-		_spawn_field_mission_enemies(mini(2, enemy_count - field_mission_spawned_enemies))
-		field_mission_wave_timer = 3.2
 	var duration := float(active_field_mission.get_meta("duration", 18.0))
 	var remaining := maxf(0.0, duration - field_mission_elapsed)
 	var detail := (
@@ -5742,7 +5874,7 @@ func _active_field_mission_requires_silence() -> bool:
 	)
 
 
-func _spawn_field_mission_enemies(count: int) -> void:
+func _spawn_field_mission_enemies(count: int, escalation: float = 0.0) -> void:
 	if not is_instance_valid(active_field_mission):
 		return
 	var world := $World as ProceduralCityMap
@@ -5765,7 +5897,7 @@ func _spawn_field_mission_enemies(count: int) -> void:
 			)
 		var threat := maxf(
 			night_intensity,
-			float(raid_zone_data.get("threat", 0.0)) + 0.22
+			float(raid_zone_data.get("threat", 0.0)) + 0.16 + escalation * 0.34
 		)
 		var spawned := _spawn_enemy_squad(
 			world,
@@ -5778,7 +5910,7 @@ func _spawn_field_mission_enemies(count: int) -> void:
 		field_mission_spawned_enemies += spawned.size()
 
 
-func _spawn_field_mission_patrols(count: int) -> void:
+func _spawn_field_mission_patrols(count: int, escalation: float = 0.0) -> void:
 	if not is_instance_valid(active_field_mission):
 		return
 	var world := $World as ProceduralCityMap
@@ -5794,7 +5926,7 @@ func _spawn_field_mission_patrols(count: int) -> void:
 			kinds.append("melee" if (patrol_index + member_index) % 4 == 3 else "pistol")
 		var threat := maxf(
 			night_intensity,
-			float(raid_zone_data.get("threat", 0.0)) + 0.12
+			float(raid_zone_data.get("threat", 0.0)) + 0.08 + escalation * 0.26
 		)
 		var spawned := _spawn_enemy_squad(
 			world,
@@ -5816,13 +5948,17 @@ func _find_field_mission_enemy_position(
 	mission_position: Vector3
 ) -> Vector3:
 	var fallback := world.find_nearest_physically_open_position(
-		mission_position + Vector3(11.0, 0.0, 0.0),
+		mission_position + Vector3(FIELD_MISSION_ENEMY_MAX_SITE_DISTANCE, 0.0, 0.0),
 		0.72,
 		[player.get_rid()]
 	)
-	for attempt in 20:
+	fallback.y = 0.08
+	for attempt in 32:
 		var angle := spawn_random.randf_range(0.0, TAU)
-		var distance := spawn_random.randf_range(10.0, 15.0)
+		var distance := spawn_random.randf_range(
+			FIELD_MISSION_ENEMY_MIN_SITE_DISTANCE,
+			FIELD_MISSION_ENEMY_MAX_SITE_DISTANCE
+		)
 		var candidate := world.find_nearest_physically_open_position(
 			mission_position + Vector3(cos(angle), 0.0, sin(angle)) * distance,
 			0.72,
@@ -5830,8 +5966,15 @@ func _find_field_mission_enemy_position(
 		)
 		candidate.y = 0.08
 		fallback = candidate
-		if candidate.distance_to(player.global_position) >= 7.0 and not world.is_position_in_safe_zone(candidate):
+		if (
+			candidate.distance_to(player.global_position) >= FIELD_MISSION_ENEMY_MIN_PLAYER_DISTANCE
+			and not world.is_position_in_safe_zone(candidate)
+		):
 			return candidate
+	if fallback.distance_to(player.global_position) < FIELD_MISSION_ENEMY_MIN_PLAYER_DISTANCE:
+		var reinforcement_position := _find_reinforcement_position()
+		if reinforcement_position != Vector3.INF:
+			return reinforcement_position
 	return fallback
 
 
@@ -6026,6 +6169,8 @@ func _complete_field_mission() -> void:
 	)
 	_show_field_notice("임무 완료 · %s" % reward_text)
 	field_mission_result_timer = FIELD_MISSION_RESULT_DURATION
+	field_mission_phase = "idle"
+	field_mission_prepare_timer = 0.0
 	active_field_mission = null
 	_clear_active_mission_collectibles()
 
@@ -6043,6 +6188,8 @@ func _fail_field_mission(reason: String) -> void:
 	)
 	_show_field_notice("임무 실패 · %s" % reason)
 	field_mission_result_timer = FIELD_MISSION_RESULT_DURATION
+	field_mission_phase = "idle"
+	field_mission_prepare_timer = 0.0
 	active_field_mission = null
 	_clear_active_mission_collectibles()
 
@@ -6082,6 +6229,9 @@ func _set_field_mission_site_state(site: Node3D, state: String) -> void:
 	var color := Color("#5eb9ad")
 	var label_text := str(site.get_meta("title", "현장 임무"))
 	match state:
+		"preparing":
+			color = Color("#e0b957")
+			label_text = "작전 준비 중"
 		"completed":
 			color = Color("#69d89c")
 			label_text = "완료"
@@ -6100,7 +6250,16 @@ func _set_field_mission_site_state(site: Node3D, state: String) -> void:
 
 func _set_field_mission_objective(title: String, detail: String, color: Color) -> void:
 	objective_panel.visible = true
-	objective_label.text = "  %s\n  %s" % [title, detail]
+	var objective_detail := detail
+	if (
+		is_instance_valid(active_field_mission)
+		and str(active_field_mission.get_meta("status", "")) == "active"
+		and field_mission_phase == "active"
+	):
+		var wave_status := _get_field_mission_wave_status()
+		if not wave_status.is_empty():
+			objective_detail += "\n  %s" % wave_status
+	objective_label.text = "  %s\n  %s" % [title, objective_detail]
 	objective_label.add_theme_color_override("font_color", color)
 
 
@@ -6480,7 +6639,14 @@ func _update_field_interactions(delta: float) -> void:
 		if not is_instance_valid(point):
 			field_interactions.erase(point)
 			continue
-		if str(point.get_meta("interaction_type", "")) == "rescue":
+		var point_type := str(point.get_meta("interaction_type", ""))
+		if point_type == "mission_start":
+			if (
+				is_instance_valid(active_field_mission)
+				or str(point.get_meta("status", "waiting")) != "waiting"
+			):
+				continue
+		if point_type == "rescue":
 			_update_cowering_resident_facing(point)
 		var ring := point.get_node_or_null("InteractionRing") as MeshInstance3D
 		if ring:
@@ -6554,6 +6720,21 @@ func _complete_field_interaction(point: Node3D) -> void:
 		field_interaction_touch_held = false
 		field_interaction_hold_time = 0.0
 		point.call("enter_building", player)
+		return
+	if interaction_type == "mission_start":
+		if (
+			not is_instance_valid(active_field_mission)
+			and str(point.get_meta("status", "waiting")) == "waiting"
+		):
+			point.set_meta("completed", true)
+			field_interactions.erase(point)
+			nearby_field_interaction = null
+			field_interaction_hold_time = 0.0
+			field_interaction_keyboard_held = false
+			field_interaction_touch_held = false
+			if field_interaction_panel:
+				field_interaction_panel.visible = false
+			_start_field_mission(point)
 		return
 	if interaction_type == "rescue":
 		var occupied_after_escort: int = GameState.rescued_workers + rescued_followers.size()

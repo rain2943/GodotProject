@@ -141,6 +141,20 @@ const RECIPES := {
 			"cost": {"scrap": 60, "rubber_gasket": 1},
 			"result": {"repair": 18.0},
 		},
+		{
+			"id": "auto_repair",
+			"name": "자동 수리 맡기기",
+			"desc": "장착 총기를 작업대에 맡겨 쉘터에 없는 동안에도 내구도를 자동 회복합니다.",
+			"cost": {},
+			"result": {"auto_repair": true},
+		},
+		{
+			"id": "workbench_upgrade",
+			"name": "작업대 시설 확장",
+			"desc": "작업대 레벨을 높여 상위 총기와 특수 전술 모듈 제작을 해금합니다.",
+			"cost": {},
+			"result": {"workbench_upgrade": true},
+		},
 	],
 	"artisan": [
 		{
@@ -244,23 +258,36 @@ func _rebuild_ui() -> void:
 
 	var root := PanelContainer.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.offset_left = 44
-	root.offset_top = 34
-	root.offset_right = -44
-	root.offset_bottom = -36
+	var viewport_size := get_viewport().get_visible_rect().size
+	var outer_margin := 10.0 if viewport_size.y < 640.0 else 28.0
+	root.offset_left = outer_margin
+	root.offset_top = outer_margin
+	root.offset_right = -outer_margin
+	root.offset_bottom = -outer_margin
 	root.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.023, 0.027, 0.95), Color("#8ac2a7"), 2, 10))
 	ui_layer.add_child(root)
 
-	var margin := _margin(26, 22, 26, 24)
+	var inner_margin := 12 if viewport_size.y < 640.0 else 22
+	var margin := _margin(inner_margin, inner_margin, inner_margin, inner_margin)
 	root.add_child(margin)
+	var screen_scroll := ScrollContainer.new()
+	screen_scroll.name = "WorkbenchScreenScroll"
+	screen_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	screen_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	screen_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	screen_scroll.follow_focus = false
+	margin.add_child(screen_scroll)
 	var main := VBoxContainer.new()
-	main.add_theme_constant_override("separation", 16)
-	margin.add_child(main)
+	main.custom_minimum_size.x = maxf(320.0, viewport_size.x - outer_margin * 2.0 - inner_margin * 2.0 - 12.0)
+	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main.add_theme_constant_override("separation", 10 if viewport_size.y < 640.0 else 16)
+	screen_scroll.add_child(main)
 
 	main.add_child(_build_header())
 	main.add_child(_build_tabs())
 
-	var body := HBoxContainer.new()
+	var body: BoxContainer = VBoxContainer.new() if viewport_size.x < 820.0 else HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 18)
 	main.add_child(body)
@@ -281,18 +308,7 @@ func _build_header() -> Control:
 	resource_label = _label(_resource_text(), 15, Color("#b7cfc3"))
 	title_box.add_child(resource_label)
 
-	var repair := _button("시간제 수리", "time")
-	repair.custom_minimum_size = Vector2(116, 42)
-	repair.pressed.connect(_start_repair)
-	header.add_child(repair)
-
-	var upgrade := _button("업그레이드", "upgrade")
-	upgrade.custom_minimum_size = Vector2(116, 42)
-	upgrade.pressed.connect(_upgrade_workbench)
-	header.add_child(upgrade)
-
-	var close := _button("닫기", "close")
-	close.custom_minimum_size = Vector2(82, 42)
+	var close := _close_button()
 	close.pressed.connect(func() -> void:
 		if is_instance_valid(ui_layer):
 			ui_layer.queue_free()
@@ -302,13 +318,18 @@ func _build_header() -> Control:
 
 
 func _build_tabs() -> Control:
-	var tabs := HBoxContainer.new()
-	tabs.add_theme_constant_override("separation", 8)
+	var tabs := GridContainer.new()
+	var compact := get_viewport().get_visible_rect().size.x < 1040.0
+	tabs.columns = 3 if compact else 6
+	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tabs.add_theme_constant_override("h_separation", 8)
+	tabs.add_theme_constant_override("v_separation", 8)
 	for category in ["parts", "ammo", "weapons", "supplies", "artisan", "enhance"]:
 		var tab := _button(str(CATEGORY_NAMES[category]), str(CATEGORY_ICONS[category]))
 		tab.toggle_mode = true
 		tab.button_pressed = selected_category == category
-		tab.custom_minimum_size = Vector2(116, 40)
+		tab.custom_minimum_size = Vector2(0, 40)
+		tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tab.pressed.connect(func() -> void:
 			selected_category = category
 			var recipes: Array = _recipes_for_category(selected_category)
@@ -322,7 +343,9 @@ func _build_tabs() -> Control:
 
 func _build_recipe_list() -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(380, 0)
+	var viewport_width := get_viewport().get_visible_rect().size.x
+	panel.custom_minimum_size = Vector2(0 if viewport_width < 820.0 else (320 if viewport_width < 1040.0 else 380), 210 if viewport_width < 820.0 else 0)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if viewport_width < 820.0 else Control.SIZE_FILL
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.035, 0.043, 0.049, 0.86), Color("#456b61"), 1, 8))
 	var margin := _margin(12, 12, 12, 12)
@@ -331,6 +354,7 @@ func _build_recipe_list() -> Control:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	margin.add_child(scroll)
 	recipe_list = VBoxContainer.new()
+	recipe_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	recipe_list.add_theme_constant_override("separation", 8)
 	scroll.add_child(recipe_list)
 	return panel
@@ -344,6 +368,8 @@ func _build_detail_panel() -> Control:
 	var margin := _margin(22, 20, 22, 20)
 	panel.add_child(margin)
 	detail_box = VBoxContainer.new()
+	detail_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	detail_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	detail_box.add_theme_constant_override("separation", 14)
 	margin.add_child(detail_box)
 	return panel
@@ -354,11 +380,12 @@ func _refresh_recipe_list() -> void:
 	var recipes: Array = _recipes_for_category(selected_category)
 	for recipe_raw in recipes:
 		var recipe: Dictionary = recipe_raw
-		var button := _button("%s\n%s" % [str(recipe["name"]), _cost_short_text(recipe)])
+		var button := _button("%s\n%s" % [str(recipe["name"]), _recipe_list_subtitle(recipe)])
 		button.icon = _recipe_icon(recipe)
 		button.expand_icon = true
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		button.custom_minimum_size = Vector2(330, 72)
+		button.custom_minimum_size = Vector2(0, 72)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.toggle_mode = true
 		button.button_pressed = str(recipe["id"]) == selected_recipe_id
@@ -395,6 +422,7 @@ func _refresh_detail_panel() -> void:
 
 	detail_box.add_child(_section("필요 재료"))
 	var cost_box := VBoxContainer.new()
+	cost_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cost_box.add_theme_constant_override("separation", 6)
 	detail_box.add_child(cost_box)
 	var effective_cost := _effective_cost(recipe)
@@ -415,7 +443,7 @@ func _refresh_detail_panel() -> void:
 	var result_label := _label("결과: %s" % _result_text(recipe), 17, Color("#d9c579"))
 	detail_box.add_child(result_label)
 
-	var craft := _button("제작", "craft")
+	var craft := _button(_craft_action_text(recipe), _craft_action_icon(recipe))
 	craft.custom_minimum_size = Vector2(240, 48)
 	craft.disabled = not _can_craft(recipe)
 	craft.pressed.connect(func() -> void:
@@ -464,6 +492,10 @@ func _can_craft(recipe: Dictionary) -> bool:
 		if _owned_resource(str(key)) < int(_effective_cost(recipe)[key]):
 			return false
 	var result := recipe.get("result", {}) as Dictionary
+	if bool(result.get("auto_repair", false)):
+		return GameState.weapon_durability < 100.0 and not GameState.workbench_repair_active
+	if bool(result.get("workbench_upgrade", false)):
+		return GameState.shelter_workbench_level < 5
 	if bool(result.get("enhance", false)):
 		return GameState.get_weapon_enhancement_level(GameState.equipped_weapon_id) < GameState.MAX_WEAPON_ENHANCEMENT
 	if result.has("enhance_mod"):
@@ -476,6 +508,17 @@ func _craft(recipe: Dictionary) -> void:
 	if not _can_craft(recipe):
 		return
 	var result: Dictionary = recipe.get("result", {})
+	if bool(result.get("auto_repair", false)):
+		GameState.workbench_repair_active = true
+		GameState.workbench_repair_weapon_id = GameState.equipped_weapon_id
+		GameState.save_persistent_state()
+		_refresh_after_change()
+		return
+	if bool(result.get("workbench_upgrade", false)):
+		if GameState.try_upgrade_workbench():
+			GameState.save_persistent_state()
+		_refresh_after_change()
+		return
 	if bool(result.get("artisan", false)):
 		var artisan_result := GameState.roll_artisan_weapon()
 		if not artisan_result.is_empty():
@@ -512,6 +555,8 @@ func _craft(recipe: Dictionary) -> void:
 
 func _effective_cost(recipe: Dictionary) -> Dictionary:
 	var result := recipe.get("result", {}) as Dictionary
+	if bool(result.get("workbench_upgrade", false)):
+		return GameState.get_workbench_upgrade_cost()
 	if bool(result.get("artisan", false)):
 		return GameState.get_artisan_roll_cost()
 	if bool(result.get("enhance", false)):
@@ -519,17 +564,6 @@ func _effective_cost(recipe: Dictionary) -> Dictionary:
 	if result.has("enhance_mod"):
 		return {"scrap": GameState.get_mod_enhancement_cost(str(result["enhance_mod"]))}
 	return (recipe.get("cost", {}) as Dictionary).duplicate(true)
-
-
-func _start_repair() -> void:
-	GameState.workbench_repair_active = true
-	GameState.workbench_repair_weapon_id = GameState.equipped_weapon_id
-	_refresh_after_change()
-
-
-func _upgrade_workbench() -> void:
-	GameState.try_upgrade_workbench()
-	_refresh_after_change()
 
 
 func _refresh_after_change() -> void:
@@ -577,6 +611,18 @@ func _cost_short_text(recipe: Dictionary) -> String:
 	return " / ".join(parts)
 
 
+func _recipe_list_subtitle(recipe: Dictionary) -> String:
+	var cost_text := _cost_short_text(recipe)
+	if not cost_text.is_empty():
+		return cost_text
+	var result := recipe.get("result", {}) as Dictionary
+	if bool(result.get("auto_repair", false)):
+		return "수리 진행 중" if GameState.workbench_repair_active else "비용 없음 · 자동 진행"
+	if bool(result.get("workbench_upgrade", false)):
+		return "최고 레벨"
+	return _result_text(recipe)
+
+
 func _result_text(recipe: Dictionary) -> String:
 	var result: Dictionary = recipe.get("result", {})
 	if result.has("component"):
@@ -595,6 +641,19 @@ func _result_text(recipe: Dictionary) -> String:
 		return "통조림 x%d" % int(result["canned_food"])
 	if result.has("repair"):
 		return "내구도 +%d%%" % int(result["repair"])
+	if bool(result.get("auto_repair", false)):
+		return (
+			"수리 진행 중 · 시간당 %.0f%%"
+			% GameState.get_workbench_repair_per_hour()
+			if GameState.workbench_repair_active
+			else "시간당 내구도 %.0f%% 회복" % GameState.get_workbench_repair_per_hour()
+		)
+	if bool(result.get("workbench_upgrade", false)):
+		return (
+			"최고 레벨"
+			if GameState.shelter_workbench_level >= 5
+			else "작업대 Lv.%d" % (GameState.shelter_workbench_level + 1)
+		)
 	if result.has("artisan"):
 		return "현재 Tier 무기 1정"
 	if result.has("enhance"):
@@ -620,6 +679,10 @@ func _recipe_icon(recipe: Dictionary) -> Texture2D:
 		return UI_ICONS.get_icon("food", 72, Color("#e6b65c"))
 	if result.has("repair"):
 		return UI_ICONS.get_icon("repair", 72, Color("#82c7ba"))
+	if bool(result.get("auto_repair", false)):
+		return UI_ICONS.get_icon("time", 72, Color("#82c7ba"))
+	if bool(result.get("workbench_upgrade", false)):
+		return UI_ICONS.get_icon("upgrade", 72, Color("#e2c06b"))
 	if result.has("artisan"):
 		return UI_ICONS.get_icon("craft", 72, Color("#e2c06b"))
 	if result.has("enhance"):
@@ -627,6 +690,24 @@ func _recipe_icon(recipe: Dictionary) -> Texture2D:
 	if result.has("enhance_mod"):
 		return UI_ICONS.get_icon("mod", 72, Color("#e2a962"))
 	return UI_ICONS.get_icon("all", 72, Color("#8ca29a"))
+
+
+func _craft_action_text(recipe: Dictionary) -> String:
+	var result := recipe.get("result", {}) as Dictionary
+	if bool(result.get("auto_repair", false)):
+		return "수리 진행 중" if GameState.workbench_repair_active else "자동 수리 맡기기"
+	if bool(result.get("workbench_upgrade", false)):
+		return "최고 레벨" if GameState.shelter_workbench_level >= 5 else "시설 업그레이드"
+	return "제작"
+
+
+func _craft_action_icon(recipe: Dictionary) -> String:
+	var result := recipe.get("result", {}) as Dictionary
+	if bool(result.get("auto_repair", false)):
+		return "time"
+	if bool(result.get("workbench_upgrade", false)):
+		return "upgrade"
+	return "craft"
 
 
 func _resource_icon(key: String) -> Texture2D:
@@ -643,16 +724,30 @@ func _resource_icon(key: String) -> Texture2D:
 
 func _resource_row(key: String, owned: int, needed: int, color: Color) -> Control:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	row.name = "ResourceCost_%s" % key
+	row.custom_minimum_size = Vector2(0, 38)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 12)
 	var icon := TextureRect.new()
 	icon.custom_minimum_size = Vector2(32, 32)
 	icon.texture = _resource_icon(key)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	row.add_child(icon)
-	var label := _label("%s  %d / %d" % [_resource_name(key), owned, needed], 17, color)
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(label)
+	var name_label := _label(_resource_name(key), 17, Color("#d9ded8"))
+	name_label.name = "ResourceName"
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	row.add_child(name_label)
+	var amount_label := _label("%d / %d" % [owned, needed], 17, color)
+	amount_label.name = "ResourceAmount"
+	amount_label.custom_minimum_size = Vector2(112, 0)
+	amount_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	amount_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	amount_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	row.add_child(amount_label)
 	return row
 
 
@@ -704,6 +799,18 @@ func _button(text: String, icon_name := "") -> Button:
 	return button
 
 
+func _close_button() -> Button:
+	var button := _button("", "close")
+	button.name = "CloseButton"
+	button.custom_minimum_size = Vector2(40, 40)
+	button.icon = UI_ICONS.get_icon("close", 24, Color("#dce6df"))
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.autowrap_mode = TextServer.AUTOWRAP_OFF
+	button.tooltip_text = "닫기"
+	button.focus_mode = Control.FOCUS_NONE
+	return button
+
+
 func _label(text: String, size: int, color: Color) -> Label:
 	var label := Label.new()
 	label.text = text
@@ -716,6 +823,7 @@ func _label(text: String, size: int, color: Color) -> Label:
 
 func _section(text: String) -> Label:
 	var label := _label(text, 18, Color("#d9ded8"))
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.55))
 	label.add_theme_constant_override("outline_size", 3)
 	return label

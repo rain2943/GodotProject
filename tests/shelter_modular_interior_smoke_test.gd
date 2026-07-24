@@ -5,10 +5,10 @@ const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png
 const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
 const BED_TEXTURE_PATH := "res://assets/interiors/shelter_bed_module_v2.png"
 const PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
-const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_isometric_v4.png"
-const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_isometric_v4.png"
-const CATNIP_SCRAPER_TEXTURE_PATH := "res://assets/interiors/modules/catnip_scraper_isometric_v4.png"
-const TRAINING_TEXTURE_PATH := "res://assets/interiors/modules/shelter_training_isometric_v4.png"
+const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_isometric_v5.png"
+const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_isometric_v5.png"
+const CATNIP_SCRAPER_TEXTURE_PATH := "res://assets/interiors/modules/catnip_scraper_isometric_v5.png"
+const TRAINING_TEXTURE_PATH := "res://assets/interiors/modules/shelter_training_isometric_v5.png"
 
 
 func _initialize() -> void:

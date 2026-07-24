@@ -27,31 +27,47 @@ const DISTRICT_MIN_SEPARATION_CELLS := 6
 const ROAD_COVER_DEFINITIONS := {
 	"concrete_barricade_axis_a": {
 		"texture_path": "res://assets/props/road_cover/concrete_barricade_axis_a_v1.png",
-		"collision_size": Vector3(3.65, 1.2, 0.82),
+		"collision_size": Vector3(0.82, 1.2, 6.10),
 		"pixel_size": 0.00375,
-		"sprite_height": 1.22,
-		"sprite_offset": Vector2(-20.5, -3.0),
+		"footprint_corners_px": [
+			Vector2(136, 617),
+			Vector2(1170, 84),
+			Vector2(1440, 492),
+			Vector2(330, 962),
+		],
 	},
 	"concrete_barricade_axis_b": {
 		"texture_path": "res://assets/props/road_cover/concrete_barricade_axis_b_v1.png",
-		"collision_size": Vector3(0.82, 1.2, 3.65),
+		"collision_size": Vector3(5.15, 1.2, 0.82),
 		"pixel_size": 0.00375,
-		"sprite_height": 1.22,
-		"sprite_offset": Vector2(12.5, 1.0),
+		"footprint_corners_px": [
+			Vector2(192, 470),
+			Vector2(386, 92),
+			Vector2(1318, 824),
+			Vector2(1075, 928),
+		],
 	},
 	"rubble_wall_axis_a": {
 		"texture_path": "res://assets/props/road_cover/rubble_wall_axis_a_v1.png",
-		"collision_size": Vector3(4.25, 1.45, 1.12),
+		"collision_size": Vector3(1.12, 1.45, 4.45),
 		"pixel_size": 0.00355,
-		"sprite_height": 1.45,
-		"sprite_offset": Vector2(14.0, 16.0),
+		"footprint_corners_px": [
+			Vector2(198, 785),
+			Vector2(1120, 84),
+			Vector2(1308, 475),
+			Vector2(420, 906),
+		],
 	},
 	"rubble_wall_axis_b": {
 		"texture_path": "res://assets/props/road_cover/rubble_wall_axis_b_v1.png",
-		"collision_size": Vector3(1.12, 1.45, 4.25),
+		"collision_size": Vector3(4.82, 1.45, 1.12),
 		"pixel_size": 0.00355,
-		"sprite_height": 1.45,
-		"sprite_offset": Vector2(2.5, 13.0),
+		"footprint_corners_px": [
+			Vector2(174, 480),
+			Vector2(337, 92),
+			Vector2(1356, 850),
+			Vector2(1160, 906),
+		],
 	},
 }
 const MARKET_HANDCART_TEXTURE_PATH := "res://assets/props/market_handcart_v1.png"
@@ -783,15 +799,33 @@ func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool)
 	body.add_to_group("cover_obstacle")
 	body.set_meta("cover_type", cover_type)
 	body.set_meta("road_cell", cell)
-	body.set_meta("cover_axis", "z" if vertical else "x")
 	add_child(body)
 
 	var sprite := Sprite3D.new()
 	sprite.name = "CoverSprite"
 	sprite.texture = texture
-	sprite.pixel_size = float(definition.get("pixel_size", 0.007))
-	sprite.offset = definition.get("sprite_offset", Vector2.ZERO)
-	sprite.position = Vector3(0.0, float(definition.get("sprite_height", 2.0)), 0.0)
+	var collision_size: Vector3 = definition.get("collision_size", Vector3(4.0, 1.4, 1.4))
+	var footprint_corners: Array = definition.get("footprint_corners_px", [])
+	if footprint_corners.size() >= 4:
+		var left_corner := footprint_corners[0] as Vector2
+		var right_corner := footprint_corners[2] as Vector2
+		var bottom_corner := footprint_corners[3] as Vector2
+		var base_pixel_width := maxf(1.0, absf(right_corner.x - left_corner.x))
+		var projected_width := (collision_size.x + collision_size.z) / sqrt(2.0)
+		sprite.pixel_size = projected_width / base_pixel_width
+		sprite.offset.x = texture.get_width() * 0.5 - bottom_corner.x
+		sprite.position = Vector3(
+			collision_size.x * 0.5,
+			(
+				(bottom_corner.y - texture.get_height() * 0.5)
+				* sprite.pixel_size
+				/ ISOMETRIC_VERTICAL_PROJECTION
+			),
+			collision_size.z * 0.5
+		)
+	else:
+		sprite.pixel_size = float(definition.get("pixel_size", 0.007))
+		sprite.position.y = collision_size.y
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.transparent = true
 	sprite.shaded = false
@@ -799,7 +833,8 @@ func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool)
 	sprite.render_priority = 4
 	body.add_child(sprite)
 
-	var collision_size: Vector3 = definition.get("collision_size", Vector3(4.0, 1.4, 1.4))
+	var collision_axis := "x" if collision_size.x >= collision_size.z else "z"
+	body.set_meta("cover_axis", collision_axis)
 	body.set_meta("collision_world_size", collision_size)
 	var collision := CollisionShape3D.new()
 	collision.name = "CoverCollision"
@@ -818,7 +853,7 @@ func _spawn_road_cover_obstacle(cell: Vector2i, center: Vector3, vertical: bool)
 	debug_mesh.mesh = footprint_mesh
 	debug_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	debug_mesh.set_meta("cover_type", cover_type)
-	debug_mesh.set_meta("cover_axis", "z" if vertical else "x")
+	debug_mesh.set_meta("cover_axis", collision_axis)
 	debug_mesh.set_meta("footprint_world_size", Vector2(collision_size.x, collision_size.z))
 	body.add_child(debug_mesh)
 

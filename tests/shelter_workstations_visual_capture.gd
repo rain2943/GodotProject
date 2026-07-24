@@ -1,7 +1,7 @@
 extends Node
 
-const OUTPUT_PATH := "res://test-output/shelter_workstations_isometric_v4.png"
-const FULL_OUTPUT_PATH := "res://test-output/shelter_workstations_isometric_v4_full.png"
+const OUTPUT_PATH := "res://test-output/shelter_workstations_isometric_v5.png"
+const FULL_OUTPUT_PATH := "res://test-output/shelter_workstations_isometric_v5_full.png"
 
 
 func _ready() -> void:

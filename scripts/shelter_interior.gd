@@ -630,6 +630,22 @@ func refresh_shelter_residents(snap := false) -> void:
 			target = _catnip_work_position(catnip_index)
 			focus = _catnip_scraper_position()
 		resident.call("set_work_assignment", assignment_kind, target, focus, snap)
+		resident.call(
+			"set_production_feedback",
+			GameState.get_worker_production_per_second(resident_id, assignment_kind)
+		)
+
+
+func _refresh_resident_production_feedback() -> void:
+	for resident in shelter_residents:
+		if not is_instance_valid(resident):
+			continue
+		var resident_id := str(resident.get_meta("resident_id", ""))
+		var assignment_kind := str(resident.get_meta("assignment_kind", "waiting"))
+		resident.call(
+			"set_production_feedback",
+			GameState.get_worker_production_per_second(resident_id, assignment_kind)
+		)
 
 
 func _resident_wait_position(index: int) -> Vector3:
@@ -993,7 +1009,10 @@ func _open_merchant_shop() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root_control.add_child(center)
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(780, 580)
+	var viewport_size := get_viewport().get_visible_rect().size
+	var shop_width := minf(820.0, maxf(520.0, viewport_size.x - 28.0))
+	var shop_height := minf(620.0, maxf(420.0, viewport_size.y - 28.0))
+	panel.custom_minimum_size = Vector2(shop_width, shop_height)
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.025, 0.033, 0.031, 0.99), Color("#8f7950")))
 	center.add_child(panel)
 	var margin := MarginContainer.new()
@@ -1040,7 +1059,7 @@ func _open_merchant_shop() -> void:
 	currency_box.add_child(food_chip)
 	merchant_shop_currency_labels["scrap"] = scrap_chip.get_meta("value_label")
 	merchant_shop_currency_labels["food"] = food_chip.get_meta("value_label")
-	var close := _merchant_button("닫기", false, "close")
+	var close := _shelter_close_button()
 	close.pressed.connect(_close_merchant_ui)
 	header.add_child(close)
 
@@ -1063,6 +1082,8 @@ func _open_merchant_shop() -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	box.add_child(scroll)
 	merchant_shop_list = VBoxContainer.new()
+	merchant_shop_list.custom_minimum_size.x = maxf(320.0, shop_width - 48.0)
+	merchant_shop_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	merchant_shop_list.add_theme_constant_override("separation", 8)
 	scroll.add_child(merchant_shop_list)
 	merchant_shop_message_label = Label.new()
@@ -1102,7 +1123,8 @@ func _refresh_merchant_shop() -> void:
 	if visible_good_count == 0:
 		var empty_label := Label.new()
 		empty_label.name = "MerchantEmptyState"
-		empty_label.custom_minimum_size = Vector2(720, 180)
+		empty_label.custom_minimum_size = Vector2(0, 180)
+		empty_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		empty_label.text = "판매할 수 있는 물품이 없습니다."
 		empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -1194,7 +1216,8 @@ func _merchant_trade_row(good: Dictionary) -> Button:
 	var can_trade := GameState.scrap >= price if buying else (price > 0 and owned >= int(good["amount"]))
 	var button := _merchant_button("", false)
 	button.name = "MerchantGood_%s" % str(good["id"])
-	button.custom_minimum_size = Vector2(720, 84)
+	button.custom_minimum_size = Vector2(0, 84)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.tooltip_text = "%s %d개 %s" % [currency_name, price, action]
 	button.add_theme_stylebox_override(
 		"normal",
@@ -1433,6 +1456,17 @@ func _merchant_button(text: String, accent: bool, icon_name := "") -> Button:
 	button.add_theme_stylebox_override("normal", _rounded_panel_style(background, border, 6))
 	button.add_theme_stylebox_override("hover", _rounded_panel_style(Color(0.16, 0.13, 0.07, 1.0), Color("#f0cc77"), 6))
 	button.add_theme_stylebox_override("disabled", _rounded_panel_style(Color(0.03, 0.035, 0.034, 0.72), Color(0.35, 0.4, 0.38, 0.3), 6))
+	return button
+
+
+func _shelter_close_button() -> Button:
+	var button := _merchant_button("", false, "close")
+	button.name = "CloseButton"
+	button.custom_minimum_size = Vector2(40, 40)
+	button.icon = UI_ICONS.get_icon("close", 24, Color("#e8dfcb"))
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.tooltip_text = "닫기"
+	button.focus_mode = Control.FOCUS_NONE
 	return button
 
 
@@ -1679,6 +1713,7 @@ func _update_live_shelter_income(delta: float) -> void:
 	if shelter_stats_refresh_time >= 0.5:
 		shelter_stats_refresh_time = 0.0
 		_update_stats()
+		_refresh_resident_production_feedback()
 	if gained > 0 and scrap_gain_label:
 		scrap_gain_label.text = "+%d 고철   %.2f/s" % [gained, GameState.get_scrap_per_second()]
 		scrap_gain_label.modulate.a = 1.0
@@ -1704,7 +1739,10 @@ func _open_raid_zone_select() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	raid_zone_ui_layer.add_child(center)
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(840, 650)
+	var viewport_size := get_viewport().get_visible_rect().size
+	var panel_width := minf(900.0, maxf(500.0, viewport_size.x - 28.0))
+	var panel_height := minf(650.0, maxf(380.0, viewport_size.y - 28.0))
+	panel.custom_minimum_size = Vector2(panel_width, panel_height)
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.025, 0.033, 0.031, 0.99), Color("#8f7950")))
 	center.add_child(panel)
 	var margin := MarginContainer.new()
@@ -1723,11 +1761,7 @@ func _open_raid_zone_select() -> void:
 	title.add_theme_font_size_override("font_size", 28)
 	title.add_theme_color_override("font_color", Color("#ead69c"))
 	header.add_child(title)
-	var close := Button.new()
-	close.text = "닫기"
-	close.icon = UI_ICONS.get_icon("close", 28, Color("#dce7df"))
-	close.expand_icon = true
-	close.add_theme_font_override("font", FONT)
+	var close := _shelter_close_button()
 	close.pressed.connect(_close_raid_zone_select)
 	header.add_child(close)
 	var subtitle := Label.new()
@@ -1741,6 +1775,7 @@ func _open_raid_zone_select() -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	box.add_child(scroll)
 	var list := VBoxContainer.new()
+	list.custom_minimum_size.x = maxf(320.0, panel_width - 56.0)
 	list.add_theme_constant_override("separation", 9)
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list)
@@ -1752,7 +1787,8 @@ func _build_raid_zone_row(zone_id: String) -> Control:
 	var zone := GameState.get_raid_zone(zone_id)
 	var unlocked := GameState.is_raid_zone_unlocked(zone_id)
 	var row := PanelContainer.new()
-	row.custom_minimum_size = Vector2(760, 92)
+	row.custom_minimum_size = Vector2(0, 92)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_theme_stylebox_override("panel", _panel_style(
 		Color(0.055, 0.063, 0.061, 0.94) if unlocked else Color(0.025, 0.028, 0.03, 0.72),
 		Color("#667e70") if unlocked else Color(0.34, 0.36, 0.36, 0.45)

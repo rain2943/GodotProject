@@ -67,9 +67,14 @@ func _run() -> void:
 	var ammo_before := int(game_state.call("get_ammo_count", "762_fmj"))
 	shelter.call("_open_merchant_shop")
 	await get_tree().process_frame
+	var shop_layer := tree_root.find_child("MerchantShopLayer", true, false) as CanvasLayer
+	var shop_close := shop_layer.find_child("CloseButton", true, false) as Button
+	assert(shop_close != null and shop_close.text.is_empty(), "Merchant shop close must be icon-only.")
+	assert(shop_close.custom_minimum_size.x <= 44.0 and shop_close.custom_minimum_size.y <= 44.0, "Merchant shop close must stay compact.")
 	assert(tree_root.find_child("고철Icon", true, false) is TextureRect, "Merchant currency must use a rendered scrap icon instead of an emoji glyph.")
 	assert(tree_root.find_child("통조림Icon", true, false) is TextureRect, "Merchant currency must use a rendered food icon instead of an emoji glyph.")
 	var shop_list := shelter.get("merchant_shop_list") as VBoxContainer
+	assert(shop_list.size_flags_horizontal == Control.SIZE_EXPAND_FILL, "Merchant rows must fill the available modal width.")
 	var buy_tab := shelter.get("merchant_buy_tab") as Button
 	var sell_tab := shelter.get("merchant_sell_tab") as Button
 	assert(buy_tab.button_pressed and not sell_tab.button_pressed, "The active buy tab must be visually selected.")

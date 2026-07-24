@@ -30,7 +30,8 @@ func _run() -> void:
 				(main_scene.get("player") as Node3D).global_position
 			)
 		)
-	assert(initial_spawn_distances.min() < 45.0)
+	assert(initial_spawn_distances.min() >= 28.0)
+	assert(initial_spawn_distances.min() < 55.0)
 	assert(initial_spawn_distances.max() > 100.0)
 	var visibility_material: ShaderMaterial = main_scene.get("visibility_material")
 	var night_aim_radius := float(visibility_material.get_shader_parameter("inner_radius"))
@@ -43,7 +44,7 @@ func _run() -> void:
 	assert(enemies.size() == 19)
 	var enemy: Node = enemies[0]
 	assert(enemy.get_node_or_null("VisionFan") == null)
-	assert(float(enemy.call("_get_vision_range")) >= 18.0)
+	assert(float(enemy.call("_get_vision_range")) >= 30.0)
 	enemy.set("facing_world_direction", Vector3.FORWARD)
 	assert(enemy.call(
 		"_is_position_inside_vision_fan",
@@ -90,6 +91,38 @@ func _run() -> void:
 	enemy.set_meta("player_visibility_hold", 0.32)
 	enemy.call("set_player_visibility_factor", 1.0)
 	enemy.visible = true
+
+	var close_enemy_position := (main_scene.get("player") as Node3D).global_position + Vector3(3.5, 0.0, 0.0)
+	(enemy as Node3D).global_position = close_enemy_position
+	var cover_blocker := StaticBody3D.new()
+	cover_blocker.collision_layer = 1
+	cover_blocker.position = (main_scene.get("player") as Node3D).global_position + Vector3(1.75, 0.0, 0.0)
+	var cover_collision := CollisionShape3D.new()
+	var cover_shape := BoxShape3D.new()
+	cover_shape.size = Vector3(0.7, 1.5, 3.0)
+	cover_collision.position.y = 0.75
+	cover_collision.shape = cover_shape
+	cover_blocker.add_child(cover_collision)
+	main_scene.add_child(cover_blocker)
+	await physics_frame
+	assert(not bool(enemy.call("_has_line_of_sight")))
+	assert(float(main_scene.call("_enemy_player_visibility_factor", enemy, 104.0, 134.0)) > 0.95)
+	cover_blocker.queue_free()
+	await physics_frame
+	enemy.call("set_player_visibility_factor", 1.0)
+	var mobile_input_direction := Vector3(1.0, 0.0, 0.03).normalized()
+	var exact_enemy_direction := (
+		(enemy as Node3D).global_position
+		- (main_scene.get("player") as Node3D).global_position
+	).normalized()
+	var assisted_direction: Vector3 = main_scene.call(
+		"_get_mobile_aim_assist_direction",
+		mobile_input_direction
+	)
+	assert(assisted_direction.dot(exact_enemy_direction) > 0.99)
+	main_scene.call("_update_mobile_aim_direction", mobile_input_direction)
+	assert((main_scene.get("locked_aim_direction") as Vector3).dot(exact_enemy_direction) > 0.99)
+	(enemy as Node3D).global_position = enemy_visible_position
 
 	var pistol_enemy: Node
 	var ranged_weapon_ids: Array[String] = []
@@ -180,6 +213,8 @@ func _run() -> void:
 	main_scene.set("touch_vector", Vector2.ZERO)
 	main_scene.call("_on_mobile_flashlight_toggled", true)
 	assert(bool(main_scene.get("laser_aim_held")))
+	main_scene.call("_update_mobile_aim_direction", Vector3(-1.0, 0.0, 0.0))
+	assert((main_scene.get("locked_aim_direction") as Vector3).dot(Vector3.LEFT) > 0.7)
 	var fatigue_before_flashlight := float(main_scene.get("fatigue"))
 	main_scene.call("_update_fatigue", 1.0, false)
 	assert(float(main_scene.get("fatigue")) > fatigue_before_flashlight)
@@ -190,13 +225,6 @@ func _run() -> void:
 	main_scene.call("_update_equipment_ui")
 	assert((main_scene.get("equipment_ammo_label") as Label).text.contains("24 / 30"))
 	assert((main_scene.get("equipment_reserve_ammo_label") as Label).text.contains("예비 95발"))
-	var quick_slots := main_scene.get("quick_slot_buttons") as Array
-	assert(quick_slots[0].text.contains("24/30  +95"))
-	assert(quick_slots[1].text.contains("응급키트"))
-	assert(quick_slots[2].text.contains("근접 공격"))
-	assert(not quick_slots[2].text.contains("식량"))
-	assert(quick_slots[3].text.contains("재장전"))
-	assert((main_scene.get_node("HUD/TopLeft/Margin/VBox/Stats") as Label).text.contains("탄 24/30 +95"))
 
 	pistol_enemy.set("magazine_ammo", 0)
 	pistol_enemy.call("_start_reload")

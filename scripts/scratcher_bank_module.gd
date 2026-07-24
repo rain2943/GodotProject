@@ -3,6 +3,7 @@ extends Node3D
 
 const FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const UI_ICONS := preload("res://scripts/ui_icon_factory.gd")
+const RESIDENT_PORTRAITS := preload("res://scripts/resident_portrait_catalog.gd")
 
 @export var interaction_radius := 3.15
 
@@ -95,6 +96,7 @@ func _open_ui() -> void:
 	margin.add_child(panel_scroll)
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.custom_minimum_size.x = maxf(300.0, panel.custom_minimum_size.x - inner_margin * 2.0 - 12.0)
 	content.add_theme_constant_override("separation", 10 if viewport_size.y < 640.0 else 16)
 	panel_scroll.add_child(content)
@@ -113,8 +115,7 @@ func _rebuild_ui() -> void:
 	header.add_child(title_box)
 	title_box.add_child(_label("꾹꾹이 고철 생산기", 26, Color("#f4ddb2")))
 	title_box.add_child(_label("주민 배치 · 자동 생산 · 캣닢 부스터", 13, Color("#9eaa9f")))
-	var close := _button("닫기", "close")
-	close.custom_minimum_size = Vector2(76, 38)
+	var close := _close_button()
 	close.pressed.connect(func(): ui_layer.queue_free())
 	header.add_child(close)
 	var workers: int = GameState.get_active_scratcher_workers()
@@ -154,21 +155,27 @@ func _rebuild_ui() -> void:
 	resident_box.add_theme_constant_override("separation", 8)
 	resident_margin.add_child(resident_box)
 	resident_box.add_child(_label("주민 배치", 16, Color("#e3decf")))
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 152 if compact and not narrow else 230)
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	resident_box.add_child(scroll)
-	var grid := GridContainer.new()
-	grid.columns = 1 if narrow else (2 if compact else 3)
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 8)
-	scroll.add_child(grid)
-	for index in range(GameState.resident_cat_ids.size()):
-		grid.add_child(_worker_slot_button(index, slots))
 	if GameState.resident_cat_ids.is_empty():
-		grid.add_child(_label("구출한 주민이 없습니다.", 15, Color("#8f978f")))
+		resident_box.add_child(_empty_resident_state(
+			"구출한 주민이 없습니다.",
+			"도시에서 주민을 구출해 함께 탈출하면 배치할 수 있습니다.",
+			compact
+		))
+	else:
+		var scroll := ScrollContainer.new()
+		scroll.custom_minimum_size = Vector2(0, 152 if compact and not narrow else 230)
+		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		resident_box.add_child(scroll)
+		var grid := GridContainer.new()
+		grid.columns = 1 if narrow else (2 if compact else 3)
+		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_theme_constant_override("h_separation", 8)
+		grid.add_theme_constant_override("v_separation", 8)
+		scroll.add_child(grid)
+		for index in range(GameState.resident_cat_ids.size()):
+			grid.add_child(_worker_slot_button(index, slots))
 
 	var operations := PanelContainer.new()
 	operations.custom_minimum_size = Vector2(0 if narrow else (230 if compact else 252), 0)
@@ -185,10 +192,6 @@ func _rebuild_ui() -> void:
 	operations_margin.add_child(actions)
 	actions.add_child(_label("시설 운용", 16, Color("#ead7ad")))
 	actions.add_child(_label("주민 카드를 눌러 작업자를 배치하거나 해제합니다.", 12, Color("#9fb0a7")))
-	var collect := _button("진행 정산", "collect")
-	collect.custom_minimum_size = Vector2(0, 38)
-	collect.pressed.connect(_collect_progress)
-	actions.add_child(collect)
 	var boost_remaining: int = GameState.get_catnip_boost_remaining()
 	var boost := _button(
 		"부스터 %02d:%02d" % [boost_remaining / 60, boost_remaining % 60]
@@ -237,19 +240,16 @@ func _worker_slot(index: int, active_workers: int, slots: int) -> PanelContainer
 	return panel
 
 
-func _collect_progress() -> void:
-	GameState.process_shelter_progress()
-	_rebuild_ui()
-
-
 func _worker_slot_button(index: int, slots: int) -> Button:
 	var button := Button.new()
 	button.custom_minimum_size = Vector2(176, 76)
 	var resident_id := ""
 	if index < GameState.resident_cat_ids.size():
 		resident_id = str(GameState.resident_cat_ids[index])
+	button.name = "ResidentCard_%s" % (resident_id if not resident_id.is_empty() else "Empty")
 	var active := not resident_id.is_empty() and GameState.assigned_worker_ids.has(resident_id)
 	var available := active or GameState.assigned_worker_ids.size() < slots
+	var trait_data: Dictionary = GameState.get_resident_trait(resident_id) if not resident_id.is_empty() else {}
 	var bg := Color(0.035, 0.04, 0.033, 0.92)
 	var border := Color("#80b887") if active else (Color("#635847") if available else Color("#333333"))
 	button.add_theme_stylebox_override("normal", _panel_style(bg, border))
@@ -257,18 +257,26 @@ func _worker_slot_button(index: int, slots: int) -> Button:
 	button.add_theme_stylebox_override("pressed", _panel_style(bg.darkened(0.05), Color("#f0d16f") if available else border))
 	button.add_theme_font_override("font", FONT)
 	button.add_theme_font_size_override("font_size", 13)
-	button.icon = UI_ICONS.get_icon("resident", 42, Color("#dfc98f"))
+	button.icon = (
+		RESIDENT_PORTRAITS.get_portrait(int(trait_data.get("portrait_index", 0)))
+		if not resident_id.is_empty()
+		else UI_ICONS.get_icon("resident", 42, Color("#625f56"))
+	)
 	button.expand_icon = true
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.disabled = not available or resident_id.is_empty()
-	var trait_data: Dictionary = GameState.get_resident_trait(resident_id) if not resident_id.is_empty() else {}
+	var display_name := str(trait_data.get("display_name", "이름 없는 주민"))
 	if active:
-		button.text = "%s · %s\n작업 중  x%.2f" % [resident_id, trait_data.get("name", ""), trait_data.get("kneading", 1.0)]
+		button.text = "%s · %s\n작업 중 · 꾹꾹이 x%.2f" % [
+			display_name,
+			trait_data.get("name", ""),
+			trait_data.get("kneading", 1.0),
+		]
 	elif resident_id.is_empty():
 		button.text = "빈 주민 슬롯"
 	else:
 		button.text = "%s · %s\n꾹꾹이 x%.2f  캣닢 x%.2f" % [
-			resident_id,
+			display_name,
 			trait_data.get("name", ""),
 			trait_data.get("kneading", 1.0),
 			trait_data.get("catnip", 1.0),
@@ -280,17 +288,20 @@ func _worker_slot_button(index: int, slots: int) -> Button:
 
 func _toggle_worker(resident_id: String) -> void:
 	GameState.toggle_worker_assignment(resident_id)
+	GameState.save_persistent_state()
 	get_tree().call_group("shelter_resident_host", "refresh_shelter_residents", false)
 	_rebuild_ui()
 
 
 func _upgrade() -> void:
 	if GameState.try_upgrade_scratcher_bank():
+		GameState.save_persistent_state()
 		_rebuild_ui()
 
 
 func _activate_boost() -> void:
 	if GameState.activate_catnip_boost():
+		GameState.save_persistent_state()
 		_rebuild_ui()
 
 
@@ -308,6 +319,51 @@ func _button(text: String, icon_name := "") -> Button:
 	button.add_theme_stylebox_override("pressed", _panel_style(Color(0.12, 0.085, 0.04, 0.98), Color("#f0c463")))
 	button.add_theme_stylebox_override("disabled", _panel_style(Color(0.03, 0.034, 0.032, 0.72), Color("#38413c")))
 	return button
+
+
+func _close_button() -> Button:
+	var button := _button("", "close")
+	button.name = "CloseButton"
+	button.custom_minimum_size = Vector2(40, 40)
+	button.icon = UI_ICONS.get_icon("close", 24, Color("#dce6df"))
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.tooltip_text = "닫기"
+	button.focus_mode = Control.FOCUS_NONE
+	return button
+
+
+func _empty_resident_state(title: String, description: String, compact: bool) -> Control:
+	var panel := PanelContainer.new()
+	panel.name = "ScratcherEmptyState"
+	panel.custom_minimum_size = Vector2(0, 138 if compact else 190)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.024, 0.021, 0.76), Color("#35483e")))
+	var center := CenterContainer.new()
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.add_child(center)
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 7)
+	center.add_child(box)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(44, 44)
+	icon.texture = UI_ICONS.get_icon("resident", 48, Color("#667a70"))
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	box.add_child(icon)
+	var title_label := _label(title, 15, Color("#b5c0ba"))
+	title_label.name = "EmptyStateTitle"
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	box.add_child(title_label)
+	var description_label := _label(description, 11, Color("#718078"))
+	description_label.name = "EmptyStateDescription"
+	description_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	description_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	box.add_child(description_label)
+	return panel
 
 
 func _summary_card(title: String, value: String, compact: bool) -> Control:
