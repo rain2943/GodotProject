@@ -63,6 +63,7 @@ var melee_button: Button
 var dash_button: Button
 var reload_button: Button
 var flashlight_button: Button
+var interact_button: Button
 var current_interactable: Node3D
 var enemies: Array[CharacterBody3D] = []
 var floor_cells: Array[Vector2i] = []
@@ -96,6 +97,7 @@ var roll_direction := Vector3.ZERO
 var touch_stick: Control
 var touch_knob: Control
 var touch_id := -1
+var fire_touch_id := -1
 var touch_origin := Vector2.ZERO
 var touch_vector := Vector2.ZERO
 var fatigue := 0.0
@@ -184,6 +186,15 @@ func _physics_process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if inventory_ui != null and bool(inventory_ui.call("is_open")):
+		if (
+			event is InputEventKey
+			and event.pressed
+			and not event.echo
+			and event.keycode in [KEY_ESCAPE, KEY_I, KEY_B]
+		):
+			inventory_ui.call("toggle")
+		return
 	if event is InputEventKey and not event.echo:
 		if event.keycode == KEY_E and event.pressed:
 			_interact()
@@ -197,6 +208,12 @@ func _input(event: InputEvent) -> void:
 			_show_status("1층 출구에서 나갈 수 있습니다.")
 	elif event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
+		if (
+			DisplayServer.is_touchscreen_available()
+			and mouse_event.device == InputEvent.DEVICE_ID_EMULATION
+		):
+			get_viewport().set_input_as_handled()
+			return
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_event.pressed:
 				if laser_aim_held:
@@ -213,20 +230,110 @@ func _input(event: InputEvent) -> void:
 				mouse_fire_held = false
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
+		if touch.pressed and _is_inventory_button_at(touch.position):
+			inventory_ui.call("toggle")
+			get_viewport().set_input_as_handled()
+			return
+		if _handle_mobile_action_touch(touch):
+			get_viewport().set_input_as_handled()
+			return
 		if touch.pressed and touch.position.x < get_viewport().get_visible_rect().size.x * 0.5:
-			touch_id = touch.index
-			touch_origin = touch.position
-			touch_vector = Vector2.ZERO
-			touch_stick.position = touch_origin - touch_stick.size * 0.5
+			if touch_id == -1:
+				touch_id = touch.index
+				touch_origin = touch.position
+				touch_vector = Vector2.ZERO
+				touch_stick.position = touch_origin - touch_stick.size * 0.5
+				get_viewport().set_input_as_handled()
 		elif not touch.pressed and touch.index == touch_id:
 			touch_id = -1
 			touch_vector = Vector2.ZERO
 			touch_knob.position = Vector2(40, 40)
-	elif event is InputEventScreenDrag and event.index == touch_id:
+			get_viewport().set_input_as_handled()
+	elif event is InputEventScreenDrag:
+		if event.index == fire_touch_id:
+			var drag := event as InputEventScreenDrag
+			if not fire_button.get_global_rect().grow(28.0).has_point(drag.position):
+				fire_touch_id = -1
+				fire_button_held = false
+			get_viewport().set_input_as_handled()
+			return
+		if event.index != touch_id:
+			return
 		var radius := touch_stick.size.x * 0.34
 		var offset: Vector2 = (event.position - touch_origin).limit_length(radius)
 		touch_vector = offset / radius
 		touch_knob.position = Vector2(40, 40) + offset
+		get_viewport().set_input_as_handled()
+
+
+func _mobile_button_contains(button: Button, screen_position: Vector2) -> bool:
+	return (
+		button != null
+		and button.visible
+		and not button.disabled
+		and button.get_global_rect().has_point(screen_position)
+	)
+
+
+func _is_inventory_button_at(screen_position: Vector2) -> bool:
+	if inventory_ui == null or bool(inventory_ui.call("is_open")):
+		return false
+	var button := inventory_ui.get_node_or_null("InventoryButton") as Button
+	return button != null and button.visible and button.get_global_rect().has_point(screen_position)
+
+
+func _release_mobile_held_actions() -> void:
+	fire_touch_id = -1
+	fire_button_held = false
+
+
+func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
+	if not touch.pressed:
+		if touch.index == fire_touch_id:
+			fire_touch_id = -1
+			fire_button_held = false
+			return true
+		return false
+	if _mobile_button_contains(fire_button, touch.position):
+		if fire_touch_id == -1:
+			fire_touch_id = touch.index
+			fire_button_held = true
+			_fire_at_nearest_enemy()
+		return true
+	if _mobile_button_contains(melee_button, touch.position):
+		_try_melee_forward()
+		return true
+	if _mobile_button_contains(dash_button, touch.position):
+		_try_start_roll()
+		return true
+	if _mobile_button_contains(interact_button, touch.position):
+		_interact()
+		return true
+	if _mobile_button_contains(reload_button, touch.position):
+		_start_reload()
+		return true
+	if _mobile_button_contains(flashlight_button, touch.position):
+		var enabled := not flashlight_button.button_pressed
+		flashlight_button.set_pressed_no_signal(enabled)
+		_on_flashlight_toggled(enabled)
+		return true
+	return false
+
+
+func _on_inventory_open_state_changed(is_open: bool) -> void:
+	if not is_open:
+		return
+	_release_mobile_held_actions()
+	mouse_fire_held = false
+	touch_vector = Vector2.ZERO
+	if is_instance_valid(player):
+		player.velocity = Vector3.ZERO
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		_release_mobile_held_actions()
+		mouse_fire_held = false
 
 
 func take_damage(amount: int) -> void:
@@ -353,6 +460,7 @@ func _update_weapon_visual() -> void:
 
 
 func _build_interface() -> void:
+	var touch_enabled := DisplayServer.is_touchscreen_available()
 	var canvas := CanvasLayer.new()
 	canvas.name = "BuildingHUD"
 	canvas.layer = 3
@@ -372,6 +480,7 @@ func _build_interface() -> void:
 	inventory_ui.connect("weapon_mods_changed", _on_inventory_weapon_mods_changed)
 	inventory_ui.connect("weapon_equipped", _on_inventory_weapon_equipped)
 	inventory_ui.connect("weapon_unequipped", _on_inventory_weapon_unequipped)
+	inventory_ui.connect("open_state_changed", _on_inventory_open_state_changed)
 	var panel := PanelContainer.new()
 	panel.position = Vector2(18, 18)
 	panel.size = Vector2(332, 104)
@@ -477,11 +586,12 @@ func _build_interface() -> void:
 	fire_button.icon = UI_ICONS.get_icon("weapon", 36, Color("#ffd29a"))
 	fire_button.expand_icon = true
 	fire_button.add_theme_font_override("font", FONT)
-	fire_button.button_down.connect(func():
-		fire_button_held = true
-		_fire_at_nearest_enemy()
-	)
-	fire_button.button_up.connect(func(): fire_button_held = false)
+	if not touch_enabled:
+		fire_button.button_down.connect(func():
+			fire_button_held = true
+			_fire_at_nearest_enemy()
+		)
+		fire_button.button_up.connect(func(): fire_button_held = false)
 	canvas.add_child(fire_button)
 	_build_elevator_menu(canvas)
 	melee_button = Button.new()
@@ -493,9 +603,10 @@ func _build_interface() -> void:
 	melee_button.icon = UI_ICONS.get_icon("melee", 36, Color("#dbe9df"))
 	melee_button.expand_icon = true
 	melee_button.add_theme_font_override("font", FONT)
-	melee_button.pressed.connect(_try_melee_forward)
+	if not touch_enabled:
+		melee_button.pressed.connect(_try_melee_forward)
 	canvas.add_child(melee_button)
-	var interact_button := Button.new()
+	interact_button = Button.new()
 	interact_button.name = "InteractButton"
 	interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	interact_button.position = Vector2(-496, -128)
@@ -504,7 +615,8 @@ func _build_interface() -> void:
 	interact_button.icon = UI_ICONS.get_icon("interact", 36, Color("#c7e2d4"))
 	interact_button.expand_icon = true
 	interact_button.add_theme_font_override("font", FONT)
-	interact_button.pressed.connect(_interact)
+	if not touch_enabled:
+		interact_button.pressed.connect(_interact)
 	canvas.add_child(interact_button)
 	dash_button = Button.new()
 	dash_button.name = "DashButton"
@@ -515,7 +627,8 @@ func _build_interface() -> void:
 	dash_button.icon = UI_ICONS.get_icon("dash", 36, Color("#d8e5de"))
 	dash_button.expand_icon = true
 	dash_button.add_theme_font_override("font", FONT)
-	dash_button.pressed.connect(_try_start_roll)
+	if not touch_enabled:
+		dash_button.pressed.connect(_try_start_roll)
 	canvas.add_child(dash_button)
 	reload_button = Button.new()
 	reload_button.name = "ReloadButton"
@@ -526,7 +639,8 @@ func _build_interface() -> void:
 	reload_button.icon = UI_ICONS.get_icon("reload", 34, Color("#d8e5de"))
 	reload_button.expand_icon = true
 	reload_button.add_theme_font_override("font", FONT)
-	reload_button.pressed.connect(_start_reload)
+	if not touch_enabled:
+		reload_button.pressed.connect(_start_reload)
 	canvas.add_child(reload_button)
 	flashlight_button = Button.new()
 	flashlight_button.name = "FlashlightButton"
@@ -538,7 +652,8 @@ func _build_interface() -> void:
 	flashlight_button.expand_icon = true
 	flashlight_button.toggle_mode = true
 	flashlight_button.add_theme_font_override("font", FONT)
-	flashlight_button.toggled.connect(_on_flashlight_toggled)
+	if not touch_enabled:
+		flashlight_button.toggled.connect(_on_flashlight_toggled)
 	canvas.add_child(flashlight_button)
 	touch_stick = Panel.new()
 	touch_stick.name = "TouchStick"

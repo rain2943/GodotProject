@@ -770,7 +770,8 @@ func _build_interface() -> void:
 	interact_button.expand_icon = true
 	interact_button.add_theme_font_override("font", FONT)
 	interact_button.add_theme_font_size_override("font_size", 17)
-	interact_button.pressed.connect(_interact)
+	if not DisplayServer.is_touchscreen_available():
+		interact_button.pressed.connect(_interact)
 	canvas.add_child(interact_button)
 	dash_button = Button.new()
 	dash_button.name = "DashButton"
@@ -782,7 +783,8 @@ func _build_interface() -> void:
 	dash_button.expand_icon = true
 	dash_button.add_theme_font_override("font", FONT)
 	dash_button.add_theme_font_size_override("font_size", 17)
-	dash_button.pressed.connect(_try_start_roll)
+	if not DisplayServer.is_touchscreen_available():
+		dash_button.pressed.connect(_try_start_roll)
 	dash_button.visible = DisplayServer.is_touchscreen_available()
 	canvas.add_child(dash_button)
 	inventory_ui = INVENTORY_UI_SCRIPT.new()
@@ -1939,20 +1941,63 @@ func _input(event: InputEvent) -> void:
 			_try_start_roll()
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
+		if touch.pressed and _is_inventory_button_at(touch.position):
+			inventory_ui.call("toggle")
+			get_viewport().set_input_as_handled()
+			return
+		if not _ui_blocks_player() and _handle_mobile_action_touch(touch):
+			get_viewport().set_input_as_handled()
+			return
 		if touch.pressed and touch.position.x < get_viewport().get_visible_rect().size.x * 0.55:
-			touch_id = touch.index
-			touch_origin = touch.position
-			touch_vector = Vector2.ZERO
-			touch_stick.position = touch_origin - touch_stick.size * 0.5
+			if touch_id == -1:
+				touch_id = touch.index
+				touch_origin = touch.position
+				touch_vector = Vector2.ZERO
+				touch_stick.position = touch_origin - touch_stick.size * 0.5
+				get_viewport().set_input_as_handled()
 		elif not touch.pressed and touch.index == touch_id:
 			touch_id = -1
 			touch_vector = Vector2.ZERO
 			touch_knob.position = Vector2(40, 40)
+			get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag and event.index == touch_id:
 		var radius := touch_stick.size.x * 0.34
 		var offset: Vector2 = (event.position - touch_origin).limit_length(radius)
 		touch_vector = offset / radius
 		touch_knob.position = Vector2(40, 40) + offset
+		get_viewport().set_input_as_handled()
+
+
+func _is_inventory_button_at(screen_position: Vector2) -> bool:
+	if inventory_ui == null or bool(inventory_ui.call("is_open")):
+		return false
+	var button := inventory_ui.get_node_or_null("InventoryButton") as Button
+	return button != null and button.visible and button.get_global_rect().has_point(screen_position)
+
+
+func _mobile_button_contains(button: Button, screen_position: Vector2) -> bool:
+	return (
+		button != null
+		and button.visible
+		and not button.disabled
+		and button.get_global_rect().has_point(screen_position)
+	)
+
+
+func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
+	if not touch.pressed:
+		return false
+	if _mobile_button_contains(dash_button, touch.position):
+		_try_start_roll()
+		if DisplayServer.is_touchscreen_available():
+			Input.vibrate_handheld(24)
+		return true
+	if _mobile_button_contains(interact_button, touch.position):
+		_interact()
+		if DisplayServer.is_touchscreen_available():
+			Input.vibrate_handheld(16)
+		return true
+	return false
 
 
 func _build_roll_audio() -> void:

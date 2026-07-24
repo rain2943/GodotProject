@@ -2288,6 +2288,7 @@ func _get_loot_glow_texture() -> ImageTexture:
 
 func _build_weapon_hud() -> void:
 	var font := load("res://assets/fonts/Pretendard-Regular.otf") as Font
+	var touch_enabled := DisplayServer.is_touchscreen_available()
 	pickup_panel = PanelContainer.new()
 	pickup_panel.name = "PickupPrompt"
 	pickup_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -2525,8 +2526,9 @@ func _build_weapon_hud() -> void:
 	fire_button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.16, 0.055, 0.04, 0.92), Color("#d98155"), 40))
 	fire_button.add_theme_stylebox_override("hover", _make_panel_style(Color(0.24, 0.075, 0.045, 0.94), Color("#e99a67"), 40))
 	fire_button.add_theme_stylebox_override("pressed", _make_panel_style(Color(0.42, 0.12, 0.055, 0.96), Color("#ffc078"), 40))
-	fire_button.button_down.connect(_on_fire_button_down)
-	fire_button.button_up.connect(_on_fire_button_up)
+	if not touch_enabled:
+		fire_button.button_down.connect(_on_fire_button_down)
+		fire_button.button_up.connect(_on_fire_button_up)
 	fire_button.visible = false
 	$HUD.add_child(fire_button)
 
@@ -2549,8 +2551,9 @@ func _build_weapon_hud() -> void:
 	melee_button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.055, 0.075, 0.07, 0.92), Color("#9eb6a5"), 40))
 	melee_button.add_theme_stylebox_override("hover", _make_panel_style(Color(0.075, 0.11, 0.095, 0.94), Color("#c4d6c8"), 40))
 	melee_button.add_theme_stylebox_override("pressed", _make_panel_style(Color(0.12, 0.19, 0.15, 0.96), Color("#e5f0e7"), 40))
-	melee_button.pressed.connect(_on_melee_button_pressed)
-	melee_button.visible = DisplayServer.is_touchscreen_available()
+	if not touch_enabled:
+		melee_button.pressed.connect(_on_melee_button_pressed)
+	melee_button.visible = touch_enabled
 	$HUD.add_child(melee_button)
 
 	dash_button = Button.new()
@@ -2572,8 +2575,9 @@ func _build_weapon_hud() -> void:
 	dash_button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.045, 0.065, 0.08, 0.92), Color("#82a8b8"), 40))
 	dash_button.add_theme_stylebox_override("hover", _make_panel_style(Color(0.06, 0.1, 0.13, 0.94), Color("#add0dc"), 40))
 	dash_button.add_theme_stylebox_override("pressed", _make_panel_style(Color(0.08, 0.17, 0.22, 0.96), Color("#d8f2f7"), 40))
-	dash_button.pressed.connect(_on_dash_button_pressed)
-	dash_button.visible = DisplayServer.is_touchscreen_available()
+	if not touch_enabled:
+		dash_button.pressed.connect(_on_dash_button_pressed)
+	dash_button.visible = touch_enabled
 	$HUD.add_child(dash_button)
 
 	_build_mobile_utility_buttons(font)
@@ -2614,21 +2618,25 @@ func _build_weapon_hud() -> void:
 func _build_mobile_utility_buttons(font: Font) -> void:
 	var touch_enabled := DisplayServer.is_touchscreen_available()
 	mobile_context_button = _make_mobile_utility_button("ContextButton", "줍기", "loot", font, -108.0)
-	mobile_context_button.button_down.connect(_on_mobile_context_button_down)
-	mobile_context_button.button_up.connect(_on_mobile_context_button_up)
+	if not touch_enabled:
+		mobile_context_button.button_down.connect(_on_mobile_context_button_down)
+		mobile_context_button.button_up.connect(_on_mobile_context_button_up)
 	mobile_context_button.visible = false
 
 	mobile_reload_button = _make_mobile_utility_button("ReloadButton", "장전", "reload", font, -198.0)
-	mobile_reload_button.pressed.connect(_reload_ak47)
+	if not touch_enabled:
+		mobile_reload_button.pressed.connect(_reload_ak47)
 	mobile_reload_button.visible = touch_enabled
 
 	mobile_flashlight_button = _make_mobile_utility_button("FlashlightButton", "Flash", "flashlight", font, -288.0)
 	mobile_flashlight_button.toggle_mode = true
-	mobile_flashlight_button.toggled.connect(_on_mobile_flashlight_toggled)
+	if not touch_enabled:
+		mobile_flashlight_button.toggled.connect(_on_mobile_flashlight_toggled)
 	mobile_flashlight_button.visible = touch_enabled
 
 	mobile_map_button = _make_mobile_utility_button("MapButton", "Map", "map", font, -378.0)
-	mobile_map_button.pressed.connect(_on_mobile_map_pressed)
+	if not touch_enabled:
+		mobile_map_button.pressed.connect(_on_mobile_map_pressed)
 	mobile_map_button.visible = touch_enabled
 
 	mobile_medkit_button = _make_mobile_utility_button_left(
@@ -2637,7 +2645,8 @@ func _build_mobile_utility_buttons(font: Font) -> void:
 		"medkit",
 		font
 	)
-	mobile_medkit_button.pressed.connect(_use_quick_medkit)
+	if not touch_enabled:
+		mobile_medkit_button.pressed.connect(_use_quick_medkit)
 	mobile_medkit_button.visible = true
 	_update_medkit_button()
 
@@ -2749,10 +2758,7 @@ func _on_mobile_flashlight_toggled(enabled: bool) -> void:
 
 
 func _on_mobile_map_pressed() -> void:
-	fire_button_held = false
-	mouse_fire_held = false
-	field_interaction_touch_held = false
-	pickup_touch_held = false
+	_release_mobile_held_actions()
 	if mobile_context_button != null:
 		mobile_context_button.visible = false
 	if _is_inventory_open():
@@ -3319,12 +3325,10 @@ func _on_inventory_open_state_changed(is_open: bool) -> void:
 	if not DisplayServer.is_touchscreen_available():
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if is_open else Input.MOUSE_MODE_HIDDEN)
 	if is_open:
-		fire_button_held = false
+		_release_mobile_held_actions()
 		mouse_fire_held = false
 		laser_aim_held = false
-		pickup_touch_held = false
 		pickup_keyboard_held = false
-		field_interaction_touch_held = false
 		field_interaction_keyboard_held = false
 		touch_vector = Vector2.ZERO
 		if mobile_flashlight_button:
@@ -6559,6 +6563,21 @@ func _mobile_button_contains(button: Button, screen_position: Vector2) -> bool:
 	)
 
 
+func _is_emulated_touch_mouse_event(event: InputEventMouseButton) -> bool:
+	return (
+		DisplayServer.is_touchscreen_available()
+		and event.device == InputEvent.DEVICE_ID_EMULATION
+	)
+
+
+func _release_mobile_held_actions() -> void:
+	fire_touch_id = -1
+	context_touch_id = -1
+	fire_button_held = false
+	field_interaction_touch_held = false
+	pickup_touch_held = false
+
+
 func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 	if not touch.pressed:
 		var released_action := false
@@ -6577,6 +6596,8 @@ func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
 	if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
 		return false
 	if _mobile_button_contains(fire_button, touch.position):
+		if fire_touch_id != -1:
+			return true
 		fire_touch_id = touch.index
 		_on_fire_button_down()
 		return true
@@ -6667,6 +6688,9 @@ func _input(event: InputEvent) -> void:
 		if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
 			return
 		var mouse_event := event as InputEventMouseButton
+		if _is_emulated_touch_mouse_event(mouse_event):
+			get_viewport().set_input_as_handled()
+			return
 		if _is_inventory_button_at(mouse_event.position):
 			return
 		if fire_button and fire_button.visible and fire_button.get_global_rect().has_point(mouse_event.position):
@@ -6687,17 +6711,36 @@ func _input(event: InputEvent) -> void:
 				touch_vector = Vector2.ZERO
 				touch_stick.visible = true
 				touch_stick.position = touch_origin - touch_stick.size * 0.5
+				get_viewport().set_input_as_handled()
 		else:
 			if touch.index == touch_id:
 				touch_id = -1
 				touch_vector = Vector2.ZERO
 				touch_knob.position = (touch_stick.size - touch_knob.size) * 0.5
-	elif event is InputEventScreenDrag and event.index == touch_id:
+				get_viewport().set_input_as_handled()
+	elif event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
+		if drag.index == fire_touch_id:
+			var fire_release_rect := fire_button.get_global_rect().grow(28.0)
+			if not fire_release_rect.has_point(drag.position):
+				fire_touch_id = -1
+				_on_fire_button_up()
+			get_viewport().set_input_as_handled()
+			return
+		if drag.index == context_touch_id:
+			var context_release_rect := mobile_context_button.get_global_rect().grow(28.0)
+			if not context_release_rect.has_point(drag.position):
+				context_touch_id = -1
+				_on_mobile_context_button_up()
+			get_viewport().set_input_as_handled()
+			return
+		if drag.index != touch_id:
+			return
 		var radius := touch_stick.size.x * 0.34
 		var offset := (drag.position - touch_origin).limit_length(radius)
 		touch_vector = offset / radius
 		touch_knob.position = (touch_stick.size - touch_knob.size) * 0.5 + offset
+		get_viewport().set_input_as_handled()
 
 
 func _handle_combat_mouse_button(mouse_event: InputEventMouseButton) -> void:
@@ -6721,6 +6764,12 @@ func _handle_combat_mouse_button(mouse_event: InputEventMouseButton) -> void:
 
 func _unhandled_input(_event: InputEvent) -> void:
 	pass
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		_release_mobile_held_actions()
+		mouse_fire_held = false
 
 
 func _exit_tree() -> void:
