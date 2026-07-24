@@ -57,9 +57,12 @@ var equipment_inventory: Dictionary = {
 	"riot_vest": 0,
 	"patched_helmet": 0,
 	"tactical_helmet": 0,
+	"patched_sneakers": 0,
+	"tactical_boots": 0,
 }
 var equipped_body_armor_id: String = ""
 var equipped_head_armor_id: String = ""
+var equipped_footwear_id: String = ""
 var returning_from_shelter: bool = false
 var world_time_hours: float = 9.0
 var equipped_weapon_id: String = "ak47"
@@ -112,19 +115,41 @@ const ARTISAN_PITY_LIMIT := 10
 const EQUIPMENT_DEFINITIONS := {
 	"scav_vest": {
 		"display_name": "누더기 방탄 조끼", "slot": "body", "damage_reduction": 0.12,
-		"weight": 3.8, "icon": "armor", "description": "얇은 철판을 덧댄 경량 조끼. 받는 피해를 12% 줄입니다.",
+		"weight": 3.8, "icon": "armor",
+		"texture_path": "res://assets/equipment/generated/scav_vest.png",
+		"description": "얇은 철판을 덧댄 경량 조끼. 받는 피해를 12% 줄입니다.",
 	},
 	"riot_vest": {
 		"display_name": "진압대 방탄 조끼", "slot": "body", "damage_reduction": 0.22,
-		"weight": 6.2, "icon": "armor", "description": "무겁지만 튼튼한 진압 장비. 받는 피해를 22% 줄입니다.",
+		"weight": 6.2, "icon": "armor",
+		"texture_path": "res://assets/equipment/generated/riot_vest.png",
+		"description": "무겁지만 튼튼한 진압 장비. 받는 피해를 22% 줄입니다.",
 	},
 	"patched_helmet": {
 		"display_name": "기워 붙인 헬멧", "slot": "head", "damage_reduction": 0.08,
-		"weight": 1.4, "icon": "helmet", "description": "금이 간 안전모를 보강했습니다. 받는 피해를 8% 줄입니다.",
+		"weight": 1.4, "icon": "helmet",
+		"texture_path": "res://assets/equipment/generated/patched_helmet.png",
+		"description": "금이 간 안전모를 보강했습니다. 받는 피해를 8% 줄입니다.",
 	},
 	"tactical_helmet": {
 		"display_name": "전술 방탄 헬멧", "slot": "head", "damage_reduction": 0.15,
-		"weight": 2.1, "icon": "helmet", "description": "군용 내피가 남아 있는 헬멧. 받는 피해를 15% 줄입니다.",
+		"weight": 2.1, "icon": "helmet",
+		"texture_path": "res://assets/equipment/generated/tactical_helmet.png",
+		"description": "군용 내피가 남아 있는 헬멧. 받는 피해를 15% 줄입니다.",
+	},
+	"patched_sneakers": {
+		"display_name": "기워 붙인 운동화", "slot": "feet",
+		"move_speed_bonus": 0.06, "stamina_cost_multiplier": 0.92,
+		"weight": 0.7, "icon": "footwear",
+		"texture_path": "res://assets/equipment/generated/patched_sneakers.png",
+		"description": "가볍게 기워 발소리와 무게를 줄인 생존용 운동화입니다.",
+	},
+	"tactical_boots": {
+		"display_name": "경량 전술화", "slot": "feet",
+		"move_speed_bonus": 0.03, "stamina_cost_multiplier": 0.78,
+		"weight": 1.4, "icon": "footwear",
+		"texture_path": "res://assets/equipment/generated/tactical_boots.png",
+		"description": "발목을 잡아주면서도 유연한 밑창을 사용한 경량 전술화입니다.",
 	},
 }
 const PLAYER_LEVEL_REWARDS := {
@@ -387,7 +412,13 @@ func add_equipment(equipment_id: String, amount: int = 1) -> bool:
 
 
 func get_equipped_equipment(slot: String) -> String:
-	return equipped_head_armor_id if slot == "head" else equipped_body_armor_id
+	match slot:
+		"head":
+			return equipped_head_armor_id
+		"feet":
+			return equipped_footwear_id
+		_:
+			return equipped_body_armor_id
 
 
 func equip_equipment(equipment_id: String) -> bool:
@@ -395,7 +426,7 @@ func equip_equipment(equipment_id: String) -> bool:
 	if definition.is_empty() or get_equipment_count(equipment_id) <= 0:
 		return false
 	var slot := str(definition.get("slot", ""))
-	if not ["body", "head"].has(slot):
+	if not ["body", "head", "feet"].has(slot):
 		return false
 	var previous := get_equipped_equipment(slot)
 	if previous == equipment_id:
@@ -403,10 +434,13 @@ func equip_equipment(equipment_id: String) -> bool:
 	equipment_inventory[equipment_id] = get_equipment_count(equipment_id) - 1
 	if not previous.is_empty():
 		equipment_inventory[previous] = get_equipment_count(previous) + 1
-	if slot == "head":
-		equipped_head_armor_id = equipment_id
-	else:
-		equipped_body_armor_id = equipment_id
+	match slot:
+		"head":
+			equipped_head_armor_id = equipment_id
+		"feet":
+			equipped_footwear_id = equipment_id
+		_:
+			equipped_body_armor_id = equipment_id
 	return true
 
 
@@ -415,16 +449,19 @@ func unequip_equipment(slot: String) -> bool:
 	if equipped_id.is_empty():
 		return false
 	equipment_inventory[equipped_id] = get_equipment_count(equipped_id) + 1
-	if slot == "head":
-		equipped_head_armor_id = ""
-	else:
-		equipped_body_armor_id = ""
+	match slot:
+		"head":
+			equipped_head_armor_id = ""
+		"feet":
+			equipped_footwear_id = ""
+		_:
+			equipped_body_armor_id = ""
 	return true
 
 
 func get_equipment_damage_multiplier() -> float:
 	var reduction := 0.0
-	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id]:
+	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
 		if equipment_id.is_empty():
 			continue
 		var definition := get_equipment_definition(equipment_id)
@@ -1034,7 +1071,20 @@ func get_max_stamina() -> float:
 
 
 func get_move_speed_multiplier() -> float:
-	return 1.0 + float(player_stat_levels.get("move_speed", 0)) * 0.025 + float(training_levels.get("agility", 0)) * 0.02
+	var progression_multiplier := 1.0 + float(player_stat_levels.get("move_speed", 0)) * 0.025 + float(training_levels.get("agility", 0)) * 0.02
+	var equipment_bonus := 0.0
+	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
+		if not equipment_id.is_empty():
+			equipment_bonus += float(get_equipment_definition(equipment_id).get("move_speed_bonus", 0.0))
+	return progression_multiplier * (1.0 + equipment_bonus)
+
+
+func get_stamina_cost_multiplier() -> float:
+	var multiplier := 1.0
+	for equipment_id in [equipped_body_armor_id, equipped_head_armor_id, equipped_footwear_id]:
+		if not equipment_id.is_empty():
+			multiplier *= float(get_equipment_definition(equipment_id).get("stamina_cost_multiplier", 1.0))
+	return clampf(multiplier, 0.5, 1.5)
 
 
 func get_stamina_recovery_multiplier() -> float:
@@ -1131,6 +1181,7 @@ func save_persistent_state() -> bool:
 		"equipment_inventory": equipment_inventory,
 		"equipped_body_armor_id": equipped_body_armor_id,
 		"equipped_head_armor_id": equipped_head_armor_id,
+		"equipped_footwear_id": equipped_footwear_id,
 		"weapon_enhancement_levels": weapon_enhancement_levels,
 		"mod_enhancement_levels": mod_enhancement_levels,
 		"equipped_weapon_id": equipped_weapon_id,
@@ -1224,6 +1275,7 @@ func load_persistent_state() -> bool:
 			equipment_inventory[equipment_id] = 0
 	equipped_body_armor_id = str(data.get("equipped_body_armor_id", equipped_body_armor_id))
 	equipped_head_armor_id = str(data.get("equipped_head_armor_id", equipped_head_armor_id))
+	equipped_footwear_id = str(data.get("equipped_footwear_id", equipped_footwear_id))
 	weapon_enhancement_levels = (data.get("weapon_enhancement_levels", weapon_enhancement_levels) as Dictionary).duplicate(true)
 	mod_enhancement_levels = (data.get("mod_enhancement_levels", mod_enhancement_levels) as Dictionary).duplicate(true)
 	equipped_weapon_id = str(data.get("equipped_weapon_id", equipped_weapon_id))
@@ -1333,9 +1385,12 @@ func reset_run() -> void:
 		"riot_vest": 0,
 		"patched_helmet": 0,
 		"tactical_helmet": 0,
+		"patched_sneakers": 0,
+		"tactical_boots": 0,
 	}
 	equipped_body_armor_id = ""
 	equipped_head_armor_id = ""
+	equipped_footwear_id = ""
 	returning_from_shelter = false
 	world_time_hours = 9.0
 	equipped_weapon_id = "ak47"

@@ -8,13 +8,14 @@ const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const GRENADE_PROJECTILE := preload("res://scripts/enemy_grenade.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
-const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/baseball_bat_temp.png")
+const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const DAMAGE_FONT := preload("res://assets/fonts/Pretendard-Regular.otf")
 const DAMAGE_NUMBER_SCRIPT := preload("res://scripts/damage_number.gd")
 const MELEE_SPEED := 4.15
 const PISTOL_SPEED := 2.5
 const PATROL_SPEED := 1.35
 const PATROL_RADIUS := 6.5
+const SQUAD_PATROL_RADIUS := 4.2
 const SCREEN_DIRECTION_NAMES := ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 const ENEMY_ANIMATION_ROOT := "res://assets/enemies/character_5"
 const ENEMY_DIRECTION_STATES := {
@@ -69,6 +70,9 @@ var patrol_origin := Vector3.ZERO
 var patrol_target := Vector3.ZERO
 var patrol_pause := 0.0
 var patrol_repath_time := 0.0
+var squad_id := -1
+var squad_anchor := Vector3.ZERO
+var squad_formation_offset := Vector3.ZERO
 var threat_level := 0.0
 var alerted := false
 var alert_marker_time := 0.0
@@ -148,6 +152,14 @@ func configure(
 
 func set_threat_level(value: float) -> void:
 	threat_level = clampf(value, 0.0, 1.0)
+
+
+func assign_squad(assigned_squad_id: int, assigned_anchor: Vector3, formation_offset: Vector3) -> void:
+	squad_id = assigned_squad_id
+	squad_anchor = assigned_anchor
+	squad_formation_offset = formation_offset
+	patrol_origin = squad_anchor + squad_formation_offset
+	_choose_patrol_target()
 
 
 func set_player_visibility_factor(value: float) -> void:
@@ -687,6 +699,13 @@ func _update_patrol(delta: float) -> void:
 
 
 func _choose_patrol_target() -> void:
+	if squad_id >= 0:
+		var patrol_epoch := int(Time.get_ticks_msec() / 4500)
+		var angle := deg_to_rad(float(posmod(squad_id * 73 + patrol_epoch * 137, 360)))
+		var shared_offset := Vector3(cos(angle), 0.0, sin(angle)) * SQUAD_PATROL_RADIUS
+		patrol_target = squad_anchor + shared_offset + squad_formation_offset
+		patrol_repath_time = 2.4
+		return
 	var angle := randf_range(0.0, TAU)
 	var radius := randf_range(PATROL_RADIUS * 0.35, PATROL_RADIUS)
 	patrol_target = patrol_origin + Vector3(cos(angle), 0.0, sin(angle)) * radius
@@ -694,10 +713,32 @@ func _choose_patrol_target() -> void:
 
 
 func _become_alerted() -> void:
+	var newly_alerted := not alerted
 	alerted = true
 	visual_contact_confirmed = true
 	_update_vision_fan_visual()
 	alert_marker_time = 0.0
+	if newly_alerted and squad_id >= 0:
+		var shared_position := target.global_position if is_instance_valid(target) else global_position
+		for squad_member in get_tree().get_nodes_in_group("raid_enemy"):
+			if (
+				squad_member == self
+				or not is_instance_valid(squad_member)
+				or not squad_member.has_method("receive_squad_alert")
+			):
+				continue
+			if int(squad_member.get("squad_id")) == squad_id:
+				squad_member.call("receive_squad_alert", shared_position)
+
+
+func receive_squad_alert(world_position: Vector3) -> void:
+	if dying or not is_instance_valid(target) or _target_is_in_safe_zone():
+		return
+	last_known_position = world_position
+	pursuit_time = COMBAT_MEMORY_BASE + COMBAT_MEMORY_THREAT_BONUS * threat_level
+	alerted = true
+	visual_contact_confirmed = true
+	_update_vision_fan_visual()
 
 
 func receive_reinforcement_order(world_position: Vector3) -> void:
@@ -872,7 +913,7 @@ func _setup_weapon_visual() -> void:
 	weapon_visual.name = "EquippedWeapon_%s" % weapon_id
 	weapon_visual.texture = _get_weapon_visual_texture()
 	weapon_visual.pixel_size = (
-		0.00072
+		WEAPON_VISUAL_CATALOG.get_world_pixel_size("baseball_bat", 0.00058)
 		if weapon_id == "baseball_bat"
 		else WEAPON_VISUAL_CATALOG.get_world_pixel_size(weapon_id, 0.0042)
 	)
@@ -943,7 +984,7 @@ func _update_weapon_visual() -> void:
 	weapon_visual.flip_h = weapon_id != "baseball_bat" and screen_direction.x < -0.01
 	var source_angle := PI if weapon_visual.flip_h else 0.0
 	weapon_visual.rotation.z = wrapf(screen_direction.angle() - source_angle, -PI, PI)
-	weapon_visual.scale = Vector3.ONE * (0.62 if weapon_id == "baseball_bat" else 1.0)
+	weapon_visual.scale = Vector3.ONE * (0.72 if weapon_id == "baseball_bat" else 1.0)
 	weapon_visual.visible = not dying
 
 

@@ -31,11 +31,15 @@ func _run() -> void:
 	assert(ui.z_index >= 4000, "Inventory must render above the rest of the HUD.")
 	assert(ui.inventory_panel.custom_minimum_size.x <= 560.0, "The default inventory panel must remain compact.")
 	assert(not ui.weapon_panel.visible, "Weapon detail must stay hidden until the weapon is selected.")
-	assert(ui.equipped_grid.get_child_count() == 3, "Only implemented primary, body, and head equipment slots should be visible.")
+	assert(ui.equipped_grid.get_child_count() == 4, "Primary, body, head, and footwear equipment slots should be visible.")
 	for equipment in ui.equipped_grid.get_children():
 		assert(not (equipment as Button).text.contains("하수구"), "Extraction objectives do not belong in equipment.")
 		assert((equipment as Button).text.is_empty(), "Equipment slot labels must not overlap centered icons.")
-		assert((equipment as Button).icon != null, "Every equipment slot must have a readable icon.")
+	for empty_slot_name in ["몸 방어구", "머리 방어구", "신발"]:
+		var empty_slot := ui.equipped_grid.get_node("Equipment_%s" % empty_slot_name) as Button
+		assert(empty_slot != null, "Every empty equipment category needs a dedicated slot.")
+		assert(empty_slot.icon == null, "Empty equipment slots must use text only.")
+		assert(empty_slot.get_child_count() == 1 and (empty_slot.get_child(0) as Label).text == empty_slot_name, "Empty equipment slots must show their category name.")
 	for bag_item in ui.bag_grid.get_children():
 		if bag_item is Button:
 			assert((bag_item as Button).text.is_empty(), "Bag slots must show only an icon and quantity badge.")
@@ -92,6 +96,8 @@ func _run() -> void:
 	var armor_card := ui.bag_grid.get_node("BagItem_scav_vest") as Button
 	assert(armor_card != null, "Looted armor must appear in the bag as an equippable item.")
 	armor_card.pressed.emit()
+	assert(ui.item_detail_description.text.contains("피해 감소 12%"), "Armor details must show the applied damage reduction stat.")
+	assert(ui.item_detail_description.text.contains("무게 3.8kg"), "Armor details must show equipment weight.")
 	ui.item_action_button.pressed.emit()
 	assert(str(state.get("equipped_body_armor_id")) == "scav_vest", "The armor action must equip the selected body armor.")
 	assert(int(state.call("get_equipment_count", "scav_vest")) == 0, "Equipped armor must leave the bag inventory.")
@@ -99,6 +105,18 @@ func _run() -> void:
 	ui.item_action_button.pressed.emit()
 	assert(str(state.get("equipped_body_armor_id")).is_empty(), "The equipped armor slot must support unequip.")
 	assert(int(state.call("get_equipment_count", "scav_vest")) == 1, "Unequipped armor must return to the bag.")
+
+	state.call("add_equipment", "patched_sneakers", 1)
+	ui._refresh_contents()
+	var footwear_card := ui.bag_grid.get_node("BagItem_patched_sneakers") as Button
+	assert(footwear_card != null, "Looted footwear must appear in the bag.")
+	footwear_card.pressed.emit()
+	assert(ui.item_detail_description.text.contains("이동 속도 +6%"), "Footwear details must show movement speed.")
+	assert(ui.item_detail_description.text.contains("대시 스태미나 소모 -8%"), "Footwear details must show stamina cost reduction.")
+	ui.item_action_button.pressed.emit()
+	assert(str(state.get("equipped_footwear_id")) == "patched_sneakers", "Footwear must equip into the feet slot.")
+	assert(is_equal_approx(float(state.call("get_move_speed_multiplier")), 1.06), "Equipped lightweight footwear must increase movement speed.")
+	assert(is_equal_approx(float(state.call("get_stamina_cost_multiplier")), 0.92), "Equipped lightweight footwear must reduce dash stamina cost.")
 
 	ui._hide_weapon_detail()
 	ui._refresh_contents()

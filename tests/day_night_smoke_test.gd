@@ -17,6 +17,12 @@ func _run() -> void:
 	assert(float(main_scene.get("night_intensity")) > 0.9)
 	var enemies: Array = main_scene.get("enemies")
 	assert(enemies.size() == 17)
+	var initial_squad_counts := {}
+	for initial_enemy in enemies:
+		var squad_id := int(initial_enemy.get("squad_id"))
+		initial_squad_counts[squad_id] = int(initial_squad_counts.get(squad_id, 0)) + 1
+	for squad_count in initial_squad_counts.values():
+		assert(int(squad_count) in [2, 3])
 	var initial_spawn_distances: Array[float] = []
 	for initial_enemy in enemies:
 		initial_spawn_distances.append(
@@ -34,7 +40,7 @@ func _run() -> void:
 	main_scene.call("_update_enemy_pressure", 1.0)
 	await process_frame
 	enemies = main_scene.get("enemies")
-	assert(enemies.size() == 18)
+	assert(enemies.size() == 19)
 	var enemy: Node = enemies[0]
 	assert(enemy.get_node_or_null("VisionFan") == null)
 	assert(float(enemy.call("_get_vision_range")) >= 18.0)
@@ -183,7 +189,7 @@ func _run() -> void:
 	main_scene.set("reserve_ammo", 95)
 	main_scene.call("_update_equipment_ui")
 	assert((main_scene.get("equipment_ammo_label") as Label).text.contains("24 / 30"))
-	assert((main_scene.get("equipment_condition_label") as Label).text.contains("완전 탄창 3개 + 낱탄 5발"))
+	assert((main_scene.get("equipment_reserve_ammo_label") as Label).text.contains("예비 95발"))
 	var quick_slots := main_scene.get("quick_slot_buttons") as Array
 	assert(quick_slots[0].text.contains("24/30  +95"))
 	assert(quick_slots[1].text.contains("응급키트"))

@@ -124,39 +124,13 @@ func _run() -> void:
 		)
 		assert(physically_open.distance_to(blocked_cover.global_position) > 0.5)
 		_assert_sealed_landmark(city, playgrounds[0], "UrbanPlaygroundCollision")
-		assert(apartment_cells.size() == 5)
-		assert(get_nodes_in_group("urban_apartment_complex").size() == 1)
-		assert(get_nodes_in_group("apartment_gate").size() == 1)
-		assert(get_nodes_in_group("apartment_portal_site").size() == 1)
+		assert(apartment_cells.is_empty())
+		assert(apartment_origin == Vector2i(-1, -1))
+		assert(get_nodes_in_group("urban_apartment_complex").is_empty())
+		assert(get_nodes_in_group("apartment_gate").is_empty())
+		assert(get_nodes_in_group("apartment_portal_site").is_empty())
 		assert(get_nodes_in_group("apartment_portal_blocker").is_empty())
-		assert(apartment_origin.y == 0)
-		assert(city.get("vertical_roads").has(apartment_origin.x + 2))
 		assert(float(city.call("get_map_limit")) > 210.0)
-		var gate_kinds := {}
-		for gate in get_nodes_in_group("apartment_gate"):
-			gate_kinds[str(gate.get_meta("gate_kind"))] = true
-			assert(bool(gate.get_meta("road_connected")))
-			assert(bool(gate.get_meta("future_portal")))
-			assert(not bool(gate.get_meta("portal_ready")))
-		assert(gate_kinds.has("main_entrance"))
-		var apartment: Node3D = get_nodes_in_group("urban_apartment_complex")[0]
-		assert(apartment.global_position.z < -float(city.call("get_map_limit")))
-		assert(apartment.get_meta("site_size_cells") == Vector2i(5, 1))
-		assert(bool(apartment.get_meta("map_edge_attached")))
-		assert(apartment.is_in_group("camera_occluder"))
-		var apartment_sprite := apartment.get_node("BuildingSprite") as Sprite3D
-		assert(apartment_sprite != null)
-		assert(apartment.get_meta("overlay_focus_local") == Vector3(0.0, 1.6, 31.2))
-		assert(apartment.get_meta("overlay_focus_fade_pixels") == Vector2(32.0, 150.0))
-		var gate_cell: Vector2i = apartment_origin + Vector2i(2, 0)
-		var gate_x: float = (city.call("_cell_center", gate_cell) as Vector3).x
-		var query := PhysicsRayQueryParameters3D.create(
-			Vector3(gate_x, 1.0, -204.0),
-			Vector3(gate_x, 1.0, -216.0),
-			1
-		)
-		var gate_hit := city.get_world_3d().direct_space_state.intersect_ray(query)
-		assert(gate_hit.is_empty())
 
 		var anchors: Dictionary = city.get("district_anchors")
 		var zones: Dictionary = city.get("cell_zones")
@@ -256,5 +230,5 @@ func _run() -> void:
 	assert(generated_lowrise_ids.has("gangnam_lowrise_garage_8x4_aligned"))
 	assert(generated_lowrise_ids.has("seoul_market_row_8x4_v1"))
 	assert(building_catalog.get_definition("gangnam_lowrise_commercial_8x4_aligned")["footprint_modules"] == Vector2i(4, 8))
-	print("CITY_PLANNING_OK seeds=5 parks=0 playgrounds=2 subways=2 apartments=1 districts=3 lowrise_types=%d" % generated_lowrise_ids.size())
+	print("CITY_PLANNING_OK seeds=5 parks=0 playgrounds=2 subways=2 apartments=0 districts=3 lowrise_types=%d" % generated_lowrise_ids.size())
 	quit(0)

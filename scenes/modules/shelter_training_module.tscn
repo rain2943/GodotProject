@@ -1,10 +1,10 @@
 [gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/shelter_training_module.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/interiors/modules/shelter_training_wall_aligned_v1.png" id="2_texture"]
+[ext_resource type="Texture2D" path="res://assets/interiors/modules/shelter_training_wall_front_v2.png" id="2_texture"]
 
 [sub_resource type="BoxShape3D" id="BoxShape_training"]
-size = Vector3(6.4, 1.4, 1.75)
+size = Vector3(6.2, 1.4, 1.75)
 
 [node name="ShelterTrainingModule" type="Node3D"]
 script = ExtResource("1_script")
@@ -18,11 +18,10 @@ position = Vector3(0, 0.55, 0.72)
 shape = SubResource("BoxShape_training")
 
 [node name="TrainingSprite" type="Sprite3D" parent="."]
-position = Vector3(0, 1.42, 0.02)
+position = Vector3(0, 1.715, -0.455)
+scale = Vector3(1.2, 1, 1)
 texture = ExtResource("2_texture")
-pixel_size = 0.00345
-offset = Vector2(0, -44)
-billboard = 1
+pixel_size = 0.00335
 shaded = false
 transparent = true
 no_depth_test = true

@@ -3,20 +3,35 @@ extends RefCounted
 
 
 const CATALOG := {
+	"m1911": {
+		"display_name": "M1911",
+		"texture_path": "res://assets/weapons/catalog/generated/m1911.png",
+		"world_pixel_size": 0.00068,
+	},
 	"ak47": {
 		"display_name": "AK-47",
-		"texture_path": "res://assets/weapons/catalog/ak47.png",
-		"world_pixel_size": 0.0018,
+		"texture_path": "res://assets/weapons/catalog/generated/ak47.png",
+		"world_pixel_size": 0.001,
 	},
 	"mp5": {
 		"display_name": "MP5",
-		"texture_path": "res://assets/weapons/catalog/mp5.png",
-		"world_pixel_size": 0.00175,
+		"texture_path": "res://assets/weapons/catalog/generated/mp5.png",
+		"world_pixel_size": 0.0009,
 	},
 	"double_barrel": {
-		"display_name": "산탄총",
-		"texture_path": "res://assets/weapons/catalog/shotgun_pump.png",
-		"world_pixel_size": 0.00175,
+		"display_name": "더블배럴 산탄총",
+		"texture_path": "res://assets/weapons/catalog/generated/double_barrel.png",
+		"world_pixel_size": 0.0009,
+	},
+	"baseball_bat": {
+		"display_name": "야구 방망이",
+		"texture_path": "res://assets/weapons/catalog/generated/baseball_bat.png",
+		"world_pixel_size": 0.00058,
+	},
+	"rocket_launcher": {
+		"display_name": "로켓런처",
+		"texture_path": "res://assets/weapons/catalog/generated/rocket_launcher.png",
+		"world_pixel_size": 0.001,
 	},
 }
 

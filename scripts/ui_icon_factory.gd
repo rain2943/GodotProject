@@ -52,6 +52,18 @@ static func get_icon(icon_name: String, size := 64, color := Color("#d9e3dc")) -
 			_circle(image, _v(32, 32, scale), 22.0 * scale, color)
 			_rect(image, Rect2i(_p(8, 32, scale), _p(48, 24, scale)), Color.TRANSPARENT)
 			_rect(image, Rect2i(_p(8, 34, scale), _p(48, 8, scale)), color.darkened(0.25))
+		"footwear":
+			_polygon_fill(image, [
+				_v(17, 9, scale),
+				_v(37, 9, scale),
+				_v(39, 35, scale),
+				_v(55, 43, scale),
+				_v(55, 53, scale),
+				_v(12, 53, scale),
+				_v(9, 43, scale),
+				_v(18, 34, scale),
+			], color)
+			_rect(image, Rect2i(_p(12, 48, scale), _p(43, 7, scale)), color.darkened(0.25))
 		"secure":
 			_rect(image, Rect2i(_p(14, 26, scale), _p(36, 29, scale)), color)
 			_circle_outline(image, _v(32, 27, scale), 14.0 * scale, color, 5.0 * scale)

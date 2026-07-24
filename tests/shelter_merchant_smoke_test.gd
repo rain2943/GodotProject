@@ -70,8 +70,13 @@ func _run() -> void:
 	assert(tree_root.find_child("고철Icon", true, false) is TextureRect, "Merchant currency must use a rendered scrap icon instead of an emoji glyph.")
 	assert(tree_root.find_child("통조림Icon", true, false) is TextureRect, "Merchant currency must use a rendered food icon instead of an emoji glyph.")
 	var shop_list := shelter.get("merchant_shop_list") as VBoxContainer
+	var buy_tab := shelter.get("merchant_buy_tab") as Button
+	var sell_tab := shelter.get("merchant_sell_tab") as Button
+	assert(buy_tab.button_pressed and not sell_tab.button_pressed, "The active buy tab must be visually selected.")
+	assert((buy_tab.get_node("SelectedIndicator") as ColorRect).visible)
 	var ammo_buy_button := shop_list.get_node("MerchantGood_762_fmj") as Button
 	assert(ammo_buy_button != null and not ammo_buy_button.disabled)
+	assert(ammo_buy_button.find_child("PriceChipIcon", true, false) is TextureRect, "Every price must use a currency icon.")
 	ammo_buy_button.pressed.emit()
 	await get_tree().process_frame
 	assert(int(game_state.call("get_ammo_count", "762_fmj")) == ammo_before + 30)
@@ -80,6 +85,9 @@ func _run() -> void:
 	shelter.call("_set_merchant_shop_mode", "sell")
 	await get_tree().process_frame
 	shop_list = shelter.get("merchant_shop_list") as VBoxContainer
+	assert(not buy_tab.button_pressed and sell_tab.button_pressed, "The active sell tab must be visually selected.")
+	assert(not (buy_tab.get_node("SelectedIndicator") as ColorRect).visible)
+	assert((sell_tab.get_node("SelectedIndicator") as ColorRect).visible)
 	assert(shop_list.get_node_or_null("MerchantGood_rubber_gasket") == null, "The sell tab must hide goods the player does not own.")
 	assert(shop_list.get_node_or_null("MerchantGood_magazine_spring") == null, "The sell tab must hide goods the player does not own.")
 	var ammo_sell_button := shop_list.get_node("MerchantGood_762_fmj") as Button

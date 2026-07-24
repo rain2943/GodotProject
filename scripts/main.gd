@@ -59,7 +59,7 @@ const AK_DROP_TEXTURE := preload("res://assets/weapons/ak47_drop.png")
 const AK_DIRECTIONAL_TEXTURE := preload("res://assets/weapons/ak47_directional.png")
 const AMMO_762_TEXTURE := preload("res://assets/items/ammo_762.png")
 const CHURU_TEXTURE := preload("res://assets/items/churu_rare.png")
-const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/baseball_bat_temp.png")
+const BASEBALL_BAT_TEXTURE := preload("res://assets/weapons/catalog/generated/baseball_bat.png")
 const BULLET_PROJECTILE := preload("res://scripts/bullet_projectile.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const ROCKET_BOSS_SCRIPT := preload("res://scripts/rocket_boss.gd")
@@ -172,6 +172,57 @@ const FIELD_MISSION_TEMPLATES := [
 		"enemy_count": 5,
 		"reward": {"medkits": 1, "component": 1},
 	},
+	{
+		"type": "stealth",
+		"title": "폐점포 잠복",
+		"description": "수색대의 시야를 피해 폐점포 주변에 몸을 숨기십시오.",
+		"duration": 15.0,
+		"guard_count": 4,
+		"detection_grace": 1.35,
+		"silence_required": true,
+		"reward": {"canned_food": 3, "medkits": 1},
+	},
+	{
+		"type": "stealth",
+		"title": "순찰대 통과 대기",
+		"description": "엄폐물 뒤에서 순찰대가 지나갈 때까지 발각되지 마십시오.",
+		"duration": 18.0,
+		"guard_count": 5,
+		"detection_grace": 1.15,
+		"silence_required": true,
+		"reward": {"ammo": 32, "component": 1},
+	},
+	{
+		"type": "investigate",
+		"title": "실종자 흔적 조사",
+		"description": "주변의 흔적을 살피고 생존자의 이동 경로를 확인하십시오.",
+		"target_count": 3,
+		"investigate_duration": 2.2,
+		"guard_count": 2,
+		"silence_required": false,
+		"reward": {"canned_food": 3, "component": 1},
+	},
+	{
+		"type": "investigate",
+		"title": "감시 초소 기록 판독",
+		"description": "발각되지 않은 채 감시 기록을 차례로 판독하십시오.",
+		"target_count": 2,
+		"investigate_duration": 2.8,
+		"guard_count": 4,
+		"detection_grace": 1.25,
+		"silence_required": true,
+		"reward": {"medkits": 1, "ammo": 24, "component": 1},
+	},
+	{
+		"type": "stealth_reach",
+		"title": "감시망 우회",
+		"description": "총을 쏘지 말고 순찰의 시야를 피해 반대편 안전 지점에 도달하십시오.",
+		"target_distance": 13.5,
+		"guard_count": 4,
+		"detection_grace": 1.0,
+		"silence_required": true,
+		"reward": {"canned_food": 2, "ammo": 28},
+	},
 ]
 const DIRECTION_VECTORS := {
 	"n": Vector2(0, -1),
@@ -221,6 +272,7 @@ var equipment_panel: PanelContainer
 var equipment_label: Label
 var equipment_weapon_image: TextureRect
 var equipment_ammo_label: Label
+var equipment_reserve_ammo_label: Label
 var equipment_condition_label: Label
 var equipment_reload_bar: ProgressBar
 var fire_button: Button
@@ -274,6 +326,7 @@ var world_time_hours := 9.0
 var night_intensity := 0.0
 var enemy_spawn_serial := 0
 var enemy_ranged_spawn_serial := 0
+var enemy_squad_serial := 0
 var reinforcement_timer := 8.0
 var sustained_combat_time := 0.0
 var concealed_combat_time := 0.0
@@ -385,6 +438,11 @@ var field_mission_spawned_enemies := 0
 var field_mission_kills := 0
 var field_mission_collected := 0
 var field_mission_result_timer := 0.0
+var field_mission_runtime := 0.0
+var field_mission_detection_time := 0.0
+var field_mission_investigation_hold := 0.0
+var field_mission_investigation_target: Node3D
+var field_mission_noise_breached := false
 
 
 func _ready() -> void:
@@ -539,7 +597,7 @@ func _physics_process(delta: float) -> void:
 	if melee_button:
 		melee_button.disabled = melee_attack_cooldown > 0.0
 	if dash_button:
-		dash_button.disabled = roll_active or roll_stamina < ROLL_STAMINA_COST
+		dash_button.disabled = roll_active or roll_stamina < _get_roll_stamina_cost()
 	if mobile_reload_button:
 		mobile_reload_button.disabled = weapon_reloading or not has_ak or reserve_ammo <= 0
 	_update_field_interactions(delta)
@@ -661,7 +719,8 @@ func _get_perception_aim_direction() -> Vector3:
 
 
 func _try_start_roll() -> void:
-	if roll_active or roll_stamina < ROLL_STAMINA_COST or player_health <= 0:
+	var stamina_cost := _get_roll_stamina_cost()
+	if roll_active or roll_stamina < stamina_cost or player_health <= 0:
 		return
 	var roll_input := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if Input.is_key_pressed(KEY_A): roll_input.x -= 1.0
@@ -681,7 +740,7 @@ func _try_start_roll() -> void:
 		roll_direction = _get_current_facing_world_direction()
 	_set_facing_from_world_direction(roll_direction)
 	roll_active = true
-	roll_stamina = maxf(0.0, roll_stamina - ROLL_STAMINA_COST)
+	roll_stamina = maxf(0.0, roll_stamina - stamina_cost)
 	_add_fatigue(FATIGUE_ROLL_GAIN)
 	roll_elapsed = 0.0
 	roll_afterimage_timer = 0.0
@@ -690,6 +749,10 @@ func _try_start_roll() -> void:
 	state_label.text = "회피 구르기"
 	_play_roll_sound()
 	_spawn_roll_afterimage()
+
+
+func _get_roll_stamina_cost() -> float:
+	return ROLL_STAMINA_COST * GameState.get_stamina_cost_multiplier()
 
 
 func _update_roll(delta: float) -> void:
@@ -923,7 +986,7 @@ func _setup_melee_weapon() -> void:
 	melee_bat_sprite = Sprite3D.new()
 	melee_bat_sprite.name = "TemporaryBaseballBat"
 	melee_bat_sprite.texture = BASEBALL_BAT_TEXTURE
-	melee_bat_sprite.pixel_size = 0.00095
+	melee_bat_sprite.pixel_size = WEAPON_VISUAL_CATALOG.get_world_pixel_size("baseball_bat", 0.00058)
 	melee_bat_sprite.centered = true
 	melee_bat_sprite.offset = Vector2.ZERO
 	melee_bat_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -1620,6 +1683,7 @@ func _capture_raid_start_snapshot() -> void:
 		"equipment_inventory": GameState.equipment_inventory.duplicate(true),
 		"equipped_body_armor_id": GameState.equipped_body_armor_id,
 		"equipped_head_armor_id": GameState.equipped_head_armor_id,
+		"equipped_footwear_id": GameState.equipped_footwear_id,
 		"weapon_durability": GameState.weapon_durability,
 		"equipped_weapon_id": GameState.equipped_weapon_id,
 		"equipped_weapon_mods": GameState.equipped_weapon_mods.duplicate(),
@@ -1640,9 +1704,9 @@ func _positive_dictionary_delta(current: Dictionary, baseline: Dictionary) -> Di
 	return delta
 
 
-func _equipment_total_counts(inventory: Dictionary, body_id: String, head_id: String) -> Dictionary:
+func _equipment_total_counts(inventory: Dictionary, body_id: String, head_id: String, footwear_id: String) -> Dictionary:
 	var totals := inventory.duplicate(true)
-	for equipped_id in [body_id, head_id]:
+	for equipped_id in [body_id, head_id, footwear_id]:
 		if equipped_id.is_empty():
 			continue
 		totals[equipped_id] = int(totals.get(equipped_id, 0)) + 1
@@ -1655,12 +1719,14 @@ func _build_death_corpse_loot() -> Dictionary:
 	var current_equipment_totals := _equipment_total_counts(
 		GameState.equipment_inventory,
 		GameState.equipped_body_armor_id,
-		GameState.equipped_head_armor_id
+		GameState.equipped_head_armor_id,
+		GameState.equipped_footwear_id
 	)
 	var starting_equipment_totals := _equipment_total_counts(
 		raid_start_snapshot.get("equipment_inventory", {}) as Dictionary,
 		str(raid_start_snapshot.get("equipped_body_armor_id", "")),
-		str(raid_start_snapshot.get("equipped_head_armor_id", ""))
+		str(raid_start_snapshot.get("equipped_head_armor_id", "")),
+		str(raid_start_snapshot.get("equipped_footwear_id", ""))
 	)
 	var loot := {
 		"ammo_inventory": _positive_dictionary_delta(
@@ -1735,6 +1801,7 @@ func _restore_raid_start_snapshot_after_death() -> void:
 	GameState.equipment_inventory = (raid_start_snapshot.get("equipment_inventory", {}) as Dictionary).duplicate(true)
 	GameState.equipped_body_armor_id = str(raid_start_snapshot.get("equipped_body_armor_id", ""))
 	GameState.equipped_head_armor_id = str(raid_start_snapshot.get("equipped_head_armor_id", ""))
+	GameState.equipped_footwear_id = str(raid_start_snapshot.get("equipped_footwear_id", ""))
 	GameState.weapon_durability = float(raid_start_snapshot.get("weapon_durability", 100.0))
 	GameState.equipped_weapon_id = str(raid_start_snapshot.get("equipped_weapon_id", "ak47"))
 	GameState.equipped_weapon_mods.assign(raid_start_snapshot.get("equipped_weapon_mods", []) as Array)
@@ -1948,8 +2015,10 @@ func _create_loot_pickup(loot_type: String, world_position: Vector3, data: Dicti
 			var equipment_id := str(data.get("equipment_id", "scav_vest"))
 			var definition := GameState.get_equipment_definition(equipment_id)
 			var slot := str(definition.get("slot", "body"))
-			sprite.texture = UI_ICONS.get_icon("helmet" if slot == "head" else "armor", 96, Color("#b7c8bd"))
-			sprite.pixel_size = 0.0085
+			sprite.texture = _get_equipment_loot_texture(equipment_id)
+			var target_long_edge := 0.7 if slot == "head" else 0.84
+			var texture_long_edge := float(maxi(sprite.texture.get_width(), sprite.texture.get_height()))
+			sprite.pixel_size = target_long_edge / maxf(texture_long_edge, 1.0)
 			highlight_color = Color("#8bb9a4")
 		_:
 			sprite.texture = AMMO_762_TEXTURE
@@ -1993,8 +2062,6 @@ func _get_canned_food_texture() -> ImageTexture:
 
 
 func _get_loot_weapon_texture(weapon_id: String) -> Texture2D:
-	if weapon_id == "baseball_bat":
-		return BASEBALL_BAT_TEXTURE
 	var catalog_texture := WEAPON_VISUAL_CATALOG.get_weapon_texture(weapon_id)
 	if catalog_texture != null:
 		return catalog_texture
@@ -2026,6 +2093,21 @@ func _get_loot_weapon_texture(weapon_id: String) -> Texture2D:
 	var texture := ImageTexture.create_from_image(image)
 	weapon_loot_texture_cache[weapon_id] = texture
 	return texture
+
+
+func _get_equipment_loot_texture(equipment_id: String) -> Texture2D:
+	var definition := GameState.get_equipment_definition(equipment_id)
+	var texture_path := str(definition.get("texture_path", ""))
+	if not texture_path.is_empty() and ResourceLoader.exists(texture_path):
+		var texture := load(texture_path) as Texture2D
+		if texture != null:
+			return texture
+	var slot := str(definition.get("slot", "body"))
+	return UI_ICONS.get_icon(
+		"helmet" if slot == "head" else "armor",
+		96,
+		Color("#b7c8bd")
+	)
 
 
 func _update_ammo_pickups(delta: float) -> void:
@@ -2390,11 +2472,23 @@ func _build_weapon_hud() -> void:
 	equipment_label.add_theme_font_size_override("font_size", 16)
 	equipment_label.add_theme_color_override("font_color", Color("#e7e3d2"))
 	weapon_text_box.add_child(equipment_label)
+	var equipment_ammo_row := HBoxContainer.new()
+	equipment_ammo_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	equipment_ammo_row.add_theme_constant_override("separation", 8)
+	weapon_text_box.add_child(equipment_ammo_row)
 	equipment_ammo_label = Label.new()
+	equipment_ammo_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	equipment_ammo_label.add_theme_font_override("font", font)
 	equipment_ammo_label.add_theme_font_size_override("font_size", 22)
 	equipment_ammo_label.add_theme_color_override("font_color", Color("#f1ce70"))
-	weapon_text_box.add_child(equipment_ammo_label)
+	equipment_ammo_row.add_child(equipment_ammo_label)
+	equipment_reserve_ammo_label = Label.new()
+	equipment_reserve_ammo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	equipment_reserve_ammo_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	equipment_reserve_ammo_label.add_theme_font_override("font", font)
+	equipment_reserve_ammo_label.add_theme_font_size_override("font_size", 14)
+	equipment_reserve_ammo_label.add_theme_color_override("font_color", Color("#c5d0c9"))
+	equipment_ammo_row.add_child(equipment_reserve_ammo_label)
 	equipment_condition_label = Label.new()
 	equipment_condition_label.custom_minimum_size = Vector2(0, 22)
 	equipment_condition_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2700,20 +2794,22 @@ func _on_inventory_weapon_mods_changed() -> void:
 func _on_inventory_weapon_equipped(weapon_id: String) -> void:
 	if (weapon_id == equipped_weapon_id and has_ak) or GameState.get_weapon_count(weapon_id) <= 0:
 		return
+	var reequipping_same_weapon := not has_ak and weapon_id == equipped_weapon_id
 	var previous_ammo_id := GameState.equipped_ammo_id
-	if has_ak and magazine_ammo > 0 and not previous_ammo_id.is_empty():
+	if not reequipping_same_weapon and magazine_ammo > 0 and not previous_ammo_id.is_empty():
 		GameState.set_ammo_count(previous_ammo_id, GameState.get_ammo_count(previous_ammo_id) + magazine_ammo)
 	if not GameState.equip_weapon(weapon_id):
 		return
 	equipped_weapon_id = GameState.equipped_weapon_id
 	equipped_weapon_mods.assign(GameState.equipped_weapon_mods)
-	magazine_ammo = 0
+	if not reequipping_same_weapon:
+		magazine_ammo = 0
 	reserve_ammo = GameState.get_ammo_count(GameState.equipped_ammo_id)
-	GameState.magazine_ammo = magazine_ammo
 	GameState.reserve_ammo = reserve_ammo
 	has_ak = true
 	GameState.has_ak = true
 	_refresh_weapon_stats()
+	GameState.magazine_ammo = magazine_ammo
 	_rebuild_player_weapon_frames()
 	_update_weapon_pose()
 	_update_equipment_ui()
@@ -2723,12 +2819,8 @@ func _on_inventory_weapon_equipped(weapon_id: String) -> void:
 func _on_inventory_weapon_unequipped() -> void:
 	if not has_ak:
 		return
-	var ammo_id := str(GameState.equipped_ammo_id)
-	if magazine_ammo > 0 and not ammo_id.is_empty():
-		GameState.set_ammo_count(ammo_id, GameState.get_ammo_count(ammo_id) + magazine_ammo)
-	magazine_ammo = 0
-	reserve_ammo = GameState.get_ammo_count(ammo_id)
-	GameState.magazine_ammo = 0
+	reserve_ammo = GameState.get_ammo_count(GameState.equipped_ammo_id)
+	GameState.magazine_ammo = magazine_ammo
 	GameState.reserve_ammo = reserve_ammo
 	GameState.unequip_weapon()
 	has_ak = false
@@ -2847,6 +2939,8 @@ func _fire_ak47() -> void:
 		return
 	magazine_ammo -= 1
 	GameState.magazine_ammo = magazine_ammo
+	if _active_field_mission_requires_silence():
+		field_mission_noise_breached = true
 	fire_cooldown = float(weapon_stats.get("fire_interval", 0.12))
 	var aim_direction := _get_current_fire_direction()
 	_lock_aim_direction(aim_direction)
@@ -3108,14 +3202,18 @@ func _update_equipment_ui() -> void:
 	var magazine_size := int(weapon_stats.get("magazine_size", 30))
 	var ammo_name := str(WEAPON_SYSTEM.get_ammo(GameState.equipped_ammo_id).get("display_name", GameState.equipped_ammo_id))
 	var enhancement_level := GameState.get_weapon_enhancement_level(equipped_weapon_id)
-	var total_ammo := magazine_ammo + reserve_ammo if has_ak else 0
 	if equipment_label:
 		equipment_label.text = "%s +%d" % [weapon_name, enhancement_level] if has_ak else "무기 없음"
 	if equipment_weapon_image:
 		equipment_weapon_image.texture = WEAPON_VISUAL_CATALOG.get_weapon_texture(equipped_weapon_id)
 		equipment_weapon_image.visible = has_ak
 	if equipment_ammo_label:
-		equipment_ammo_label.text = "남은 탄환 %d발" % total_ammo if has_ak else "탄환 없음"
+		equipment_ammo_label.text = "%02d / %02d" % [
+			magazine_ammo,
+			magazine_size,
+		] if has_ak else "-- / --"
+	if equipment_reserve_ammo_label:
+		equipment_reserve_ammo_label.text = "예비 %d발" % reserve_ammo if has_ak else "예비 없음"
 	if equipment_condition_label:
 		if has_ak:
 			equipment_condition_label.text = "%s · 사용 탄환  %s" % [
@@ -3513,10 +3611,25 @@ func _spawn_enemies() -> void:
 	var enemy_multiplier := float(raid_zone_data.get("enemy_multiplier", 1.0))
 	var total_enemies := maxi(BASE_ENEMY_COUNT, roundi(float(BASE_ENEMY_COUNT) * enemy_multiplier))
 	var zone_threat := float(raid_zone_data.get("threat", 0.0))
-	for index in total_enemies:
-		var kind := "melee" if index < 2 else ("grenadier" if index % 6 == 4 else "pistol")
-		var spawn_position := _find_distributed_enemy_position(world, index, total_enemies)
-		_spawn_enemy(kind, spawn_position, maxf(night_intensity, zone_threat))
+	var squad_sizes := _build_enemy_squad_sizes(total_enemies)
+	var spawned_count := 0
+	for squad_index in squad_sizes.size():
+		var squad_anchor := _find_distributed_enemy_position(world, squad_index, squad_sizes.size())
+		var kinds: Array[String] = []
+		for member_index in squad_sizes[squad_index]:
+			var enemy_index := spawned_count + member_index
+			kinds.append(
+				"melee"
+				if enemy_index < 2
+				else ("grenadier" if enemy_index % 6 == 4 else "pistol")
+			)
+		_spawn_enemy_squad(
+			world,
+			squad_anchor,
+			kinds,
+			maxf(night_intensity, zone_threat)
+		)
+		spawned_count += squad_sizes[squad_index]
 	if bool(raid_zone_data.get("boss", false)):
 		_spawn_zone_boss(world, total_enemies, zone_threat)
 
@@ -3645,7 +3758,97 @@ func _find_distributed_enemy_position(
 	)
 
 
-func _spawn_enemy(kind: String, spawn_position: Vector3, threat: float) -> CharacterBody3D:
+func _build_enemy_squad_sizes(total_count: int) -> Array[int]:
+	var sizes: Array[int] = []
+	var remaining := maxi(0, total_count)
+	while remaining > 0:
+		var squad_size := 1
+		if remaining == 2 or remaining == 4:
+			squad_size = 2
+		elif remaining == 3:
+			squad_size = 3
+		elif remaining > 4:
+			squad_size = 3 if spawn_random.randf() < 0.62 else 2
+		sizes.append(squad_size)
+		remaining -= squad_size
+	return sizes
+
+
+func _spawn_enemy_squad(
+	world: ProceduralCityMap,
+	squad_anchor: Vector3,
+	kinds: Array[String],
+	threat: float,
+	order_position: Vector3 = Vector3.INF,
+	metadata: Dictionary = {}
+) -> Array[CharacterBody3D]:
+	var spawned: Array[CharacterBody3D] = []
+	var assigned_squad_id := enemy_squad_serial
+	enemy_squad_serial += 1
+	for member_index in kinds.size():
+		var spawn_position := _find_squad_member_position(
+			world,
+			squad_anchor,
+			member_index,
+			kinds.size()
+		)
+		var enemy := _spawn_enemy(
+			kinds[member_index],
+			spawn_position,
+			threat,
+			assigned_squad_id,
+			squad_anchor,
+			spawn_position - squad_anchor
+		)
+		for metadata_key in metadata:
+			enemy.set_meta(str(metadata_key), metadata[metadata_key])
+		if order_position != Vector3.INF and enemy.has_method("receive_reinforcement_order"):
+			enemy.call("receive_reinforcement_order", order_position)
+		spawned.append(enemy)
+	return spawned
+
+
+func _find_squad_member_position(
+	world: ProceduralCityMap,
+	squad_anchor: Vector3,
+	member_index: int,
+	member_count: int
+) -> Vector3:
+	if member_index == 0:
+		return squad_anchor
+	var base_angle := TAU * float(member_index) / float(maxi(1, member_count))
+	var fallback := squad_anchor
+	for attempt in 10:
+		var angle := base_angle + float(attempt / 2 + 1) * (0.28 if attempt % 2 == 0 else -0.28)
+		var distance := 1.45 + float(attempt / 3) * 0.38
+		var requested := squad_anchor + Vector3(cos(angle), 0.0, sin(angle)) * distance
+		var candidate := world.find_nearest_physically_open_position(
+			requested,
+			0.58,
+			[player.get_rid()]
+		)
+		candidate.y = squad_anchor.y
+		fallback = candidate
+		if candidate.distance_to(squad_anchor) > 4.2:
+			continue
+		var overlaps_enemy := false
+		for existing_enemy in enemies:
+			if is_instance_valid(existing_enemy) and existing_enemy.global_position.distance_to(candidate) < 0.9:
+				overlaps_enemy = true
+				break
+		if not overlaps_enemy:
+			return candidate
+	return fallback
+
+
+func _spawn_enemy(
+	kind: String,
+	spawn_position: Vector3,
+	threat: float,
+	assigned_squad_id: int = -1,
+	assigned_squad_anchor: Vector3 = Vector3.ZERO,
+	formation_offset: Vector3 = Vector3.ZERO
+) -> CharacterBody3D:
 	var enemy_weapon_id := "baseball_bat"
 	if kind != "melee":
 		var ranged_loadout_cycle := ["mp5", "ak47", "mp5", "ak47", "m1911", "double_barrel"]
@@ -3664,6 +3867,8 @@ func _spawn_enemy(kind: String, spawn_position: Vector3, threat: float) -> Chara
 	if enemy.has_signal("reinforcement_called"):
 		enemy.connect("reinforcement_called", _on_enemy_reinforcement_called)
 	enemies.append(enemy)
+	if assigned_squad_id >= 0 and enemy.has_method("assign_squad"):
+		enemy.call("assign_squad", assigned_squad_id, assigned_squad_anchor, formation_offset)
 	return enemy
 
 
@@ -3757,13 +3962,16 @@ func _spawn_enemy_loot(enemy: CharacterBody3D) -> Node3D:
 
 
 func _get_random_armor_drop(seed_hint: int = 0) -> Dictionary:
-	var body_drop := posmod(seed_hint + spawn_random.randi(), 2) == 0
+	var equipment_slot_roll := posmod(seed_hint + spawn_random.randi(), 3)
 	var high_grade := spawn_random.randf() < 0.22 + night_intensity * 0.18
-	var equipment_id := (
-		("riot_vest" if high_grade else "scav_vest")
-		if body_drop
-		else ("tactical_helmet" if high_grade else "patched_helmet")
-	)
+	var equipment_id := ""
+	match equipment_slot_roll:
+		0:
+			equipment_id = "riot_vest" if high_grade else "scav_vest"
+		1:
+			equipment_id = "tactical_helmet" if high_grade else "patched_helmet"
+		_:
+			equipment_id = "tactical_boots" if high_grade else "patched_sneakers"
 	var definition := GameState.get_equipment_definition(equipment_id)
 	return {
 		"amount": 1,
@@ -3858,14 +4066,29 @@ func _on_enemy_reinforcement_called(caller: CharacterBody3D) -> void:
 func _spawn_called_reinforcements() -> void:
 	var effective_threat := clampf(maxf(0.58, night_intensity), 0.0, 1.0)
 	var reinforcement_count := 6 + roundi(night_intensity * 4.0)
-	for index in reinforcement_count:
-		var spawn_position := _find_reinforcement_position()
-		if spawn_position == Vector3.INF:
+	var world := $World as ProceduralCityMap
+	var squad_sizes := _build_enemy_squad_sizes(reinforcement_count)
+	var spawned_count := 0
+	for squad_size in squad_sizes:
+		var squad_anchor := _find_reinforcement_position()
+		if squad_anchor == Vector3.INF:
 			continue
-		var kind := "grenadier" if index == reinforcement_count - 1 else ("pistol" if index < reinforcement_count - 2 or spawn_random.randf() < 0.82 else "melee")
-		var enemy := _spawn_enemy(kind, spawn_position, effective_threat)
-		if enemy.has_method("receive_reinforcement_order"):
-			enemy.call("receive_reinforcement_order", player.global_position)
+		var kinds: Array[String] = []
+		for member_index in squad_size:
+			var enemy_index := spawned_count + member_index
+			kinds.append(
+				"grenadier"
+				if enemy_index == reinforcement_count - 1
+				else ("pistol" if enemy_index < reinforcement_count - 2 or spawn_random.randf() < 0.82 else "melee")
+			)
+		_spawn_enemy_squad(
+			world,
+			squad_anchor,
+			kinds,
+			effective_threat,
+			player.global_position
+		)
+		spawned_count += squad_size
 
 
 func _update_enemy_pressure(delta: float) -> void:
@@ -3888,11 +4111,24 @@ func _update_enemy_pressure(delta: float) -> void:
 	reinforcement_timer -= delta
 	if reinforcement_timer > 0.0:
 		return
-	var spawn_position := _find_reinforcement_position()
-	if spawn_position != Vector3.INF:
-		var roll := spawn_random.randf()
-		var kind := "grenadier" if roll < 0.14 else ("pistol" if roll < lerpf(0.76, 0.9, effective_threat) else "melee")
-		_spawn_enemy(kind, spawn_position, effective_threat)
+	var squad_anchor := _find_reinforcement_position()
+	if squad_anchor != Vector3.INF:
+		var missing_count := target_count - enemies.size()
+		var squad_size := 2 if missing_count <= 2 else spawn_random.randi_range(2, 3)
+		var kinds: Array[String] = []
+		for member_index in squad_size:
+			var roll := spawn_random.randf()
+			kinds.append(
+				"grenadier"
+					if roll < 0.14
+					else ("pistol" if roll < lerpf(0.76, 0.9, effective_threat) else "melee")
+			)
+		_spawn_enemy_squad(
+			$World as ProceduralCityMap,
+			squad_anchor,
+			kinds,
+			effective_threat
+		)
 	reinforcement_timer = lerpf(15.0, 2.8, effective_threat)
 
 
@@ -4907,11 +5143,7 @@ func _setup_procedural_field_missions(world: ProceduralCityMap) -> void:
 			0.08
 		)
 		occupied_positions.append(mission_position)
-		var template_index := posmod(
-			index + spawn_random.randi_range(0, FIELD_MISSION_TEMPLATES.size() - 1),
-			FIELD_MISSION_TEMPLATES.size()
-		)
-		var definition := (FIELD_MISSION_TEMPLATES[template_index] as Dictionary).duplicate(true)
+		var definition := _pick_field_mission_definition(index)
 		var mission_site := Node3D.new()
 		mission_site.name = "FieldMission_%02d" % (index + 1)
 		add_child(mission_site)
@@ -4925,13 +5157,39 @@ func _setup_procedural_field_missions(world: ProceduralCityMap) -> void:
 		_build_field_mission_marker(mission_site)
 
 
+func _pick_field_mission_definition(index: int) -> Dictionary:
+	var required_types: Array[String] = ["stealth", "investigate", "stealth_reach"]
+	var candidates: Array[Dictionary] = []
+	var required_type: String = required_types[index] if index < required_types.size() else ""
+	for template_value in FIELD_MISSION_TEMPLATES:
+		var template := template_value as Dictionary
+		if required_type.is_empty() or str(template.get("type", "")) == required_type:
+			candidates.append(template)
+	if candidates.is_empty():
+		candidates.assign(FIELD_MISSION_TEMPLATES)
+	return candidates[spawn_random.randi_range(0, candidates.size() - 1)].duplicate(true)
+
+
 func _build_field_mission_marker(site: Node3D) -> void:
+	var mission_type := str(site.get_meta("type", "defense"))
+	var marker_color := Color("#5eb9ad")
+	var marker_text := "현장 신호"
+	match mission_type:
+		"stealth":
+			marker_color = Color("#6aa8b9")
+			marker_text = "은신 지점"
+		"investigate":
+			marker_color = Color("#c5a964")
+			marker_text = "조사 신호"
+		"stealth_reach":
+			marker_color = Color("#78b59a")
+			marker_text = "우회 경로"
 	var marker_material := StandardMaterial3D.new()
 	marker_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	marker_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	marker_material.albedo_color = Color(0.33, 0.78, 0.72, 0.16)
+	marker_material.albedo_color = Color(marker_color, 0.16)
 	marker_material.emission_enabled = true
-	marker_material.emission = Color("#5eb9ad")
+	marker_material.emission = marker_color
 	marker_material.emission_energy_multiplier = 1.2
 	var ring_mesh := TorusMesh.new()
 	ring_mesh.inner_radius = 2.5
@@ -4948,11 +5206,11 @@ func _build_field_mission_marker(site: Node3D) -> void:
 
 	var marker_label := Label3D.new()
 	marker_label.name = "MissionMarkerLabel"
-	marker_label.text = "현장 신호"
+	marker_label.text = marker_text
 	marker_label.position = Vector3(0.0, 1.15, 0.0)
 	marker_label.font = FONT
 	marker_label.font_size = 28
-	marker_label.modulate = Color("#9bcfc2")
+	marker_label.modulate = marker_color.lightened(0.2)
 	marker_label.outline_size = 7
 	marker_label.outline_modulate = Color(0.01, 0.02, 0.018, 0.94)
 	marker_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -4981,6 +5239,7 @@ func _update_field_missions(delta: float) -> void:
 		_fail_field_mission("작전 구역을 너무 멀리 이탈했습니다.")
 		return
 
+	field_mission_runtime += delta
 	var mission_type := str(active_field_mission.get_meta("type", "defense"))
 	match mission_type:
 		"defense":
@@ -4989,6 +5248,12 @@ func _update_field_missions(delta: float) -> void:
 			_update_eliminate_mission()
 		"collect":
 			_update_collect_mission()
+		"stealth":
+			_update_stealth_mission(delta, distance_to_site)
+		"investigate":
+			_update_investigation_mission(delta)
+		"stealth_reach":
+			_update_stealth_reach_mission(delta)
 
 
 func _start_field_mission(site: Node3D) -> void:
@@ -5000,6 +5265,11 @@ func _start_field_mission(site: Node3D) -> void:
 	field_mission_kills = 0
 	field_mission_collected = 0
 	field_mission_result_timer = 0.0
+	field_mission_runtime = 0.0
+	field_mission_detection_time = 0.0
+	field_mission_investigation_hold = 0.0
+	field_mission_investigation_target = null
+	field_mission_noise_breached = false
 	_clear_active_mission_collectibles()
 	_set_field_mission_site_state(site, "active")
 	var mission_type := str(site.get_meta("type", "defense"))
@@ -5012,6 +5282,14 @@ func _start_field_mission(site: Node3D) -> void:
 		"collect":
 			_spawn_field_mission_collectibles(int(site.get_meta("target_count", 3)))
 			_spawn_field_mission_enemies(int(site.get_meta("enemy_count", 4)))
+		"stealth":
+			_spawn_field_mission_patrols(int(site.get_meta("guard_count", 4)))
+		"investigate":
+			_spawn_field_mission_investigation_points(int(site.get_meta("target_count", 3)))
+			_spawn_field_mission_patrols(int(site.get_meta("guard_count", 2)))
+		"stealth_reach":
+			_spawn_field_mission_reach_target(float(site.get_meta("target_distance", 13.5)))
+			_spawn_field_mission_patrols(int(site.get_meta("guard_count", 4)))
 	_set_field_mission_objective(
 		str(site.get_meta("title", "현장 임무")),
 		str(site.get_meta("description", "현장 목표를 수행하십시오.")),
@@ -5079,24 +5357,227 @@ func _update_collect_mission() -> void:
 		_complete_field_mission()
 
 
+func _update_stealth_mission(delta: float, distance_to_site: float) -> void:
+	if field_mission_noise_breached:
+		_fail_field_mission("총성이 울려 잠복 위치가 노출됐습니다.")
+		return
+	var detected := _update_field_mission_detection(delta)
+	var detection_grace := float(active_field_mission.get_meta("detection_grace", 1.25))
+	if field_mission_detection_time >= detection_grace:
+		_fail_field_mission("수색대에게 위치를 들켰습니다.")
+		return
+	var hold_radius := FIELD_MISSION_TRIGGER_RADIUS + 1.4
+	var inside_hide_area := distance_to_site <= hold_radius
+	if inside_hide_area and not detected:
+		field_mission_elapsed += delta
+	var duration := float(active_field_mission.get_meta("duration", 15.0))
+	var remaining := maxf(0.0, duration - field_mission_elapsed)
+	var detail := "엄폐 상태 유지  %.1f초" % remaining
+	var color := Color("#8fd0c1")
+	if detected:
+		detail = "발각 위험 · 시야를 끊으십시오  %.1f / %.1f초" % [
+			field_mission_detection_time,
+			detection_grace,
+		]
+		color = Color("#ff9b77")
+	elif not inside_hide_area:
+		detail = "은신 지점으로 복귀하십시오 · 거리 %.0fm" % distance_to_site
+		color = Color("#d7bd72")
+	_set_field_mission_objective(
+		str(active_field_mission.get_meta("title", "은밀 잠복")),
+		detail,
+		color
+	)
+	if field_mission_elapsed >= duration:
+		_complete_field_mission()
+
+
+func _update_investigation_mission(delta: float) -> void:
+	var silence_required := bool(active_field_mission.get_meta("silence_required", false))
+	if silence_required and field_mission_noise_breached:
+		_fail_field_mission("총성으로 조사 현장이 노출됐습니다.")
+		return
+	var detected := _update_field_mission_detection(delta)
+	var detection_grace := float(active_field_mission.get_meta("detection_grace", 1.25))
+	if silence_required and field_mission_detection_time >= detection_grace:
+		_fail_field_mission("감시망에 발각되어 기록을 확보하지 못했습니다.")
+		return
+	var nearest: Node3D
+	var nearest_distance := INF
+	for clue in active_mission_collectibles:
+		if not is_instance_valid(clue):
+			continue
+		var distance := player.global_position.distance_to(clue.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest = clue
+	if nearest != field_mission_investigation_target:
+		field_mission_investigation_target = nearest
+		field_mission_investigation_hold = 0.0
+	var investigate_duration := float(active_field_mission.get_meta("investigate_duration", 2.2))
+	var can_investigate := is_instance_valid(nearest) and nearest_distance <= 1.6 and not detected
+	if can_investigate:
+		field_mission_investigation_hold += delta
+	else:
+		field_mission_investigation_hold = maxf(0.0, field_mission_investigation_hold - delta * 1.5)
+	if can_investigate and field_mission_investigation_hold >= investigate_duration:
+		field_mission_collected += 1
+		active_mission_collectibles.erase(nearest)
+		nearest.queue_free()
+		field_mission_investigation_target = null
+		field_mission_investigation_hold = 0.0
+		_show_field_notice("현장 단서 확인 · %d개" % field_mission_collected)
+	var target_count := int(active_field_mission.get_meta("target_count", 3))
+	var detail := "조사 지점 접근  %d / %d" % [
+		mini(field_mission_collected, target_count),
+		target_count,
+	]
+	var color := Color("#e3ca82")
+	if detected:
+		detail = "적의 시야를 끊어야 조사를 계속할 수 있습니다."
+		color = Color("#ff9b77")
+	elif is_instance_valid(nearest) and nearest_distance <= 1.6:
+		detail = "단서 분석  %.1f / %.1f초 · %d / %d" % [
+			field_mission_investigation_hold,
+			investigate_duration,
+			field_mission_collected,
+			target_count,
+		]
+	_set_field_mission_objective(
+		str(active_field_mission.get_meta("title", "현장 조사")),
+		detail,
+		color
+	)
+	if field_mission_collected >= target_count:
+		_complete_field_mission()
+
+
+func _update_stealth_reach_mission(delta: float) -> void:
+	if field_mission_noise_breached:
+		_fail_field_mission("총성이 울려 우회 경로가 차단됐습니다.")
+		return
+	var detected := _update_field_mission_detection(delta)
+	var detection_grace := float(active_field_mission.get_meta("detection_grace", 1.0))
+	if field_mission_detection_time >= detection_grace:
+		_fail_field_mission("순찰대에게 우회 이동을 들켰습니다.")
+		return
+	var target := active_mission_collectibles[0] if not active_mission_collectibles.is_empty() else null
+	if not is_instance_valid(target):
+		_fail_field_mission("안전 지점 신호를 찾을 수 없습니다.")
+		return
+	var target_distance := player.global_position.distance_to((target as Node3D).global_position)
+	var detail := "안전 지점까지 %.1fm · 시야에 들지 마십시오." % target_distance
+	var color := Color("#8fd0c1")
+	if detected:
+		detail = "발각 위험 · 엄폐물 뒤로 이동하십시오  %.1f / %.1f초" % [
+			field_mission_detection_time,
+			detection_grace,
+		]
+		color = Color("#ff9b77")
+	_set_field_mission_objective(
+		str(active_field_mission.get_meta("title", "감시망 우회")),
+		detail,
+		color
+	)
+	if target_distance <= 1.55:
+		_complete_field_mission()
+
+
+func _update_field_mission_detection(delta: float) -> bool:
+	if field_mission_runtime < 1.0:
+		field_mission_detection_time = 0.0
+		return false
+	var detected := _is_player_detected_for_field_mission()
+	if detected:
+		field_mission_detection_time += delta
+	else:
+		field_mission_detection_time = maxf(0.0, field_mission_detection_time - delta * 1.8)
+	return detected
+
+
+func _is_player_detected_for_field_mission() -> bool:
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
+			continue
+		if bool(enemy.get("alerted")) and bool(enemy.get("has_current_line_of_sight")):
+			return true
+	return false
+
+
+func _active_field_mission_requires_silence() -> bool:
+	return (
+		is_instance_valid(active_field_mission)
+		and bool(active_field_mission.get_meta("silence_required", false))
+	)
+
+
 func _spawn_field_mission_enemies(count: int) -> void:
 	if not is_instance_valid(active_field_mission):
 		return
 	var world := $World as ProceduralCityMap
 	var mission_id := int(active_field_mission.get_meta("mission_id", 0))
-	for index in count:
-		var spawn_position := _find_field_mission_enemy_position(world, active_field_mission.global_position)
-		var loadout_roll := posmod(field_mission_spawned_enemies + index + mission_id, 7)
-		var enemy_kind := "grenadier" if loadout_roll == 6 else ("melee" if loadout_roll == 4 else "pistol")
+	for squad_size in _build_enemy_squad_sizes(count):
+		var squad_anchor := _find_field_mission_enemy_position(
+			world,
+			active_field_mission.global_position
+		)
+		var kinds: Array[String] = []
+		for member_index in squad_size:
+			var loadout_roll := posmod(
+				field_mission_spawned_enemies + member_index + mission_id,
+				7
+			)
+			kinds.append(
+				"grenadier"
+					if loadout_roll == 6
+					else ("melee" if loadout_roll == 4 else "pistol")
+			)
 		var threat := maxf(
 			night_intensity,
 			float(raid_zone_data.get("threat", 0.0)) + 0.22
 		)
-		var enemy := _spawn_enemy(enemy_kind, spawn_position, threat)
-		enemy.set_meta("field_mission_id", mission_id)
-		field_mission_spawned_enemies += 1
-		if enemy.has_method("receive_reinforcement_order"):
-			enemy.call("receive_reinforcement_order", active_field_mission.global_position)
+		var spawned := _spawn_enemy_squad(
+			world,
+			squad_anchor,
+			kinds,
+			threat,
+			active_field_mission.global_position,
+			{"field_mission_id": mission_id}
+		)
+		field_mission_spawned_enemies += spawned.size()
+
+
+func _spawn_field_mission_patrols(count: int) -> void:
+	if not is_instance_valid(active_field_mission):
+		return
+	var world := $World as ProceduralCityMap
+	var mission_id := int(active_field_mission.get_meta("mission_id", 0))
+	var patrol_index := 0
+	for squad_size in _build_enemy_squad_sizes(count):
+		var squad_anchor := _find_field_mission_enemy_position(
+			world,
+			active_field_mission.global_position
+		)
+		var kinds: Array[String] = []
+		for member_index in squad_size:
+			kinds.append("melee" if (patrol_index + member_index) % 4 == 3 else "pistol")
+		var threat := maxf(
+			night_intensity,
+			float(raid_zone_data.get("threat", 0.0)) + 0.12
+		)
+		var spawned := _spawn_enemy_squad(
+			world,
+			squad_anchor,
+			kinds,
+			threat,
+			Vector3.INF,
+			{
+				"field_mission_id": mission_id,
+				"stealth_mission_guard": true,
+			}
+		)
+		field_mission_spawned_enemies += spawned.size()
+		patrol_index += squad_size
 
 
 func _find_field_mission_enemy_position(
@@ -5121,6 +5602,130 @@ func _find_field_mission_enemy_position(
 		if candidate.distance_to(player.global_position) >= 7.0 and not world.is_position_in_safe_zone(candidate):
 			return candidate
 	return fallback
+
+
+func _spawn_field_mission_investigation_points(count: int) -> void:
+	if not is_instance_valid(active_field_mission):
+		return
+	var world := $World as ProceduralCityMap
+	for index in count:
+		var angle := (
+			TAU * float(index) / float(maxi(1, count))
+			+ spawn_random.randf_range(-0.42, 0.42)
+		)
+		var distance := spawn_random.randf_range(3.2, 5.1)
+		var requested := (
+			active_field_mission.global_position
+			+ Vector3(cos(angle), 0.0, sin(angle)) * distance
+		)
+		var position := world.find_nearest_physically_open_position(
+			requested,
+			0.52,
+			[player.get_rid()]
+		)
+		var clue := Node3D.new()
+		clue.name = "MissionClue_%02d" % (index + 1)
+		add_child(clue)
+		clue.global_position = Vector3(position.x, 0.08, position.z)
+		_build_field_mission_investigation_point(clue)
+		active_mission_collectibles.append(clue)
+
+
+func _build_field_mission_investigation_point(clue: Node3D) -> void:
+	var case_material := StandardMaterial3D.new()
+	case_material.albedo_color = Color("#39443f")
+	case_material.metallic = 0.38
+	case_material.roughness = 0.72
+	var case_mesh := BoxMesh.new()
+	case_mesh.size = Vector3(0.52, 0.12, 0.38)
+	case_mesh.material = case_material
+	var case := MeshInstance3D.new()
+	case.name = "EvidenceCase"
+	case.position.y = 0.11
+	case.rotation.y = spawn_random.randf_range(-0.45, 0.45)
+	case.mesh = case_mesh
+	clue.add_child(case)
+	var signal_material := StandardMaterial3D.new()
+	signal_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	signal_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	signal_material.albedo_color = Color(0.92, 0.73, 0.32, 0.72)
+	signal_material.emission_enabled = true
+	signal_material.emission = Color("#d8b456")
+	signal_material.emission_energy_multiplier = 2.0
+	var signal_mesh := CylinderMesh.new()
+	signal_mesh.top_radius = 0.09
+	signal_mesh.bottom_radius = 0.12
+	signal_mesh.height = 0.06
+	signal_mesh.material = signal_material
+	var signal_marker := MeshInstance3D.new()
+	signal_marker.name = "EvidenceSignal"
+	signal_marker.position.y = 0.21
+	signal_marker.mesh = signal_mesh
+	clue.add_child(signal_marker)
+	_add_interaction_marker(clue, Color("#d8b456"), 0.58, false)
+	var label := Label3D.new()
+	label.text = "조사"
+	label.position = Vector3(0.0, 0.86, 0.0)
+	label.font = FONT
+	label.font_size = 23
+	label.modulate = Color("#f0d994")
+	label.outline_size = 6
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	clue.add_child(label)
+
+
+func _spawn_field_mission_reach_target(target_distance: float) -> void:
+	if not is_instance_valid(active_field_mission):
+		return
+	var world := $World as ProceduralCityMap
+	var angle := spawn_random.randf_range(0.0, TAU)
+	var requested := (
+		active_field_mission.global_position
+		+ Vector3(cos(angle), 0.0, sin(angle)) * target_distance
+	)
+	var position := world.find_nearest_physically_open_position(
+		requested,
+		0.62,
+		[player.get_rid()]
+	)
+	var target := Node3D.new()
+	target.name = "StealthReachTarget"
+	add_child(target)
+	target.global_position = Vector3(position.x, 0.08, position.z)
+	_build_field_mission_reach_target(target)
+	active_mission_collectibles.append(target)
+
+
+func _build_field_mission_reach_target(target: Node3D) -> void:
+	var material := StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(0.34, 0.78, 0.58, 0.22)
+	material.emission_enabled = true
+	material.emission = Color("#67c898")
+	material.emission_energy_multiplier = 1.8
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.82
+	ring_mesh.outer_radius = 0.94
+	ring_mesh.rings = 28
+	ring_mesh.ring_segments = 10
+	ring_mesh.material = material
+	var ring := MeshInstance3D.new()
+	ring.name = "SafeRouteRing"
+	ring.mesh = ring_mesh
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	target.add_child(ring)
+	var label := Label3D.new()
+	label.text = "안전 지점"
+	label.position = Vector3(0.0, 1.02, 0.0)
+	label.font = FONT
+	label.font_size = 25
+	label.modulate = Color("#9be0bb")
+	label.outline_size = 7
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	target.add_child(label)
 
 
 func _spawn_field_mission_collectibles(count: int) -> void:
@@ -5273,6 +5878,8 @@ func _clear_active_mission_collectibles() -> void:
 		if is_instance_valid(collectible):
 			collectible.queue_free()
 	active_mission_collectibles.clear()
+	field_mission_investigation_target = null
+	field_mission_investigation_hold = 0.0
 
 
 func _setup_corpse_recovery(world: ProceduralCityMap) -> void:
@@ -6096,7 +6703,7 @@ func _input(event: InputEvent) -> void:
 func _handle_combat_mouse_button(mouse_event: InputEventMouseButton) -> void:
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 		if mouse_event.pressed:
-			if laser_aim_held and magazine_ammo > 0:
+			if laser_aim_held and has_ak and (magazine_ammo > 0 or reserve_ammo > 0):
 				mouse_fire_held = true
 				_try_fire_ak47()
 			else:

@@ -54,8 +54,6 @@ func _ready() -> void:
 	sprite.position = BOSS_SPRITE_POSITION
 	sprite.pixel_size = 0.0108
 	sprite.render_priority = 36
-	if weapon_visual != null:
-		weapon_visual.visible = false
 	var collision := get_node_or_null("CollisionShape3D") as CollisionShape3D
 	if collision != null and collision.shape is CapsuleShape3D:
 		var shape := collision.shape as CapsuleShape3D
@@ -301,8 +299,16 @@ func _add_boss_animation(
 
 
 func _update_weapon_visual() -> void:
-	if weapon_visual != null:
-		weapon_visual.visible = false
+	if weapon_visual == null:
+		return
+	var direction := facing_world_direction.normalized()
+	weapon_visual.position = direction * 0.58 + Vector3(0, 0.74, 0)
+	var screen_direction := Vector2(direction.x - direction.z, direction.x + direction.z).normalized()
+	weapon_visual.flip_h = screen_direction.x < -0.01
+	var source_angle := PI if weapon_visual.flip_h else 0.0
+	weapon_visual.rotation.z = wrapf(screen_direction.angle() - source_angle, -PI, PI)
+	weapon_visual.scale = Vector3.ONE * 0.92
+	weapon_visual.visible = not dying
 
 
 func _reset_sprite_pose() -> void:

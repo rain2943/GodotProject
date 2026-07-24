@@ -61,5 +61,20 @@ func _initialize() -> void:
 		push_error("FIELD_SYSTEM_COMPILE: fatigue HUD must stay clear of mobile movement controls")
 		quit(1)
 		return
+	for mission_type in ["stealth", "investigate", "stealth_reach"]:
+		if not main_source.contains("\"type\": \"%s\"" % mission_type):
+			push_error("FIELD_SYSTEM_COMPILE: missing survival mission type %s" % mission_type)
+			quit(1)
+			return
+	if not main_source.contains(
+		"bool(enemy.get(\"alerted\")) and bool(enemy.get(\"has_current_line_of_sight\"))"
+	):
+		push_error("FIELD_SYSTEM_COMPILE: stealth missions must use real enemy detection state")
+		quit(1)
+		return
+	if not main_source.contains("var required_types: Array[String] = [\"stealth\", \"investigate\", \"stealth_reach\"]"):
+		push_error("FIELD_SYSTEM_COMPILE: each raid must guarantee survival-oriented missions")
+		quit(1)
+		return
 	print("FIELD_SYSTEM_COMPILE: PASS")
 	quit(0)

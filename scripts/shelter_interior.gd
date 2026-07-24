@@ -1046,10 +1046,14 @@ func _open_merchant_shop() -> void:
 	tabs.add_theme_constant_override("separation", 8)
 	box.add_child(tabs)
 	merchant_buy_tab = _merchant_button("구매", true, "backpack")
+	merchant_buy_tab.name = "MerchantBuyTab"
 	merchant_buy_tab.pressed.connect(func() -> void: _set_merchant_shop_mode("buy"))
+	_prepare_merchant_tab(merchant_buy_tab, "buy")
 	tabs.add_child(merchant_buy_tab)
 	merchant_sell_tab = _merchant_button("판매", false, "scrap")
+	merchant_sell_tab.name = "MerchantSellTab"
 	merchant_sell_tab.pressed.connect(func() -> void: _set_merchant_shop_mode("sell"))
+	_prepare_merchant_tab(merchant_sell_tab, "sell")
 	tabs.add_child(merchant_sell_tab)
 
 	var scroll := ScrollContainer.new()
@@ -1083,8 +1087,7 @@ func _refresh_merchant_shop() -> void:
 		child.queue_free()
 	(merchant_shop_currency_labels.get("scrap") as Label).text = "고철  %d" % GameState.scrap
 	(merchant_shop_currency_labels.get("food") as Label).text = "통조림  %d" % GameState.canned_food
-	merchant_buy_tab.disabled = merchant_shop_mode == "buy"
-	merchant_sell_tab.disabled = merchant_shop_mode == "sell"
+	_update_merchant_tab_styles()
 	var visible_good_count := 0
 	for good_variant in MERCHANT_GOODS:
 		var good: Dictionary = good_variant
@@ -1107,31 +1110,216 @@ func _refresh_merchant_shop() -> void:
 		merchant_shop_list.add_child(empty_label)
 
 
+func _prepare_merchant_tab(tab: Button, mode: String) -> void:
+	tab.toggle_mode = true
+	tab.custom_minimum_size = Vector2(150, 52)
+	tab.set_meta("merchant_mode", mode)
+	var indicator := ColorRect.new()
+	indicator.name = "SelectedIndicator"
+	indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	indicator.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	indicator.offset_left = 10
+	indicator.offset_top = -4
+	indicator.offset_right = -10
+	indicator.offset_bottom = 0
+	indicator.color = Color("#f0c96d")
+	tab.add_child(indicator)
+
+
+func _update_merchant_tab_styles() -> void:
+	for tab in [merchant_buy_tab, merchant_sell_tab]:
+		if tab == null:
+			continue
+		var mode := str(tab.get_meta("merchant_mode", ""))
+		var selected := mode == merchant_shop_mode
+		var accent_color := Color("#f0c96d") if mode == "buy" else Color("#85d3b0")
+		tab.disabled = false
+		tab.set_pressed_no_signal(selected)
+		tab.text = ("구매" if mode == "buy" else "판매") + ("  선택됨" if selected else "")
+		tab.icon = UI_ICONS.get_icon(
+			"backpack" if mode == "buy" else "scrap",
+			28,
+			Color("#17201c") if selected else accent_color
+		)
+		tab.add_theme_color_override(
+			"font_color",
+			Color("#17201c") if selected else Color("#aebbb5")
+		)
+		tab.add_theme_color_override(
+			"font_hover_color",
+			Color("#f6efd9")
+		)
+		tab.add_theme_color_override(
+			"font_pressed_color",
+			Color("#17201c")
+		)
+		var selected_background := accent_color.darkened(0.12)
+		var inactive_background := Color(0.025, 0.033, 0.032, 0.96)
+		tab.add_theme_stylebox_override(
+			"normal",
+			_rounded_panel_style(
+				selected_background if selected else inactive_background,
+				accent_color if selected else Color("#46564f"),
+				6
+			)
+		)
+		tab.add_theme_stylebox_override(
+			"pressed",
+			_rounded_panel_style(selected_background, accent_color.lightened(0.16), 6)
+		)
+		tab.add_theme_stylebox_override(
+			"hover",
+			_rounded_panel_style(Color(0.095, 0.09, 0.055, 0.98), accent_color, 6)
+		)
+		tab.add_theme_stylebox_override(
+			"hover_pressed",
+			_rounded_panel_style(selected_background.lightened(0.04), accent_color.lightened(0.2), 6)
+		)
+		var indicator := tab.get_node_or_null("SelectedIndicator") as ColorRect
+		if indicator:
+			indicator.color = accent_color.lightened(0.12)
+			indicator.visible = selected
+
+
 func _merchant_trade_row(good: Dictionary) -> Button:
 	var buying := merchant_shop_mode == "buy"
 	var price := int(good["buy_price"] if buying else good.get("sell_cans", 0))
 	var owned := _merchant_item_count(good)
 	var action := "구매" if buying else "판매"
-	var currency := "고철" if buying else "통조림"
-	var button := _merchant_button(
-		"%s  x%d\n%s    ·    보유 %d    ·    %s %d" % [
-			str(good["title"]), int(good["amount"]), str(good["description"]), owned, currency, price,
-		],
-		buying
-	)
+	var currency_icon := "scrap" if buying else "food"
+	var currency_name := "고철" if buying else "통조림"
+	var currency_color := Color("#d4d9d6") if buying else Color("#e5b55b")
+	var can_trade := GameState.scrap >= price if buying else (price > 0 and owned >= int(good["amount"]))
+	var button := _merchant_button("", false)
 	button.name = "MerchantGood_%s" % str(good["id"])
-	button.custom_minimum_size = Vector2(720, 72)
-	button.text = "%s    %s" % [button.text, action]
+	button.custom_minimum_size = Vector2(720, 84)
+	button.tooltip_text = "%s %d개 %s" % [currency_name, price, action]
+	button.add_theme_stylebox_override(
+		"normal",
+		_rounded_panel_style(Color(0.025, 0.033, 0.031, 0.97), Color("#50645b"), 6)
+	)
+	button.add_theme_stylebox_override(
+		"hover",
+		_rounded_panel_style(Color(0.085, 0.075, 0.045, 0.99), currency_color, 6)
+	)
+	button.add_theme_stylebox_override(
+		"pressed",
+		_rounded_panel_style(Color(0.14, 0.11, 0.052, 1.0), currency_color.lightened(0.14), 6)
+	)
+
+	var row := HBoxContainer.new()
+	row.name = "TradeRowContent"
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 12
+	row.offset_top = 8
+	row.offset_right = -12
+	row.offset_bottom = -8
+	row.add_theme_constant_override("separation", 12)
+	button.add_child(row)
+
+	var item_icon := TextureRect.new()
+	item_icon.name = "ItemIcon"
+	item_icon.custom_minimum_size = Vector2(58, 58)
 	var icon_path := str(good.get("icon", ""))
 	if not icon_path.is_empty() and ResourceLoader.exists(icon_path):
-		button.icon = load(icon_path) as Texture2D
+		item_icon.texture = load(icon_path) as Texture2D
 	else:
-		button.icon = _merchant_good_fallback_icon(good)
-	button.expand_icon = true
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.disabled = GameState.scrap < price if buying else (price <= 0 or owned < int(good["amount"]))
+		item_icon.texture = _merchant_good_fallback_icon(good)
+	item_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	item_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	item_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(item_icon)
+
+	var details := VBoxContainer.new()
+	details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	details.alignment = BoxContainer.ALIGNMENT_CENTER
+	details.add_theme_constant_override("separation", 3)
+	row.add_child(details)
+	var title := Label.new()
+	title.text = "%s  ×%d" % [str(good["title"]), int(good["amount"])]
+	title.add_theme_font_override("font", FONT)
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color("#eee6d2"))
+	details.add_child(title)
+	var description := Label.new()
+	description.text = str(good["description"])
+	description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	description.add_theme_font_override("font", FONT)
+	description.add_theme_font_size_override("font_size", 12)
+	description.add_theme_color_override("font_color", Color("#93a29b"))
+	details.add_child(description)
+
+	row.add_child(_merchant_trade_chip(
+		"backpack",
+		"보유",
+		owned,
+		Color("#a9bbb2"),
+		"OwnedChip"
+	))
+	row.add_child(_merchant_trade_chip(
+		currency_icon,
+		"필요" if buying else "받음",
+		price,
+		currency_color if can_trade else Color("#d9786c"),
+		"PriceChip"
+	))
+	var action_label := Label.new()
+	action_label.name = "TradeAction"
+	action_label.custom_minimum_size.x = 58
+	action_label.text = "%s\n›" % action
+	action_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	action_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	action_label.add_theme_font_override("font", FONT)
+	action_label.add_theme_font_size_override("font_size", 14)
+	action_label.add_theme_color_override(
+		"font_color",
+		currency_color if can_trade else Color("#6f7b75")
+	)
+	row.add_child(action_label)
+	button.disabled = not can_trade
 	button.pressed.connect(func() -> void: _trade_merchant_good(good, buying))
 	return button
+
+
+func _merchant_trade_chip(
+	icon_name: String,
+	caption: String,
+	value: int,
+	color: Color,
+	node_name: String
+) -> VBoxContainer:
+	var chip := VBoxContainer.new()
+	chip.name = node_name
+	chip.custom_minimum_size.x = 88
+	chip.alignment = BoxContainer.ALIGNMENT_CENTER
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var caption_label := Label.new()
+	caption_label.text = caption
+	caption_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption_label.add_theme_font_override("font", FONT)
+	caption_label.add_theme_font_size_override("font_size", 11)
+	caption_label.add_theme_color_override("font_color", Color("#84938c"))
+	chip.add_child(caption_label)
+	var value_row := HBoxContainer.new()
+	value_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	value_row.add_theme_constant_override("separation", 5)
+	chip.add_child(value_row)
+	var icon := TextureRect.new()
+	icon.name = "%sIcon" % node_name
+	icon.custom_minimum_size = Vector2(24, 24)
+	icon.texture = UI_ICONS.get_icon(icon_name, 24, color)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	value_row.add_child(icon)
+	var value_label := Label.new()
+	value_label.text = str(value)
+	value_label.add_theme_font_override("font", FONT)
+	value_label.add_theme_font_size_override("font_size", 17)
+	value_label.add_theme_color_override("font_color", color)
+	value_row.add_child(value_label)
+	return chip
 
 
 func _trade_merchant_good(good: Dictionary, buying: bool) -> void:

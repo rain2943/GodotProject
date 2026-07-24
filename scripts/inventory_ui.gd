@@ -286,7 +286,7 @@ func _build_inventory_panel() -> Control:
 	box.add_child(_section("장비"))
 	equipped_grid = GridContainer.new()
 	equipped_grid.name = "EquipmentGrid"
-	equipped_grid.columns = 3
+	equipped_grid.columns = 2
 	equipped_grid.add_theme_constant_override("h_separation", 6)
 	equipped_grid.add_theme_constant_override("v_separation", 6)
 	box.add_child(equipped_grid)
@@ -344,7 +344,7 @@ func _build_inventory_panel() -> Control:
 func _build_item_detail_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "SelectedItemDetail"
-	panel.custom_minimum_size = Vector2(0, 72)
+	panel.custom_minimum_size = Vector2(0, 90)
 	panel.clip_contents = true
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.025, 0.029, 0.96), Color(0.43, 0.58, 0.52, 0.58), 7))
 	var margin := _margin(10, 8, 10, 8)
@@ -370,7 +370,7 @@ func _build_item_detail_panel() -> Control:
 	item_detail_description = _label("가방 슬롯에는 아이콘과 수량만 표시됩니다.", 11, Color("#9aaba4"))
 	item_detail_description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	item_detail_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	item_detail_description.max_lines_visible = 2
+	item_detail_description.max_lines_visible = 3
 	item_detail_description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_description)
 	item_detail_reason = _label("", 10, Color("#ffc77f"))
@@ -851,17 +851,24 @@ func _refresh_contents() -> void:
 	equipped_grid.add_child(_equipment_button("주무기", weapon_texture, has_weapon_state, _show_weapon_detail))
 	var body_id := str(game_state.equipped_body_armor_id)
 	var head_id := str(game_state.equipped_head_armor_id)
+	var footwear_id := str(game_state.equipped_footwear_id)
 	equipped_grid.add_child(_equipment_button(
 		_equipped_equipment_label("body", "몸 방어구"),
-		UI_ICONS.get_icon("armor", 48, Color("#b8c8be")),
+		_equipment_texture(body_id, 48),
 		not body_id.is_empty(),
 		func() -> void: _select_equipped_equipment("body")
 	))
 	equipped_grid.add_child(_equipment_button(
 		_equipped_equipment_label("head", "머리 방어구"),
-		UI_ICONS.get_icon("helmet", 48, Color("#b8c8be")),
+		_equipment_texture(head_id, 48),
 		not head_id.is_empty(),
 		func() -> void: _select_equipped_equipment("head")
+	))
+	equipped_grid.add_child(_equipment_button(
+		_equipped_equipment_label("feet", "신발"),
+		_equipment_texture(footwear_id, 48),
+		not footwear_id.is_empty(),
+		func() -> void: _select_equipped_equipment("feet")
 	))
 
 	_add_bag_item({
@@ -908,14 +915,13 @@ func _refresh_contents() -> void:
 		if equipment_count <= 0:
 			continue
 		var equipment_definition: Dictionary = game_state.get_equipment_definition(equipment_id)
-		var equipment_slot := str(equipment_definition.get("slot", "body"))
 		_add_bag_item({
 			"id": equipment_id,
 			"type": "equipment",
 			"title": str(equipment_definition.get("display_name", equipment_id)),
 			"description": str(equipment_definition.get("description", "")),
 			"quantity": equipment_count,
-			"texture": UI_ICONS.get_icon("helmet" if equipment_slot == "head" else "armor", 64, Color("#b8c8be")),
+			"texture": _equipment_texture(equipment_id, 64),
 		})
 
 	var mod_ids: Array = MOD_COMPONENTS.keys()
@@ -945,7 +951,11 @@ func _refresh_contents() -> void:
 		var equipment_id := str(equipment_id_variant)
 		var definition: Dictionary = game_state.get_equipment_definition(equipment_id)
 		equipment_weight += float(definition.get("weight", 0.0)) * float(game_state.get_equipment_count(equipment_id))
-	for equipped_id in [str(game_state.equipped_body_armor_id), str(game_state.equipped_head_armor_id)]:
+	for equipped_id in [
+		str(game_state.equipped_body_armor_id),
+		str(game_state.equipped_head_armor_id),
+		str(game_state.equipped_footwear_id),
+	]:
 		if not equipped_id.is_empty():
 			equipment_weight += float(game_state.get_equipment_definition(equipped_id).get("weight", 0.0))
 	var load := 6.3 + float(reserve_state) * 0.015 + float(canned_food_state) * 0.35 + float(stored_weapons_state) * 3.2 + equipment_weight
@@ -1049,7 +1059,7 @@ func _select_equipped_equipment(slot: String) -> void:
 		"description": str(definition.get("description", "")),
 		"quantity": 1,
 		"equipped": true,
-		"texture": UI_ICONS.get_icon("helmet" if slot == "head" else "armor", 64, Color("#b8c8be")),
+		"texture": _equipment_texture(equipment_id, 64),
 	}
 	_refresh_item_detail()
 
@@ -1173,15 +1183,14 @@ func _refresh_item_detail() -> void:
 		var equipment_id := str(selected_item.get("id", ""))
 		var equipment_definition: Dictionary = game_state.get_equipment_definition(equipment_id)
 		var equipment_slot := str(equipment_definition.get("slot", "body"))
-		var reduction_percent := roundi(float(equipment_definition.get("damage_reduction", 0.0)) * 100.0)
 		var equipped_id := str(game_state.get_equipped_equipment(equipment_slot))
-		item_detail_description.text = "%s  ·  피해 감소 %d%%  ·  무게 %.1fkg" % [
+		item_detail_description.text = "%s\n%s" % [
 			str(equipment_definition.get("description", "방어 장비")),
-			reduction_percent,
-			float(equipment_definition.get("weight", 0.0)),
+			_format_equipment_stats(equipment_definition),
 		]
 		item_action_button.text = "해제" if equipped_id == equipment_id else "장착"
-		item_action_button.icon = UI_ICONS.get_icon("close" if equipped_id == equipment_id else "armor", 28, Color("#bce6ca"))
+		var equipment_icon := str(equipment_definition.get("icon", "armor"))
+		item_action_button.icon = UI_ICONS.get_icon("close" if equipped_id == equipment_id else equipment_icon, 28, Color("#bce6ca"))
 		item_action_button.visible = true
 
 
@@ -1218,6 +1227,21 @@ func _on_selected_item_action() -> void:
 		equipment_changed.emit()
 		selected_item = {}
 		_refresh_contents()
+
+
+func _format_equipment_stats(definition: Dictionary) -> String:
+	var stats: Array[String] = []
+	var reduction_percent := roundi(float(definition.get("damage_reduction", 0.0)) * 100.0)
+	if reduction_percent > 0:
+		stats.append("피해 감소 %d%%" % reduction_percent)
+	var move_speed_percent := roundi(float(definition.get("move_speed_bonus", 0.0)) * 100.0)
+	if move_speed_percent != 0:
+		stats.append("이동 속도 %s%d%%" % ["+" if move_speed_percent > 0 else "", move_speed_percent])
+	var stamina_cost_percent := roundi((float(definition.get("stamina_cost_multiplier", 1.0)) - 1.0) * 100.0)
+	if stamina_cost_percent != 0:
+		stats.append("대시 스태미나 소모 %s%d%%" % ["+" if stamina_cost_percent > 0 else "", stamina_cost_percent])
+	stats.append("무게 %.1fkg" % float(definition.get("weight", 0.0)))
+	return "  ·  ".join(stats)
 
 
 func _request_weapon_unequip() -> void:
@@ -1326,16 +1350,16 @@ func _equipment_button(slot_name: String, texture: Texture2D, active: bool, call
 	button.name = "Equipment_%s" % slot_name
 	button.custom_minimum_size = Vector2(132, 74)
 	button.tooltip_text = slot_name
-	button.icon = texture if texture != null else UI_ICONS.get_icon(_equipment_icon_name(slot_name), 38, Color("#8fa49a"))
-	button.expand_icon = true
+	button.icon = (texture if texture != null else UI_ICONS.get_icon(_equipment_icon_name(slot_name), 38, Color("#8fa49a"))) if active else null
+	button.expand_icon = active
 	button.add_theme_constant_override("icon_max_width", 42)
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
 	var label := Label.new()
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE if active else Control.PRESET_FULL_RECT)
 	label.offset_left = 6
-	label.offset_top = -24
+	label.offset_top = -24 if active else 4
 	label.offset_right = -6
 	label.offset_bottom = -4
 	label.text = slot_name
@@ -1343,7 +1367,7 @@ func _equipment_button(slot_name: String, texture: Texture2D, active: bool, call
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.add_theme_font_override("font", font_ref)
-	label.add_theme_font_size_override("font_size", 10)
+	label.add_theme_font_size_override("font_size", 10 if active else 13)
 	label.add_theme_color_override("font_color", Color("#dbe4de") if active else Color("#819087"))
 	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	label.add_theme_constant_override("outline_size", 3)
@@ -1372,7 +1396,7 @@ func _apply_responsive_layout() -> void:
 	if bag_grid:
 		bag_grid.columns = 5 if panel_width >= 450.0 else (4 if panel_width >= 370.0 else 3)
 	if equipped_grid:
-		equipped_grid.columns = 3 if panel_width >= 390.0 else 2
+		equipped_grid.columns = 2
 	if mod_slot_grid:
 		mod_slot_grid.columns = 2 if panel_width >= 430.0 else 1
 		for child in mod_slot_grid.get_children():
@@ -1472,6 +1496,7 @@ func _equipment_icon_name(slot_name: String) -> String:
 		"Weapon", "주무기", "보조무기": return "weapon"
 		"Armor", "몸 방어구": return "armor"
 		"Helmet", "머리 방어구": return "helmet"
+		"Footwear", "신발": return "footwear"
 		"Backpack", "가방": return "backpack"
 		"Secure", "보안 슬롯": return "secure"
 		"Accessory", "장신구": return "accessory"
@@ -1487,10 +1512,27 @@ func _item_texture(item: Dictionary) -> Texture2D:
 		"resource": return UI_ICONS.get_icon("food", 64, Color("#e6b65c"))
 		"weapon": return UI_ICONS.get_icon("weapon", 64, Color("#c6d2cc"))
 		"equipment":
-			var definition: Dictionary = game_state.get_equipment_definition(str(item.get("id", "")))
-			return UI_ICONS.get_icon("helmet" if str(definition.get("slot", "body")) == "head" else "armor", 64, Color("#b8c8be"))
+			return _equipment_texture(str(item.get("id", "")), 64)
 		"mod": return UI_ICONS.get_icon("mod", 64, Color("#8fd3c4"))
 	return UI_ICONS.get_icon("all", 64, Color("#8fa49a"))
+
+
+func _equipment_texture(equipment_id: String, fallback_size: int = 64) -> Texture2D:
+	if game_state != null and not equipment_id.is_empty():
+		var definition: Dictionary = game_state.get_equipment_definition(equipment_id)
+		var texture_path := str(definition.get("texture_path", ""))
+		if not texture_path.is_empty() and ResourceLoader.exists(texture_path):
+			var texture := load(texture_path) as Texture2D
+			if texture != null:
+				return texture
+		var slot := str(definition.get("slot", "body"))
+		var icon_name := "armor"
+		if slot == "head":
+			icon_name = "helmet"
+		elif slot == "feet":
+			icon_name = "footwear"
+		return UI_ICONS.get_icon(icon_name, fallback_size, Color("#b8c8be"))
+	return UI_ICONS.get_icon("armor", fallback_size, Color("#71877c"))
 
 
 func _weapon_preview_texture() -> Texture2D:

@@ -143,7 +143,14 @@ func _resolved_weapon_id() -> String:
 
 
 func _resolved_equipment_id() -> String:
-	var equipment_ids: Array[String] = ["scav_vest", "patched_helmet", "riot_vest", "tactical_helmet"]
+	var equipment_ids: Array[String] = [
+		"scav_vest",
+		"patched_helmet",
+		"riot_vest",
+		"tactical_helmet",
+		"patched_sneakers",
+		"tactical_boots",
+	]
 	return equipment_ids[absi(loot_key.hash()) % equipment_ids.size()]
 
 

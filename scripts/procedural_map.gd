@@ -144,7 +144,6 @@ func _generate_layout() -> void:
 	river_center_x = GRID_SIZE / 2 + rng.randi_range(-1, 0)
 	for z in range(GRID_SIZE):
 		river_columns.append(river_center_x)
-	_select_apartment_complex_site()
 
 	var eligible_cells: Array[Vector2i] = []
 	for x in range(GRID_SIZE):
@@ -641,7 +640,6 @@ func _build_guardrails(
 			var collision_size := Vector3(0.32, 1.0, segment_length) if vertical else Vector3(segment_length, 1.0, 0.32)
 			_add_static_collision_box("BridgeGuardCollision", center + side_offset + Vector3(0, deck_height + 0.48, 0), collision_size)
 func _build_zoned_lots() -> void:
-	_build_apartment_complex()
 	for cell in playground_cells:
 		_spawn_landmark(cell, "playground")
 	for cell in subway_cells:

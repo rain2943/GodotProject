@@ -5,10 +5,10 @@ const FLOOR_TEXTURE_PATH := "res://assets/interiors/shelter_floor_topdown_v3.png
 const WALL_TEXTURE_PATH := "res://assets/interiors/shelter_wall_panel_v3.png"
 const BED_TEXTURE_PATH := "res://assets/interiors/shelter_bed_module_v2.png"
 const PIPE_TEXTURE_PATH := "res://assets/interiors/shelter_escape_pipe_v1.png"
-const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_wall_aligned_v1.png"
-const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_wall_aligned_v1.png"
-const CATNIP_SCRAPER_TEXTURE_PATH := "res://assets/interiors/modules/catnip_scraper_wall_aligned_v1.png"
-const TRAINING_TEXTURE_PATH := "res://assets/interiors/modules/shelter_training_wall_aligned_v1.png"
+const WORKBENCH_TEXTURE_PATH := "res://assets/interiors/modules/shelter_workbench_wall_front_v2.png"
+const SCRATCHER_BANK_TEXTURE_PATH := "res://assets/interiors/modules/scratcher_bank_wall_front_v2.png"
+const CATNIP_SCRAPER_TEXTURE_PATH := "res://assets/interiors/modules/catnip_scraper_wall_front_v2.png"
+const TRAINING_TEXTURE_PATH := "res://assets/interiors/modules/shelter_training_wall_front_v2.png"
 
 
 func _initialize() -> void:
@@ -76,22 +76,30 @@ func _run() -> void:
 	var workbench := get_nodes_in_group("shelter_workbench")[0] as Node
 	var workbench_sprite := workbench.get_node("WorkbenchSprite") as Sprite3D
 	assert(workbench_sprite.texture.resource_path == WORKBENCH_TEXTURE_PATH)
-	assert(workbench_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
+	assert(workbench_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
+	assert(is_equal_approx(workbench_sprite.position.z, -0.455))
+	assert(workbench_sprite.scale == Vector3(1.25, 1.08, 1.0))
 	assert(workbench_sprite.no_depth_test)
 	assert(workbench.has_method("interact"))
 	var bank := get_nodes_in_group("scratcher_bank")[0] as Node
 	var bank_sprite := bank.get_node("BankSprite") as Sprite3D
 	assert(bank_sprite.texture.resource_path == SCRATCHER_BANK_TEXTURE_PATH)
-	assert(bank_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
+	assert(bank_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
+	assert(is_equal_approx(bank_sprite.position.z, -0.455))
+	assert(bank_sprite.scale == Vector3(1.3, 1.05, 1.0))
 	assert(bank_sprite.no_depth_test)
 	assert(bank.has_method("interact"))
 	var catnip_scraper := get_nodes_in_group("catnip_scraper")[0] as Node
 	var catnip_sprite := catnip_scraper.get_node("ScraperSprite") as Sprite3D
 	assert(catnip_sprite.texture.resource_path == CATNIP_SCRAPER_TEXTURE_PATH)
+	assert(catnip_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
+	assert(is_equal_approx(catnip_sprite.position.z, -0.455))
 	assert(catnip_scraper.has_method("interact"))
 	var training := get_nodes_in_group("training_facility")[0] as Node
 	var training_sprite := training.get_node("TrainingSprite") as Sprite3D
 	assert(training_sprite.texture.resource_path == TRAINING_TEXTURE_PATH)
+	assert(training_sprite.billboard == BaseMaterial3D.BILLBOARD_DISABLED)
+	assert(is_equal_approx(training_sprite.position.z, -0.455))
 	assert(training.has_method("interact"))
 
 	assert(shelter.get_node("ShelterPlayer") is CharacterBody3D)
