@@ -61,14 +61,29 @@ func _run() -> void:
 	assert(not enemy_sprite.flip_h)
 	enemy.call("_become_alerted")
 	assert(enemy.get("alerted"))
-	assert(enemy.get_node("ThreatMarker").visible)
+	assert(not enemy.get_node("ThreatMarker").visible)
 	enemy.set("last_known_position", (enemy as Node3D).global_position + Vector3(5.0, 0.0, 0.0))
 	enemy.call("_pursue_last_known_position")
 	assert((enemy as CharacterBody3D).velocity.length() > 0.1)
 	enemy.call("_clear_alert")
 	enemy.call("receive_reinforcement_order", (enemy as Node3D).global_position + Vector3(3.0, 0.0, 0.0))
 	assert(enemy.get("alerted"))
-	assert(enemy.get_node("ThreatMarker").text == "!")
+	assert(not enemy.get_node("ThreatMarker").visible)
+	var enemy_visible_position := (enemy as Node3D).global_position
+	enemy.set_meta("smoothed_player_visibility", 1.0)
+	enemy.set_meta("player_visibility_hold", 0.32)
+	(enemy as Node3D).global_position = enemy_visible_position + Vector3(10000.0, 0.0, 10000.0)
+	main_scene.call("_update_enemy_visibility", 0.016)
+	assert(enemy.visible)
+	assert(float(enemy.get("player_visibility_factor")) > 0.95)
+	for visibility_step in 180:
+		main_scene.call("_update_enemy_visibility", 0.016)
+	assert(not enemy.visible)
+	(enemy as Node3D).global_position = enemy_visible_position
+	enemy.set_meta("smoothed_player_visibility", 1.0)
+	enemy.set_meta("player_visibility_hold", 0.32)
+	enemy.call("set_player_visibility_factor", 1.0)
+	enemy.visible = true
 
 	var pistol_enemy: Node
 	var ranged_weapon_ids: Array[String] = []
@@ -87,8 +102,9 @@ func _run() -> void:
 	pistol_enemy.set("attack_cooldown", 0.0)
 	pistol_enemy.call("_update_pistol", Vector3(1.0, 0.0, 0.0), 8.0, 0.1)
 	assert(pistol_enemy.get("combat_state") == "pistol_burst")
-	assert(int(pistol_enemy.get("burst_shots_remaining")) == 8)
-	assert(int(pistol_enemy.call("_get_weapon_burst_size")) == 9)
+	var expected_burst_size := int(pistol_enemy.call("_get_weapon_burst_size"))
+	assert(expected_burst_size == int(pistol_enemy.get("magazine_size")))
+	assert(int(pistol_enemy.get("burst_shots_remaining")) == expected_burst_size - 1)
 
 	var perception := main_scene.get("perception_system") as CanvasLayer
 	assert(perception != null)
@@ -120,6 +136,42 @@ func _run() -> void:
 	assert(main_scene.get("mobile_reload_button") is Button)
 	assert(main_scene.get("mobile_flashlight_button") is Button)
 	assert(main_scene.get("mobile_map_button") is Button)
+	var fire_button := main_scene.get("fire_button") as Button
+	var dash_button := main_scene.get("dash_button") as Button
+	fire_button.visible = true
+	dash_button.visible = true
+	await process_frame
+	main_scene.set("touch_id", 71)
+	main_scene.set("touch_vector", Vector2(0.8, 0.0))
+	main_scene.set("fire_cooldown", 0.0)
+	main_scene.set("magazine_ammo", 24)
+	var fire_touch := InputEventScreenTouch.new()
+	fire_touch.index = 72
+	fire_touch.position = fire_button.get_global_rect().get_center()
+	fire_touch.pressed = true
+	assert(main_scene.call("_handle_mobile_action_touch", fire_touch))
+	assert(main_scene.get("fire_button_held"))
+	assert(int(main_scene.get("fire_touch_id")) == 72)
+	assert((main_scene.get("touch_vector") as Vector2).is_equal_approx(Vector2(0.8, 0.0)))
+	var fire_release := InputEventScreenTouch.new()
+	fire_release.index = 72
+	fire_release.position = fire_touch.position
+	fire_release.pressed = false
+	assert(main_scene.call("_handle_mobile_action_touch", fire_release))
+	assert(not main_scene.get("fire_button_held"))
+	assert(int(main_scene.get("touch_id")) == 71)
+	main_scene.set("roll_active", false)
+	main_scene.set("roll_stamina", 36.0)
+	var dash_touch := InputEventScreenTouch.new()
+	dash_touch.index = 73
+	dash_touch.position = dash_button.get_global_rect().get_center()
+	dash_touch.pressed = true
+	assert(main_scene.call("_handle_mobile_action_touch", dash_touch))
+	assert(main_scene.get("roll_active"))
+	assert((main_scene.get("touch_vector") as Vector2).is_equal_approx(Vector2(0.8, 0.0)))
+	main_scene.set("roll_active", false)
+	main_scene.set("touch_id", -1)
+	main_scene.set("touch_vector", Vector2.ZERO)
 	main_scene.call("_on_mobile_flashlight_toggled", true)
 	assert(bool(main_scene.get("laser_aim_held")))
 	var fatigue_before_flashlight := float(main_scene.get("fatigue"))
@@ -132,7 +184,12 @@ func _run() -> void:
 	main_scene.call("_update_equipment_ui")
 	assert((main_scene.get("equipment_ammo_label") as Label).text.contains("24 / 30"))
 	assert((main_scene.get("equipment_condition_label") as Label).text.contains("완전 탄창 3개 + 낱탄 5발"))
-	assert((main_scene.get("quick_slot_buttons") as Array)[0].text.contains("24/30 · 예비 95"))
+	var quick_slots := main_scene.get("quick_slot_buttons") as Array
+	assert(quick_slots[0].text.contains("24/30  +95"))
+	assert(quick_slots[1].text.contains("응급키트"))
+	assert(quick_slots[2].text.contains("근접 공격"))
+	assert(not quick_slots[2].text.contains("식량"))
+	assert(quick_slots[3].text.contains("재장전"))
 	assert((main_scene.get_node("HUD/TopLeft/Margin/VBox/Stats") as Label).text.contains("탄 24/30 +95"))
 
 	pistol_enemy.set("magazine_ammo", 0)

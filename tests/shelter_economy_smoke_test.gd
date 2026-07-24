@@ -29,9 +29,26 @@ func _run() -> void:
 	var inventory_button := shelter.find_child("InventoryButton", true, false) as Button
 	if inventory_button == null or inventory_button.icon == null:
 		_fail("shelter inventory button is missing or has no backpack icon")
-	for resource_icon in ["🔩", "🌿", "🥫", "🍗"]:
-		if not stats.text.contains(resource_icon):
-			_fail("shelter resource stats are missing icon %s" % resource_icon)
+	var currency_labels := shelter.get("shelter_currency_labels") as Dictionary
+	for resource_data in [
+		["scrap", "고철"],
+		["catnip", "캣닢"],
+		["food", "통조림"],
+		["churu", "츄르"],
+	]:
+		var resource_id := str(resource_data[0])
+		var resource_name := str(resource_data[1])
+		if not currency_labels.has(resource_id):
+			_fail("shelter resource value is missing for %s" % resource_name)
+			return
+		var resource_label := currency_labels[resource_id] as Label
+		if resource_label == null or not resource_label.text.contains(resource_name):
+			_fail("shelter resource value is unreadable for %s" % resource_name)
+			return
+		var resource_icon := shelter.find_child("%sIcon" % resource_name, true, false) as TextureRect
+		if resource_icon == null or resource_icon.texture == null:
+			_fail("shelter resource icon is missing for %s" % resource_name)
+			return
 	var resident_nodes := get_nodes_in_group("shelter_resident")
 	if resident_nodes.size() != 4:
 		_fail("rescued residents were not instantiated in the shelter")
@@ -87,6 +104,13 @@ func _run() -> void:
 	var bank := get_nodes_in_group("scratcher_bank")[0] as Node
 	bank.call("interact")
 	await process_frame
+	var bank_panel := root.find_child("ScratcherBankPanel", true, false) as Control
+	var bank_body := root.find_child("ScratcherBankBody", true, false) as BoxContainer
+	if bank_panel == null or bank_body == null:
+		_fail("scratcher bank responsive panel structure is missing")
+	var bank_viewport_size := bank.get_viewport().get_visible_rect().size
+	if bank_panel.size.x > bank_viewport_size.x or bank_panel.size.y > bank_viewport_size.y:
+		_fail("scratcher bank panel exceeds the viewport: panel=%s viewport=%s" % [bank_panel.size, bank_viewport_size])
 	var assigned_ids := game_state.get("assigned_worker_ids") as Array
 	if assigned_ids.is_empty():
 		_fail("worker assignment data was unexpectedly empty")
@@ -100,6 +124,24 @@ func _run() -> void:
 			break
 	if toggled_resident == null or bool(toggled_resident.get_meta("assigned_to_scratcher", true)):
 		_fail("resident did not leave the scratcher after unassignment")
+	var bank_layer := bank.get("ui_layer") as CanvasLayer
+	if is_instance_valid(bank_layer):
+		bank_layer.queue_free()
+	await process_frame
+	var catnip_module := get_nodes_in_group("catnip_scraper")[0] as Node
+	catnip_module.call("interact")
+	await process_frame
+	var catnip_panel := root.find_child("CatnipScraperPanel", true, false) as Control
+	var catnip_body := root.find_child("CatnipScraperBody", true, false) as BoxContainer
+	if catnip_panel == null or catnip_body == null:
+		_fail("catnip scraper responsive panel structure is missing")
+	var catnip_viewport_size := catnip_module.get_viewport().get_visible_rect().size
+	if catnip_panel.size.x > catnip_viewport_size.x or catnip_panel.size.y > catnip_viewport_size.y:
+		_fail("catnip scraper panel exceeds the viewport: panel=%s viewport=%s" % [catnip_panel.size, catnip_viewport_size])
+	var catnip_layer := catnip_module.get("ui_layer") as CanvasLayer
+	if is_instance_valid(catnip_layer):
+		catnip_layer.queue_free()
+	await process_frame
 
 	var before_level := int(game_state.get("scratcher_bank_level"))
 	var upgraded := bool(game_state.call("try_upgrade_scratcher_bank"))

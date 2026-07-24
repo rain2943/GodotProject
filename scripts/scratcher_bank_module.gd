@@ -68,9 +68,12 @@ func _open_ui() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	safe_margin.add_child(center)
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(900, 510)
+	panel.name = "ScratcherBankPanel"
+	var viewport_size := get_viewport().get_visible_rect().size
+	panel.custom_minimum_size = Vector2(minf(900.0, viewport_size.x - 44.0), minf(570.0, viewport_size.y - 44.0))
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	panel.clip_contents = true
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.018, 0.023, 0.02, 0.96), Color("#c29c5b")))
 	center.add_child(panel)
 	var margin := MarginContainer.new()
@@ -79,9 +82,16 @@ func _open_ui() -> void:
 	margin.add_theme_constant_override("margin_right", 24)
 	margin.add_theme_constant_override("margin_bottom", 22)
 	panel.add_child(margin)
+	var panel_scroll := ScrollContainer.new()
+	panel_scroll.name = "ScratcherBankScroll"
+	panel_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	margin.add_child(panel_scroll)
 	content = VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 16)
-	margin.add_child(content)
+	panel_scroll.add_child(content)
 	_rebuild_ui()
 
 
@@ -103,7 +113,9 @@ func _rebuild_ui() -> void:
 	header.add_child(close)
 	var workers: int = GameState.get_active_scratcher_workers()
 	var slots: int = GameState.get_scratcher_worker_slots()
-	var summary := HBoxContainer.new()
+	var compact := get_viewport().get_visible_rect().size.x < 980.0 or get_viewport().get_visible_rect().size.y < 620.0
+	var summary := HFlowContainer.new()
+	summary.name = "ScratcherBankSummary"
 	summary.add_theme_constant_override("separation", 10)
 	content.add_child(summary)
 	summary.add_child(_summary_card("시설", "Lv.%d · Tier %d" % [GameState.scratcher_bank_level, GameState.shelter_tier]))
@@ -111,7 +123,8 @@ func _rebuild_ui() -> void:
 	summary.add_child(_summary_card("시간당 고철 생산", "%.0f" % GameState.get_scrap_per_hour()))
 	summary.add_child(_summary_card("부스터", "x%.0f" % GameState.get_production_multiplier()))
 
-	var body := HBoxContainer.new()
+	var body: BoxContainer = VBoxContainer.new() if compact else HBoxContainer.new()
+	body.name = "ScratcherBankBody"
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 16)
 	content.add_child(body)
@@ -136,7 +149,7 @@ func _rebuild_ui() -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	resident_box.add_child(scroll)
 	var grid := GridContainer.new()
-	grid.columns = 3
+	grid.columns = 1 if compact else 3
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 8)
@@ -147,7 +160,7 @@ func _rebuild_ui() -> void:
 		grid.add_child(_label("구출한 주민이 없습니다.", 15, Color("#8f978f")))
 
 	var operations := PanelContainer.new()
-	operations.custom_minimum_size = Vector2(252, 0)
+	operations.custom_minimum_size = Vector2(0 if compact else 252, 0)
 	operations.add_theme_stylebox_override("panel", _panel_style(Color(0.03, 0.034, 0.028, 0.92), Color("#66563a")))
 	body.add_child(operations)
 	var operations_margin := MarginContainer.new()
@@ -288,7 +301,7 @@ func _button(text: String, icon_name := "") -> Button:
 
 func _summary_card(title: String, value: String) -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(0, 58)
+	panel.custom_minimum_size = Vector2(190, 58)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.035, 0.041, 0.036, 0.92), Color("#46564d")))
 	var margin := MarginContainer.new()

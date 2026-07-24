@@ -65,7 +65,6 @@ const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const ROCKET_BOSS_SCRIPT := preload("res://scripts/rocket_boss.gd")
 const INVENTORY_UI_SCRIPT := preload("res://scripts/inventory_ui.gd")
 const PERCEPTION_SYSTEM_SCRIPT := preload("res://scripts/perception_system.gd")
-const ENEMY_ALERT_OVERLAY_SCRIPT := preload("res://scripts/enemy_alert_overlay.gd")
 const OVERLAY_DEPTH_SORT := preload("res://scripts/overlay_depth_sort.gd")
 const WEAPON_SYSTEM := preload("res://scripts/weapon_system.gd")
 const WEAPON_VISUAL_CATALOG := preload("res://scripts/weapon_visual_catalog.gd")
@@ -96,9 +95,13 @@ const MELEE_ATTACK_RANGE := 2.2
 const MELEE_ATTACK_DAMAGE := 38
 const MOBILE_AIM_ASSIST_MAX_DISTANCE := 30.0
 const MOBILE_AIM_ASSIST_HALF_ANGLE_DEG := 55.0
-const REINFORCEMENT_CALL_TRIGGER_TIME := 7.0
+const REINFORCEMENT_CALL_TRIGGER_TIME := 30.0
+const REINFORCEMENT_HIDDEN_TRIGGER_TIME := 14.0
 const REINFORCEMENT_CALL_DURATION := 4.6
-const REINFORCEMENT_CALL_COOLDOWN := 24.0
+const REINFORCEMENT_CALL_COOLDOWN := 38.0
+const ENEMY_VISIBILITY_HOLD_SECONDS := 0.32
+const ENEMY_VISIBILITY_FADE_IN_SPEED := 10.0
+const ENEMY_VISIBILITY_FADE_OUT_SPEED := 3.2
 const FIELD_INTERACTION_DISTANCE := 2.8
 const SALVAGE_HOLD_DURATION := 2.4
 const RESCUE_HOLD_DURATION := 1.8
@@ -144,6 +147,7 @@ const DIRECTION_VECTORS := {
 
 var touch_id := -1
 var fire_touch_id := -1
+var context_touch_id := -1
 var touch_origin := Vector2.ZERO
 var touch_vector := Vector2.ZERO
 var facing := "s"
@@ -200,7 +204,6 @@ var nearby_ammo_pickup: Node3D
 var inventory_ui: Control
 var visibility_material: ShaderMaterial
 var perception_system: CanvasLayer
-var enemy_alert_overlay: Control
 var aim_hold_time := 0.0
 var locked_aim_direction := Vector3.ZERO
 var smoke_particle_texture: ImageTexture
@@ -216,6 +219,7 @@ var enemy_spawn_serial := 0
 var enemy_ranged_spawn_serial := 0
 var reinforcement_timer := 8.0
 var sustained_combat_time := 0.0
+var concealed_combat_time := 0.0
 var reinforcement_call_cooldown := 0.0
 var active_reinforcement_caller: CharacterBody3D
 var day_night_tint: ColorRect
@@ -359,7 +363,6 @@ func _ready() -> void:
 	_setup_weather_effects()
 	_spawn_ammo_pickups()
 	_build_weapon_hud()
-	_build_enemy_alert_overlay()
 	_build_gunshot_audio()
 	_build_roll_audio()
 	_build_bgm_audio()
@@ -376,7 +379,11 @@ func _ready() -> void:
 		player.position = world.get_shelter_exit_position()
 		GameState.returning_from_shelter = false
 	else:
-		player.position = world.find_nearest_open_position(player.position)
+		player.position = world.find_nearest_physically_open_position(
+			player.position,
+			0.62,
+			[player.get_rid()]
+		)
 	_setup_extraction_site(world)
 	_setup_field_objectives(world)
 	_register_building_entrance_interactions()
@@ -424,12 +431,15 @@ func _physics_process(delta: float) -> void:
 	if player_death_sequence_active:
 		_update_building_overlays()
 		_update_visibility_fog()
-		_update_enemy_visibility()
+		_update_enemy_visibility(delta)
 		return
 	_update_day_night(delta)
 	_update_lightning(delta)
 	_update_enemy_pressure(delta)
+	var previous_melee_cooldown := melee_attack_cooldown
 	melee_attack_cooldown = maxf(0.0, melee_attack_cooldown - delta)
+	if previous_melee_cooldown > 0.0 and melee_attack_cooldown <= 0.0:
+		_update_quick_slot_labels()
 	_update_melee_attack(delta)
 	aim_hold_time = maxf(0.0, aim_hold_time - delta)
 	player_hit_stun_time = maxf(0.0, player_hit_stun_time - delta)
@@ -459,7 +469,7 @@ func _physics_process(delta: float) -> void:
 		player.move_and_slide()
 		_update_building_overlays()
 		_update_visibility_fog()
-		_update_enemy_visibility()
+		_update_enemy_visibility(delta)
 		return
 	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if Input.is_key_pressed(KEY_A): input_vector.x -= 1.0
@@ -515,7 +525,7 @@ func _physics_process(delta: float) -> void:
 	camera_rig.position = camera_rig.position.lerp(camera_target, 1.0 - exp(-7.0 * delta))
 	_update_building_overlays()
 	_update_visibility_fog()
-	_update_enemy_visibility()
+	_update_enemy_visibility(delta)
 	if perception_system:
 		perception_system.call("set_aim_direction", _get_perception_aim_direction())
 		if perception_system.has_method("set_aim_expanded"):
@@ -1513,6 +1523,7 @@ func _capture_raid_start_snapshot() -> void:
 		"canned_food": GameState.canned_food,
 		"churu": GameState.churu,
 		"mod_component_inventory": GameState.mod_component_inventory.duplicate(true),
+		"weapon_mod_inventory": GameState.weapon_mod_inventory.duplicate(true),
 		"weapon_inventory": GameState.weapon_inventory.duplicate(true),
 		"weapon_durability": GameState.weapon_durability,
 		"equipped_weapon_id": GameState.equipped_weapon_id,
@@ -1530,6 +1541,7 @@ func _restore_raid_start_snapshot_after_death() -> void:
 	GameState.canned_food = int(raid_start_snapshot.get("canned_food", GameState.canned_food))
 	GameState.churu = int(raid_start_snapshot.get("churu", GameState.churu))
 	GameState.mod_component_inventory = (raid_start_snapshot.get("mod_component_inventory", {}) as Dictionary).duplicate(true)
+	GameState.weapon_mod_inventory = (raid_start_snapshot.get("weapon_mod_inventory", {}) as Dictionary).duplicate(true)
 	GameState.weapon_inventory = (raid_start_snapshot.get("weapon_inventory", {}) as Dictionary).duplicate(true)
 	GameState.weapon_durability = float(raid_start_snapshot.get("weapon_durability", 100.0))
 	GameState.equipped_weapon_id = str(raid_start_snapshot.get("equipped_weapon_id", "ak47"))
@@ -2191,6 +2203,8 @@ func _build_weapon_hud() -> void:
 	fire_button.expand_icon = true
 	fire_button.tooltip_text = "AK-47 발사"
 	fire_button.focus_mode = Control.FOCUS_NONE
+	fire_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	fire_button.z_index = 90
 	fire_button.add_theme_font_override("font", font)
 	fire_button.add_theme_font_size_override("font_size", 17)
 	fire_button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.16, 0.055, 0.04, 0.92), Color("#d98155"), 40))
@@ -2213,6 +2227,8 @@ func _build_weapon_hud() -> void:
 	melee_button.expand_icon = true
 	melee_button.tooltip_text = "야구 방망이 휘두르기"
 	melee_button.focus_mode = Control.FOCUS_NONE
+	melee_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	melee_button.z_index = 90
 	melee_button.add_theme_font_override("font", font)
 	melee_button.add_theme_font_size_override("font_size", 16)
 	melee_button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.055, 0.075, 0.07, 0.92), Color("#9eb6a5"), 40))
@@ -2234,6 +2250,8 @@ func _build_weapon_hud() -> void:
 	dash_button.expand_icon = true
 	dash_button.tooltip_text = "회피 대시"
 	dash_button.focus_mode = Control.FOCUS_NONE
+	dash_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	dash_button.z_index = 90
 	dash_button.add_theme_font_override("font", font)
 	dash_button.add_theme_font_size_override("font_size", 16)
 	dash_button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.045, 0.065, 0.08, 0.92), Color("#82a8b8"), 40))
@@ -2317,6 +2335,8 @@ func _make_mobile_utility_button(
 	button.icon = UI_ICONS.get_icon(icon_name, 32, Color("#dbe8df"))
 	button.expand_icon = true
 	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.z_index = 90
 	button.add_theme_font_override("font", font)
 	button.add_theme_font_size_override("font_size", 13)
 	button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.025, 0.035, 0.034, 0.94), Color("#718a7e"), 38))
@@ -2406,16 +2426,16 @@ func _build_quick_slots(font: Font) -> void:
 	quick_slots.add_theme_constant_override("separation", 8)
 	quick_slot_buttons.clear()
 	var definitions := [
-		{"title": "1  무기", "icon": "weapon", "color": Color("#e2cc86")},
-		{"title": "2  응급", "icon": "medkit", "color": Color("#db756e")},
-		{"title": "3  식량", "icon": "food", "color": Color("#d6bd68")},
-		{"title": "4  장전", "icon": "reload", "color": Color("#82bda0")},
+		{"title": "1  주무기", "icon": "weapon", "color": Color("#e2cc86")},
+		{"title": "2  응급키트", "icon": "medkit", "color": Color("#db756e")},
+		{"title": "3  근접", "icon": "melee", "color": Color("#d6bd68")},
+		{"title": "4  재장전", "icon": "reload", "color": Color("#82bda0")},
 	]
 	for index in definitions.size():
 		var definition: Dictionary = definitions[index]
 		var button := Button.new()
 		button.name = "QuickSlot%d" % (index + 1)
-		button.custom_minimum_size = Vector2(104, 74)
+		button.custom_minimum_size = Vector2(98, 70)
 		button.text = str(definition["title"])
 		button.icon = UI_ICONS.get_icon(str(definition["icon"]), 38, definition["color"])
 		button.expand_icon = true
@@ -2424,7 +2444,7 @@ func _build_quick_slots(font: Font) -> void:
 		button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
 		button.focus_mode = Control.FOCUS_NONE
 		button.add_theme_font_override("font", font)
-		button.add_theme_font_size_override("font_size", 13)
+		button.add_theme_font_size_override("font_size", 12)
 		button.add_theme_stylebox_override("normal", _make_panel_style(Color(0.018, 0.025, 0.025, 0.94), Color("#56655f"), 7))
 		button.add_theme_stylebox_override("hover", _make_panel_style(Color(0.04, 0.065, 0.055, 0.97), Color("#c6b66f"), 7))
 		button.add_theme_stylebox_override("pressed", _make_panel_style(Color(0.09, 0.12, 0.09, 0.98), Color("#ecd578"), 7))
@@ -2923,17 +2943,20 @@ func _update_quick_slot_labels() -> void:
 	var full_magazines := floori(float(reserve_ammo) / float(maxi(1, magazine_size)))
 	var loose_rounds := reserve_ammo % maxi(1, magazine_size)
 	quick_slot_buttons[0].icon = weapon_texture if has_ak and weapon_texture != null else UI_ICONS.get_icon("weapon", 38, Color("#e2cc86"))
-	quick_slot_buttons[0].text = "1  %s\n%d/%d · 예비 %d" % [
-		str(weapon_stats.get("category", "무기")) if has_ak else "무기 꺼내기",
+	quick_slot_buttons[0].text = "1  %s\n%d/%d  +%d" % [
+		str(weapon_stats.get("category", "주무기")) if has_ak else "주무기",
 		magazine_ammo if has_ak else 0,
 		magazine_size if has_ak else 0,
 		reserve_ammo if has_ak else 0,
 	]
-	quick_slot_buttons[1].text = "2  응급\n%d개" % GameState.medkits
+	quick_slot_buttons[0].tooltip_text = "보유한 다음 주무기로 전환"
+	quick_slot_buttons[0].disabled = _get_owned_weapon_ids().is_empty()
+	quick_slot_buttons[1].text = "2  응급키트\n%d개" % GameState.medkits
 	quick_slot_buttons[1].disabled = GameState.medkits <= 0 or player_health >= GameState.get_max_health()
-	quick_slot_buttons[2].text = "3  식량\n%d개" % GameState.canned_food
-	quick_slot_buttons[2].disabled = GameState.canned_food <= 0 or fatigue <= 0.0
-	quick_slot_buttons[3].text = "4  장전\n%d탄창 + %d발" % [full_magazines, loose_rounds]
+	var melee_ready := melee_attack_cooldown <= 0.0 and not melee_attack_active
+	quick_slot_buttons[2].text = "3  근접 공격\n%s" % ("준비" if melee_ready else "%.1f초" % melee_attack_cooldown)
+	quick_slot_buttons[2].disabled = not melee_ready or roll_active or player_health <= 0
+	quick_slot_buttons[3].text = "4  재장전\n%d탄창  +%d" % [full_magazines, loose_rounds]
 	quick_slot_buttons[3].disabled = not has_ak or weapon_reloading or reserve_ammo <= 0 or magazine_ammo >= magazine_size
 
 
@@ -2942,15 +2965,11 @@ func _activate_quick_slot(slot_index: int) -> void:
 		return
 	match slot_index:
 		1:
-			if not has_ak and GameState.get_weapon_count(equipped_weapon_id) > 0:
-				_on_inventory_weapon_equipped(equipped_weapon_id)
-			weapon_sprite.visible = has_ak
-			_update_weapon_pose()
-			_show_quick_slot_notice("%s 준비" % str(weapon_stats.get("display_name", "무기")))
+			_cycle_quick_weapon()
 		2:
 			_use_quick_medkit()
 		3:
-			_use_quick_food()
+			_try_melee_attack()
 		4:
 			_reload_ak47()
 	_update_equipment_ui()
@@ -2973,15 +2992,29 @@ func _use_quick_medkit() -> void:
 	GameState.save_persistent_state()
 
 
-func _use_quick_food() -> void:
-	if GameState.canned_food <= 0 or fatigue <= 0.0:
-		_show_quick_slot_notice("사용할 통조림이 없거나 피로가 없습니다.")
+func _get_owned_weapon_ids() -> Array[String]:
+	var owned: Array[String] = []
+	for weapon_id in WEAPON_SYSTEM.WEAPONS.keys():
+		var id := str(weapon_id)
+		if GameState.get_weapon_count(id) > 0:
+			owned.append(id)
+	return owned
+
+
+func _cycle_quick_weapon() -> void:
+	var owned := _get_owned_weapon_ids()
+	if owned.is_empty():
+		_show_quick_slot_notice("보유한 주무기가 없습니다.")
 		return
-	GameState.canned_food -= 1
-	fatigue = maxf(0.0, fatigue - 24.0)
-	GameState.fatigue = fatigue
-	_show_quick_slot_notice("통조림 섭취  피로 -24")
-	GameState.save_persistent_state()
+	var next_id := owned[0]
+	var current_index := owned.find(equipped_weapon_id)
+	if owned.size() > 1 and current_index >= 0:
+		next_id = owned[(current_index + 1) % owned.size()]
+	if not has_ak or next_id != equipped_weapon_id:
+		_on_inventory_weapon_equipped(next_id)
+	weapon_sprite.visible = has_ak
+	_update_weapon_pose()
+	_show_quick_slot_notice("%s 장착" % str(weapon_stats.get("display_name", "주무기")))
 
 
 func _show_quick_slot_notice(message: String) -> void:
@@ -3365,7 +3398,11 @@ func _spawn_test_boss_near_player() -> void:
 	]
 	var spawn_position := Vector3.INF
 	for offset in candidate_offsets:
-		var candidate := world.find_nearest_open_position(player.global_position + offset)
+		var candidate := world.find_nearest_physically_open_position(
+			player.global_position + offset,
+			1.05,
+			[player.get_rid()]
+		)
 		candidate.y = 0.78
 		if candidate.distance_to(player.global_position) < 7.0:
 			continue
@@ -3409,7 +3446,11 @@ func _find_distributed_enemy_position(
 			requested.x = clampf(requested.x, -map_limit, map_limit)
 			requested.z = clampf(requested.z, -map_limit, map_limit)
 			requested.y = 0.78
-			var nearby_candidate := world.find_nearest_open_position(requested)
+			var nearby_candidate := world.find_nearest_physically_open_position(
+				requested,
+				0.62,
+				[player.get_rid()]
+			)
 			nearby_candidate.y = 0.78
 			if nearby_candidate.distance_to(player.global_position) >= 16.0:
 				return nearby_candidate
@@ -3427,7 +3468,7 @@ func _find_distributed_enemy_position(
 func _spawn_enemy(kind: String, spawn_position: Vector3, threat: float) -> CharacterBody3D:
 	var enemy_weapon_id := "baseball_bat"
 	if kind != "melee":
-		var ranged_loadout_cycle := ["m1911", "mp5", "ak47", "double_barrel"]
+		var ranged_loadout_cycle := ["mp5", "ak47", "mp5", "ak47", "m1911", "double_barrel"]
 		enemy_weapon_id = ranged_loadout_cycle[enemy_ranged_spawn_serial % ranged_loadout_cycle.size()]
 		enemy_ranged_spawn_serial += 1
 	var enemy := CharacterBody3D.new()
@@ -3452,7 +3493,8 @@ func _on_enemy_died(enemy: CharacterBody3D) -> void:
 		run_boss_kills += 1
 	if enemy == active_reinforcement_caller:
 		active_reinforcement_caller = null
-		sustained_combat_time = REINFORCEMENT_CALL_TRIGGER_TIME * 0.45
+		sustained_combat_time = REINFORCEMENT_CALL_TRIGGER_TIME * 0.2
+		concealed_combat_time = 0.0
 	_spawn_enemy_loot(enemy)
 	enemies.erase(enemy)
 	reinforcement_timer = minf(reinforcement_timer, 2.5)
@@ -3565,23 +3607,31 @@ func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 		active_reinforcement_caller = null
 	elif active_reinforcement_caller != null and not bool(active_reinforcement_caller.get("reinforcement_call_active")):
 		active_reinforcement_caller = null
-		sustained_combat_time = REINFORCEMENT_CALL_TRIGGER_TIME * 0.45
-	var combat_active := false
+		sustained_combat_time = REINFORCEMENT_CALL_TRIGGER_TIME * 0.2
+		concealed_combat_time = 0.0
+	var alerted_count := 0
+	var visual_contact_count := 0
 	for enemy in enemies:
 		if not is_instance_valid(enemy) or bool(enemy.get("dying")):
 			continue
-		if bool(enemy.get("visual_contact_confirmed")) or (
-			bool(enemy.get("alerted")) and enemy.global_position.distance_to(player.global_position) < 22.0
-		):
-			combat_active = true
-			break
-	if combat_active:
+		if bool(enemy.get("alerted")):
+			alerted_count += 1
+			if bool(enemy.get("has_current_line_of_sight")):
+				visual_contact_count += 1
+	if visual_contact_count > 0:
 		sustained_combat_time += delta
+		concealed_combat_time = maxf(0.0, concealed_combat_time - delta * 2.0)
+	elif alerted_count >= 2:
+		concealed_combat_time += delta
+		sustained_combat_time = maxf(0.0, sustained_combat_time - delta * 0.2)
 	else:
 		sustained_combat_time = maxf(0.0, sustained_combat_time - delta * 2.0)
+		concealed_combat_time = maxf(0.0, concealed_combat_time - delta * 2.5)
 	if active_reinforcement_caller != null or reinforcement_call_cooldown > 0.0:
 		return
-	if sustained_combat_time < REINFORCEMENT_CALL_TRIGGER_TIME:
+	var prolonged_firefight := sustained_combat_time >= REINFORCEMENT_CALL_TRIGGER_TIME
+	var prolonged_standoff := concealed_combat_time >= REINFORCEMENT_HIDDEN_TRIGGER_TIME
+	if not prolonged_firefight and not prolonged_standoff:
 		return
 	var caller: CharacterBody3D
 	var best_score := INF
@@ -3593,12 +3643,15 @@ func _update_reinforcement_call(delta: float, effective_threat: float) -> void:
 		if not enemy.has_method("start_reinforcement_call"):
 			continue
 		var score := enemy.global_position.distance_to(player.global_position)
+		if prolonged_standoff and bool(enemy.get("has_current_line_of_sight")):
+			score += 18.0
 		if score < best_score:
 			best_score = score
 			caller = enemy
 	if caller != null and bool(caller.call("start_reinforcement_call", REINFORCEMENT_CALL_DURATION)):
 		active_reinforcement_caller = caller
 		sustained_combat_time = 0.0
+		concealed_combat_time = 0.0
 
 
 func _on_enemy_reinforcement_called(caller: CharacterBody3D) -> void:
@@ -3606,6 +3659,7 @@ func _on_enemy_reinforcement_called(caller: CharacterBody3D) -> void:
 		return
 	active_reinforcement_caller = null
 	reinforcement_call_cooldown = REINFORCEMENT_CALL_COOLDOWN
+	concealed_combat_time = 0.0
 	_spawn_called_reinforcements()
 
 
@@ -3660,7 +3714,11 @@ func _find_reinforcement_position() -> Vector3:
 		requested.x = clampf(requested.x, -map_limit, map_limit)
 		requested.z = clampf(requested.z, -map_limit, map_limit)
 		requested.y = 0.78
-		var candidate := world.find_nearest_open_position(requested)
+		var candidate := world.find_nearest_physically_open_position(
+			requested,
+			0.62,
+			[player.get_rid()]
+		)
 		if candidate.distance_to(player.global_position) < 17.0:
 			continue
 		if world.is_position_in_safe_zone(candidate):
@@ -3822,7 +3880,7 @@ func _update_visibility_fog() -> void:
 	visibility_material.set_shader_parameter("circle_radius", circle_radius)
 
 
-func _update_enemy_visibility() -> void:
+func _update_enemy_visibility(delta: float = 1.0 / 60.0) -> void:
 	if not is_instance_valid(player) or not is_instance_valid(camera):
 		return
 	var fully_visible_radius := lerpf(178.0, 104.0, night_intensity)
@@ -3833,12 +3891,35 @@ func _update_enemy_visibility() -> void:
 	for enemy in enemies:
 		if not is_instance_valid(enemy):
 			continue
-		var visibility_factor := _enemy_player_visibility_factor(
+		var raw_visibility := _enemy_player_visibility_factor(
 			enemy,
 			fully_visible_radius,
 			reveal_radius
 		)
-		enemy.visible = visibility_factor > 0.01
+		var previous_visibility := float(enemy.get_meta("smoothed_player_visibility", raw_visibility))
+		var visibility_hold := maxf(
+			0.0,
+			float(enemy.get_meta("player_visibility_hold", 0.0)) - delta
+		)
+		if raw_visibility > 0.01:
+			visibility_hold = ENEMY_VISIBILITY_HOLD_SECONDS
+		elif visibility_hold > 0.0:
+			raw_visibility = previous_visibility
+		var blend_speed := (
+			ENEMY_VISIBILITY_FADE_IN_SPEED
+			if raw_visibility > previous_visibility
+			else ENEMY_VISIBILITY_FADE_OUT_SPEED
+		)
+		var visibility_factor := lerpf(
+			previous_visibility,
+			raw_visibility,
+			1.0 - exp(-blend_speed * maxf(delta, 0.0001))
+		)
+		if raw_visibility <= 0.0 and visibility_factor < 0.012:
+			visibility_factor = 0.0
+		enemy.set_meta("smoothed_player_visibility", visibility_factor)
+		enemy.set_meta("player_visibility_hold", visibility_hold)
+		enemy.visible = visibility_factor > 0.001
 		if enemy.has_method("set_player_visibility_factor"):
 			enemy.call("set_player_visibility_factor", visibility_factor)
 
@@ -3870,7 +3951,7 @@ func _enemy_player_visibility_factor(
 		enemy.global_position + Vector3(0, 0.42, 0),
 		1
 	)
-	query.exclude = [player.get_rid()]
+	query.exclude = [player.get_rid(), enemy.get_rid()]
 	if not player.get_world_3d().direct_space_state.intersect_ray(query).is_empty():
 		return 0.0
 	if screen_distance <= fully_visible_radius:
@@ -3900,7 +3981,7 @@ func _enemy_is_in_player_vision(enemy: Node3D, visible_radius: float) -> bool:
 		enemy.global_position + Vector3(0, 0.42, 0),
 		1
 	)
-	query.exclude = [player.get_rid()]
+	query.exclude = [player.get_rid(), enemy.get_rid()]
 	return player.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 
@@ -3908,13 +3989,6 @@ func _install_perception_system() -> void:
 	perception_system = PERCEPTION_SYSTEM_SCRIPT.new() as CanvasLayer
 	perception_system.call("setup", player, camera)
 	add_child(perception_system)
-
-
-func _build_enemy_alert_overlay() -> void:
-	enemy_alert_overlay = ENEMY_ALERT_OVERLAY_SCRIPT.new() as Control
-	enemy_alert_overlay.name = "EnemyAlertOverlay"
-	enemy_alert_overlay.call("setup", player, camera)
-	$HUD.add_child(enemy_alert_overlay)
 
 
 func take_damage(amount: int) -> void:
@@ -4322,8 +4396,10 @@ func _setup_extraction_site(world: ProceduralCityMap) -> void:
 			positions.append(candidate)
 	while positions.size() < 3:
 		var fallback_angle := TAU * float(positions.size()) / 3.0
-		var fallback := world.find_nearest_open_position(
-			player.global_position + Vector3(cos(fallback_angle), 0, sin(fallback_angle)) * 54.0
+		var fallback := world.find_nearest_physically_open_position(
+			player.global_position + Vector3(cos(fallback_angle), 0, sin(fallback_angle)) * 54.0,
+			0.72,
+			[player.get_rid()]
 		)
 		positions.append(fallback)
 	for index in positions.size():
@@ -4536,14 +4612,22 @@ func _create_extraction_beacon(world_position: Vector3, index: int) -> Node3D:
 
 func _find_random_field_position(world: ProceduralCityMap, minimum_player_distance: float = 18.0) -> Vector3:
 	var map_limit := world.get_map_limit() * 0.82
-	var fallback := world.find_nearest_open_position(Vector3.ZERO)
+	var fallback := world.find_nearest_physically_open_position(
+		Vector3.ZERO,
+		0.62,
+		[player.get_rid()]
+	)
 	for attempt in 48:
 		var requested := Vector3(
 			spawn_random.randf_range(-map_limit, map_limit),
 			0.08,
 			spawn_random.randf_range(-map_limit, map_limit)
 		)
-		var candidate := world.find_nearest_open_position(requested)
+		var candidate := world.find_nearest_physically_open_position(
+			requested,
+			0.62,
+			[player.get_rid()]
+		)
 		candidate.y = 0.08
 		fallback = candidate
 		if candidate.distance_to(player.global_position) >= minimum_player_distance:
@@ -4570,7 +4654,11 @@ func _find_stratified_map_position(
 		world_y,
 		-map_limit + (float(sector_z) + 0.5) * sector_size
 	)
-	var fallback := world.find_nearest_open_position(sector_center)
+	var fallback := world.find_nearest_physically_open_position(
+		sector_center,
+		0.62,
+		[player.get_rid()]
+	)
 	fallback.y = world_y
 	for attempt in 24:
 		var jitter_scale := sector_size * (0.12 + 0.015 * float(attempt % 8))
@@ -4578,7 +4666,11 @@ func _find_stratified_map_position(
 		var requested := sector_center + Vector3(cos(angle), 0.0, sin(angle)) * jitter_scale
 		requested.x = clampf(requested.x, -map_limit, map_limit)
 		requested.z = clampf(requested.z, -map_limit, map_limit)
-		var candidate := world.find_nearest_open_position(requested)
+		var candidate := world.find_nearest_physically_open_position(
+			requested,
+			0.62,
+			[player.get_rid()]
+		)
 		candidate.y = world_y
 		fallback = candidate
 		if candidate.distance_to(player.global_position) < minimum_player_distance:
@@ -4641,15 +4733,57 @@ func _setup_salvage_points(world: ProceduralCityMap) -> void:
 
 
 func _setup_rescue_points(world: ProceduralCityMap) -> void:
+	var occupied_rescue_positions: Array[Vector3] = []
 	for index in 3:
+		var rescue_position := _find_rescue_position(world, occupied_rescue_positions)
+		occupied_rescue_positions.append(rescue_position)
 		var point := _create_field_interaction(
 			"rescue",
-			_find_random_field_position(world, 26.0),
+			rescue_position,
 			"갇힌 피난민 고양이 구조",
 			RESCUE_HOLD_DURATION
 		)
 		_build_rescue_locker(point)
 		_add_interaction_marker(point, Color("#74d39f"), 0.95, false)
+
+
+func _find_rescue_position(world: ProceduralCityMap, occupied_positions: Array[Vector3]) -> Vector3:
+	var fallback := _find_random_field_position(world, 26.0)
+	var safe_fallback := Vector3.INF
+	for attempt in 64:
+		var candidate := _find_random_field_position(world, 26.0)
+		fallback = candidate
+		var blocked_by_extraction := false
+		for site in extraction_sites:
+			if is_instance_valid(site) and candidate.distance_to(site.global_position) < 14.0:
+				blocked_by_extraction = true
+				break
+		if blocked_by_extraction:
+			continue
+		safe_fallback = candidate
+		var separated := true
+		for occupied_position in occupied_positions:
+			if candidate.distance_to(occupied_position) < 10.0:
+				separated = false
+				break
+		if separated:
+			return candidate
+	if safe_fallback != Vector3.INF:
+		return safe_fallback
+	var emergency_position := world.find_nearest_physically_open_position(
+		player.global_position + Vector3(18.0, 0.08, 18.0),
+		0.72,
+		[player.get_rid()]
+	)
+	for site in extraction_sites:
+		if is_instance_valid(site) and emergency_position.distance_to(site.global_position) < 14.0:
+			emergency_position = world.find_nearest_physically_open_position(
+				-site.global_position * 0.65,
+				0.72,
+				[player.get_rid()]
+			)
+			break
+	return emergency_position if emergency_position != Vector3.ZERO else fallback
 
 
 func _create_field_interaction(
@@ -5109,6 +5243,64 @@ func _save_run_state() -> void:
 	GameState.save_persistent_state()
 
 
+func _mobile_button_contains(button: Button, screen_position: Vector2) -> bool:
+	return (
+		button != null
+		and button.visible
+		and not button.disabled
+		and button.get_global_rect().has_point(screen_position)
+	)
+
+
+func _handle_mobile_action_touch(touch: InputEventScreenTouch) -> bool:
+	if not touch.pressed:
+		var released_action := false
+		if touch.index == fire_touch_id:
+			fire_touch_id = -1
+			_on_fire_button_up()
+			released_action = true
+		if touch.index == context_touch_id:
+			context_touch_id = -1
+			_on_mobile_context_button_up()
+			released_action = true
+		return released_action
+	if _is_inventory_button_at(touch.position):
+		_toggle_inventory()
+		return true
+	if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
+		return false
+	if _mobile_button_contains(fire_button, touch.position):
+		fire_touch_id = touch.index
+		_on_fire_button_down()
+		return true
+	if _mobile_button_contains(melee_button, touch.position):
+		_on_melee_button_pressed()
+		return true
+	if _mobile_button_contains(dash_button, touch.position):
+		_on_dash_button_pressed()
+		return true
+	if _mobile_button_contains(mobile_context_button, touch.position):
+		context_touch_id = touch.index
+		_on_mobile_context_button_down()
+		return true
+	if _mobile_button_contains(mobile_reload_button, touch.position):
+		_reload_ak47()
+		return true
+	if _mobile_button_contains(mobile_flashlight_button, touch.position):
+		var enabled := not mobile_flashlight_button.button_pressed
+		mobile_flashlight_button.set_pressed_no_signal(enabled)
+		_on_mobile_flashlight_toggled(enabled)
+		return true
+	if _mobile_button_contains(mobile_map_button, touch.position):
+		_on_mobile_map_pressed()
+		return true
+	for index in quick_slot_buttons.size():
+		if _mobile_button_contains(quick_slot_buttons[index], touch.position):
+			_activate_quick_slot(index + 1)
+			return true
+	return false
+
+
 func _input(event: InputEvent) -> void:
 	if player_death_sequence_active:
 		return
@@ -5176,26 +5368,20 @@ func _input(event: InputEvent) -> void:
 		_handle_combat_mouse_button(mouse_event)
 		get_viewport().set_input_as_handled()
 	elif event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if _handle_mobile_action_touch(touch):
+			get_viewport().set_input_as_handled()
+			return
 		if _is_inventory_open() or _is_tactical_map_open() or extraction_transition_active:
 			return
-		var touch := event as InputEventScreenTouch
-		if _is_inventory_button_at(touch.position):
-			return
 		if touch.pressed:
-			if has_ak and fire_button.visible and fire_button.get_global_rect().has_point(touch.position):
-				fire_touch_id = touch.index
-				fire_button_held = true
-				_try_fire_ak47()
-			elif touch_id == -1 and touch.position.x < get_viewport().get_visible_rect().size.x * 0.55:
+			if touch_id == -1 and touch.position.x < get_viewport().get_visible_rect().size.x * 0.55:
 				touch_id = touch.index
 				touch_origin = touch.position
 				touch_vector = Vector2.ZERO
 				touch_stick.visible = true
 				touch_stick.position = touch_origin - touch_stick.size * 0.5
 		else:
-			if touch.index == fire_touch_id:
-				fire_touch_id = -1
-				fire_button_held = false
 			if touch.index == touch_id:
 				touch_id = -1
 				touch_vector = Vector2.ZERO

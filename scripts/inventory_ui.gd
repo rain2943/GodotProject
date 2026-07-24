@@ -104,6 +104,7 @@ var bag_empty_hint_tween: Tween
 var bag_filter: String = "all"
 var feedback_tween: Tween
 var visible_bag_items := 0
+var responsive_compact := false
 const BAG_WEIGHT_LIMIT := 49.0
 const BAG_WEIGHT_WARNING := 44.0
 
@@ -127,7 +128,9 @@ func setup(
 	z_index = 4000
 	_build_open_button()
 	_build_modal()
+	get_viewport().size_changed.connect(_apply_responsive_layout)
 	set_open(false)
+	call_deferred("_apply_responsive_layout")
 
 
 func set_weapon_texture(next_weapon_texture: Texture2D) -> void:
@@ -181,6 +184,7 @@ func set_open(value: bool) -> void:
 		open_button.visible = not opened
 	if opened:
 		_refresh_contents()
+	_apply_responsive_layout()
 	open_state_changed.emit(opened)
 
 
@@ -257,9 +261,16 @@ func _build_inventory_panel() -> Control:
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.035, 0.043, 0.049, 0.98), Color(0.66, 0.78, 0.73, 0.7), 8))
 	var margin := _margin(16, 14, 16, 14)
 	panel.add_child(margin)
+	var panel_scroll := ScrollContainer.new()
+	panel_scroll.name = "InventoryPanelScroll"
+	panel_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	margin.add_child(panel_scroll)
 	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 6)
-	margin.add_child(box)
+	panel_scroll.add_child(box)
 
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 10)
@@ -267,9 +278,6 @@ func _build_inventory_panel() -> Control:
 	var title := _label("인벤토리", 23, Color("#f0e8d0"))
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
-	scrap_label = _label("쉘터 고철 %d" % (int(game_state.scrap) if game_state != null else 0), 15, Color("#e4c96f"))
-	scrap_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	header.add_child(scrap_label)
 	var close_button := _icon_text_button("닫기", "인벤토리 닫기 [Esc]", "close")
 	close_button.custom_minimum_size = Vector2(62, 34)
 	close_button.pressed.connect(func() -> void: set_open(false))
@@ -278,7 +286,7 @@ func _build_inventory_panel() -> Control:
 	box.add_child(_section("장비"))
 	equipped_grid = GridContainer.new()
 	equipped_grid.name = "EquipmentGrid"
-	equipped_grid.columns = 4
+	equipped_grid.columns = 3
 	equipped_grid.add_theme_constant_override("h_separation", 6)
 	equipped_grid.add_theme_constant_override("v_separation", 6)
 	box.add_child(equipped_grid)
@@ -288,7 +296,9 @@ func _build_inventory_panel() -> Control:
 	var bag_title := _section("가방")
 	bag_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bag_header.add_child(bag_title)
-	bag_header.add_child(_label("아이콘을 눌러 상세 정보와 장착 상태 확인", 12, Color("#8fa59b")))
+	var bag_help := _label("아이콘 선택 시 아래에 상세 정보가 표시됩니다.", 11, Color("#8fa59b"))
+	bag_help.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	bag_header.add_child(bag_help)
 
 	box.add_child(_build_bag_filter_bar())
 	inventory_feedback = _label("", 11, Color("#f2d27a"))
@@ -350,7 +360,6 @@ func _build_item_detail_panel() -> Control:
 	item_detail_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	row.add_child(item_detail_icon)
 	var text_box := VBoxContainer.new()
-	text_box.custom_minimum_size = Vector2(270, 52)
 	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	text_box.clip_contents = true
@@ -360,13 +369,13 @@ func _build_item_detail_panel() -> Control:
 	item_detail_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_title)
 	item_detail_description = _label("가방 슬롯에는 아이콘과 수량만 표시됩니다.", 11, Color("#9aaba4"))
-	item_detail_description.custom_minimum_size = Vector2(270, 0)
+	item_detail_description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	item_detail_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	item_detail_description.max_lines_visible = 2
 	item_detail_description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text_box.add_child(item_detail_description)
 	item_detail_reason = _label("", 10, Color("#ffc77f"))
-	item_detail_reason.custom_minimum_size = Vector2(270, 0)
+	item_detail_reason.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	item_detail_reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	item_detail_reason.max_lines_visible = 2
 	item_detail_reason.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -388,9 +397,16 @@ func _build_weapon_panel() -> Control:
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.028, 0.035, 0.04, 0.98), Color(0.69, 0.62, 0.4, 0.68), 8))
 	var margin := _margin(18, 14, 18, 16)
 	panel.add_child(margin)
+	var panel_scroll := ScrollContainer.new()
+	panel_scroll.name = "WeaponPanelScroll"
+	panel_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	margin.add_child(panel_scroll)
 	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 12)
-	margin.add_child(box)
+	panel_scroll.add_child(box)
 
 	var header := HBoxContainer.new()
 	box.add_child(header)
@@ -444,16 +460,17 @@ func _build_weapon_panel() -> Control:
 
 
 func _build_bag_filter_bar() -> Control:
-	var row := HBoxContainer.new()
+	var row := HFlowContainer.new()
 	row.name = "BagFilterBar"
 	row.add_theme_constant_override("separation", 6)
 	for filter_id in BAG_FILTER_ORDER:
-		var button := _icon_text_button(_bag_filter_button_label(str(filter_id)), "", _filter_icon_name(filter_id))
+		var filter_name := _get_filter_display_name(str(filter_id))
+		var button := _icon_text_button("", "%s만 보기" % filter_name, _filter_icon_name(filter_id))
 		button.name = "BagFilter_%s" % filter_id
 		button.toggle_mode = true
 		button.scale = Vector2.ONE
-		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		bag_filter_hover_states[button] = false
 		button.mouse_filter = Control.MOUSE_FILTER_STOP
 		button.button_pressed = filter_id == bag_filter
@@ -462,8 +479,7 @@ func _build_bag_filter_bar() -> Control:
 		button.button_up.connect(_on_bag_filter_button_up.bind(button))
 		button.mouse_entered.connect(_on_bag_filter_button_hover.bind(button, true))
 		button.mouse_exited.connect(_on_bag_filter_button_hover.bind(button, false))
-		var min_width := int(BAG_FILTER_MIN_WIDTH.get(filter_id, 84))
-		button.custom_minimum_size = Vector2(min_width, 30)
+		button.custom_minimum_size = Vector2(54, 34)
 		button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		button.size_flags_vertical = Control.SIZE_EXPAND
 		row.add_child(button)
@@ -565,7 +581,10 @@ func _get_filter_display_name(filter_id: String) -> String:
 
 
 func _should_show_bag_item(item: Dictionary) -> bool:
-	return _bag_filter_matches_item(bag_filter, item.get("type", ""))
+	return (
+		int(item.get("quantity", 0)) > 0
+		and _bag_filter_matches_item(bag_filter, item.get("type", ""))
+	)
 
 
 func _bag_filter_matches_item(filter_id: String, item_type: String) -> bool:
@@ -595,7 +614,8 @@ func _refresh_bag_filter_buttons() -> void:
 		if button is Button:
 			var count := _count_bag_items_for_filter(str(filter_id))
 			var prev_count := int(bag_filter_button_counts.get(filter_id, -1))
-			(button as Button).text = _bag_filter_button_label(str(filter_id))
+			(button as Button).text = ""
+			(button as Button).tooltip_text = "%s만 보기" % _get_filter_display_name(str(filter_id))
 			var count_label: Variant = bag_filter_count_labels.get(filter_id, null)
 			var count_badge: Variant = bag_filter_count_badges.get(filter_id, null)
 			if count_label is Label:
@@ -785,9 +805,9 @@ func _count_bag_items_for_filter(filter_id: String) -> int:
 	if game_state == null:
 		return 0
 	var count := 0
-	if _bag_filter_matches_item(filter_id, "ammo"):
+	if reserve_state > 0 and _bag_filter_matches_item(filter_id, "ammo"):
 		count += 1
-	if _bag_filter_matches_item(filter_id, "resource"):
+	if canned_food_state > 0 and _bag_filter_matches_item(filter_id, "resource"):
 		count += 1
 	var weapon_ids: Array = game_state.weapon_inventory.keys()
 	weapon_ids.sort()
@@ -803,7 +823,9 @@ func _count_bag_items_for_filter(filter_id: String) -> int:
 			if int(game_state.get_equipment_count(str(equipment_id))) > 0:
 				count += 1
 	if _bag_filter_matches_item(filter_id, "mod"):
-		count += MOD_COMPONENTS.size()
+		for mod_id_variant in MOD_COMPONENTS:
+			if int(game_state.get_weapon_mod_count(str(mod_id_variant))) > 0:
+				count += 1
 	return count
 
 
@@ -832,7 +854,6 @@ func _refresh_contents() -> void:
 	_refresh_bag_filter_buttons()
 
 	equipped_grid.add_child(_equipment_button("주무기", weapon_texture, has_weapon_state, _show_weapon_detail))
-	equipped_grid.add_child(_equipment_button("보조무기", null, false))
 	var body_id := str(game_state.equipped_body_armor_id)
 	var head_id := str(game_state.equipped_head_armor_id)
 	equipped_grid.add_child(_equipment_button(
@@ -847,9 +868,6 @@ func _refresh_contents() -> void:
 		not head_id.is_empty(),
 		func() -> void: _select_equipped_equipment("head")
 	))
-	equipped_grid.add_child(_equipment_button("가방", null, true))
-	equipped_grid.add_child(_equipment_button("보안 슬롯", null, false))
-	equipped_grid.add_child(_equipment_button("장신구", null, false))
 
 	_add_bag_item({
 		"id": "762_fmj",
@@ -911,7 +929,9 @@ func _refresh_contents() -> void:
 		var mod_id := str(mod_id_variant)
 		var cost: Dictionary = MOD_COMPONENTS[mod_id]
 		var component_id := str(cost["component"])
-		var available: int = int(game_state.get_mod_component_count(component_id))
+		var available: int = int(game_state.get_weapon_mod_count(mod_id))
+		if available <= 0:
+			continue
 		_add_bag_item({
 			"id": mod_id,
 			"type": "mod",
@@ -943,11 +963,11 @@ func _refresh_contents() -> void:
 	weight_label.add_theme_color_override("font_color", weight_color)
 	if scrap_label:
 		scrap_label.text = "쉘터 고철 %d" % int(game_state.scrap if game_state else 0)
-	weapon_panel.visible = weapon_detail_open and has_weapon_state
 	if weapon_detail_open and has_weapon_state:
 		_refresh_weapon_detail()
 	_refresh_item_detail()
 	_update_bag_empty_hint()
+	_apply_responsive_layout()
 
 
 func _add_bag_item(item: Dictionary) -> void:
@@ -1011,6 +1031,7 @@ func _show_weapon_detail() -> void:
 	weapon_panel.visible = true
 	_refresh_weapon_detail()
 	_refresh_item_detail()
+	_apply_responsive_layout()
 
 
 func _equipped_equipment_label(slot: String, fallback: String) -> String:
@@ -1042,6 +1063,7 @@ func _hide_weapon_detail() -> void:
 	weapon_detail_open = false
 	if weapon_panel:
 		weapon_panel.visible = false
+	_apply_responsive_layout()
 
 
 func _refresh_weapon_detail() -> void:
@@ -1131,14 +1153,11 @@ func _refresh_item_detail() -> void:
 		var slot := str(definition.get("slot", ""))
 		var installed := _get_mod_in_slot(slot)
 		var has_quantity := int(selected_item.get("quantity", 0)) > 0
-		var cost: Dictionary = MOD_COMPONENTS.get(mod_id, {})
-		var component_id := str(cost["component"])
-		var available: int = int(game_state.get_mod_component_count(component_id))
-		item_detail_description.text = "%s  ·  %s 슬롯  ·  보유 재료 %d / %d" % [
+		var available: int = int(game_state.get_weapon_mod_count(mod_id))
+		item_detail_description.text = "%s  ·  %s 슬롯  ·  완성 부착물 %d개 보유" % [
 			_mod_description(mod_id),
 			_slot_name(slot),
 			available,
-			int(cost["amount"]),
 		]
 		item_action_button.text = "해제" if installed == mod_id else ("교체" if not installed.is_empty() else "장착")
 		item_action_button.icon = UI_ICONS.get_icon("close" if installed == mod_id else "mod", 28, Color("#e1d39a"))
@@ -1248,17 +1267,12 @@ func _get_mod_install_check(mod_id: String) -> Dictionary:
 		result["reason"] = "알 수 없는 모듈입니다."
 		return result
 	var slot := str(definition.get("slot", ""))
-	var cost: Dictionary = MOD_COMPONENTS[mod_id]
-	var component_id := str(cost["component"])
-	var available_components: int = int(game_state.get_mod_component_count(component_id))
+	var available_mods: int = int(game_state.get_weapon_mod_count(mod_id))
 	var next_mods: Array[String] = []
 	next_mods.assign(game_state.equipped_weapon_mods)
 	var currently_installed := _get_mod_in_slot(slot)
 	if not currently_installed.is_empty():
 		next_mods.erase(currently_installed)
-		var installed_cost: Dictionary = MOD_COMPONENTS.get(currently_installed, {})
-		if str(installed_cost.get("component", "")) == component_id:
-			available_components += int(installed_cost.get("amount", 0))
 	next_mods.append(mod_id)
 	if slot == "special" and game_state.shelter_workbench_level < 5:
 		result["reason"] = "작업대 레벨 5가 필요합니다."
@@ -1266,8 +1280,8 @@ func _get_mod_install_check(mod_id: String) -> Dictionary:
 	if not WEAPON_SYSTEM.validate_mod_loadout(next_mods, game_state.equipped_weapon_id):
 		result["reason"] = "슬롯 충돌 또는 장착 불가 부품입니다."
 		return result
-	if available_components < int(cost["amount"]):
-		result["reason"] = "재료가 부족합니다."
+	if available_mods < 1:
+		result["reason"] = "제작된 부착물을 보유하고 있지 않습니다."
 		return result
 	result["can_install"] = true
 	result["reason"] = "설치 가능"
@@ -1282,12 +1296,10 @@ func _install_mod(mod_id: String) -> void:
 	var definition := WEAPON_SYSTEM.get_mod(mod_id)
 	var slot := str(definition.get("slot", ""))
 	var currently_installed := _get_mod_in_slot(slot)
-	var cost: Dictionary = MOD_COMPONENTS[mod_id]
-	var component_id := str(cost["component"])
 	if not currently_installed.is_empty():
-		_return_mod_component(currently_installed)
+		game_state.add_weapon_mod(currently_installed, 1)
 		game_state.equipped_weapon_mods.erase(currently_installed)
-	game_state.mod_component_inventory[component_id] = game_state.get_mod_component_count(component_id) - int(cost["amount"])
+	game_state.add_weapon_mod(mod_id, -1)
 	game_state.equipped_weapon_mods.append(mod_id)
 	game_state.save_equipped_weapon_loadout()
 	_show_inventory_feedback("%s 장착" % _mod_name(mod_id), Color("#a3ff92"))
@@ -1298,20 +1310,12 @@ func _install_mod(mod_id: String) -> void:
 func _unequip_mod(mod_id: String) -> void:
 	if not game_state.equipped_weapon_mods.has(mod_id):
 		return
-	_return_mod_component(mod_id)
+	game_state.add_weapon_mod(mod_id, 1)
 	game_state.equipped_weapon_mods.erase(mod_id)
 	game_state.save_equipped_weapon_loadout()
 	_show_inventory_feedback("%s 해제" % _mod_name(mod_id), Color("#f5c96a"))
 	weapon_mods_changed.emit()
 	_refresh_contents()
-
-
-func _return_mod_component(mod_id: String) -> void:
-	if not MOD_COMPONENTS.has(mod_id):
-		return
-	var cost: Dictionary = MOD_COMPONENTS[mod_id]
-	var component_id := str(cost["component"])
-	game_state.add_mod_component(component_id, int(cost["amount"]))
 
 
 func _get_mod_in_slot(slot: String) -> String:
@@ -1323,15 +1327,62 @@ func _get_mod_in_slot(slot: String) -> String:
 
 
 func _equipment_button(slot_name: String, texture: Texture2D, active: bool, callback: Callable = Callable()) -> Button:
-	var button := _tile_button(slot_name, active)
+	var button := _tile_button("", active)
 	button.name = "Equipment_%s" % slot_name
-	button.custom_minimum_size = Vector2(108, 62)
-	button.icon = texture if texture != null else UI_ICONS.get_icon(_equipment_icon_name(slot_name), 48, Color("#8fa49a"))
+	button.custom_minimum_size = Vector2(132, 74)
+	button.tooltip_text = slot_name
+	button.icon = texture if texture != null else UI_ICONS.get_icon(_equipment_icon_name(slot_name), 38, Color("#8fa49a"))
 	button.expand_icon = true
+	button.add_theme_constant_override("icon_max_width", 42)
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	var label := Label.new()
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	label.offset_left = 6
+	label.offset_top = -24
+	label.offset_right = -6
+	label.offset_bottom = -4
+	label.text = slot_name
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	label.add_theme_font_override("font", font_ref)
+	label.add_theme_font_size_override("font_size", 10)
+	label.add_theme_color_override("font_color", Color("#dbe4de") if active else Color("#819087"))
+	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	label.add_theme_constant_override("outline_size", 3)
+	button.add_child(label)
 	if callback.is_valid():
 		button.pressed.connect(callback)
 	return button
+
+
+func _apply_responsive_layout() -> void:
+	if inventory_panel == null or weapon_panel == null or shell == null:
+		return
+	var viewport_size := get_viewport_rect().size
+	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
+		return
+	responsive_compact = viewport_size.x < 1080.0
+	var safe_width := maxf(300.0, viewport_size.x - 32.0)
+	var safe_height := maxf(360.0, viewport_size.y - 32.0)
+	var panel_width := minf(480.0, safe_width if responsive_compact else (safe_width - 12.0) * 0.5)
+	var panel_height := minf(620.0, safe_height)
+	inventory_panel.custom_minimum_size = Vector2(panel_width, panel_height)
+	weapon_panel.custom_minimum_size = Vector2(panel_width, panel_height)
+	var showing_weapon := weapon_detail_open and has_weapon_state
+	inventory_panel.visible = not (responsive_compact and showing_weapon)
+	weapon_panel.visible = showing_weapon
+	if bag_grid:
+		bag_grid.columns = 5 if panel_width >= 450.0 else (4 if panel_width >= 370.0 else 3)
+	if equipped_grid:
+		equipped_grid.columns = 3 if panel_width >= 390.0 else 2
+	if mod_slot_grid:
+		mod_slot_grid.columns = 2 if panel_width >= 430.0 else 1
+		for child in mod_slot_grid.get_children():
+			if child is Control:
+				(child as Control).custom_minimum_size.x = 0.0 if mod_slot_grid.columns == 1 else 216.0
 
 
 func _bag_item_button(item: Dictionary) -> Button:

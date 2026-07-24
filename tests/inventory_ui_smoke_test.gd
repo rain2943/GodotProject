@@ -31,9 +31,10 @@ func _run() -> void:
 	assert(ui.z_index >= 4000, "Inventory must render above the rest of the HUD.")
 	assert(ui.inventory_panel.custom_minimum_size.x <= 560.0, "The default inventory panel must remain compact.")
 	assert(not ui.weapon_panel.visible, "Weapon detail must stay hidden until the weapon is selected.")
-	assert(ui.equipped_grid.get_child_count() == 7, "Equipment must not include the sewer extraction objective.")
+	assert(ui.equipped_grid.get_child_count() == 3, "Only implemented primary, body, and head equipment slots should be visible.")
 	for equipment in ui.equipped_grid.get_children():
 		assert(not (equipment as Button).text.contains("하수구"), "Extraction objectives do not belong in equipment.")
+		assert((equipment as Button).text.is_empty(), "Equipment slot labels must not overlap centered icons.")
 		assert((equipment as Button).icon != null, "Every equipment slot must have a readable icon.")
 	for bag_item in ui.bag_grid.get_children():
 		if bag_item is Button:
@@ -52,15 +53,24 @@ func _run() -> void:
 	var shell_minimum := ui.shell.get_combined_minimum_size()
 	assert(ui.shell.get_combined_minimum_size().x <= 1040.0, "The expanded inventory must fit the 1280-wide game viewport: %s" % shell_minimum)
 	assert(ui.shell.get_combined_minimum_size().y <= 640.0, "The inventory must fit the 720-high game viewport: %s" % shell_minimum)
-	assert(
-		ui.inventory_panel.get_global_rect().end.x <= ui.weapon_panel.get_global_rect().position.x,
-		"Inventory and weapon detail panels must never overlap."
-	)
+	if ui.responsive_compact:
+		assert(not ui.inventory_panel.visible and ui.weapon_panel.visible, "Compact layouts must show one panel at a time.")
+	else:
+		assert(
+			ui.inventory_panel.get_global_rect().end.x <= ui.weapon_panel.get_global_rect().position.x,
+			"Inventory and weapon detail panels must never overlap."
+		)
+	for filter_id in ui.BAG_FILTER_ORDER:
+		var filter_button := ui.bag_filter_buttons[filter_id] as Button
+		assert(filter_button.text.is_empty(), "Bag filters must use compact icons without overlapping text.")
+		assert(not filter_button.tooltip_text.is_empty(), "Icon-only bag filters need readable tooltips.")
 
 	var equipped_mods: Array = state.get("equipped_weapon_mods")
 	equipped_mods.clear()
 	var components: Dictionary = state.get("mod_component_inventory")
 	components["scope_lens"] = 1
+	var finished_mods: Dictionary = state.get("weapon_mod_inventory")
+	finished_mods["scope_2x"] = 1
 	state.set("scrap", 0)
 	ui._refresh_contents()
 	var scope_card := ui.bag_grid.get_node("BagItem_scope_2x") as Button
@@ -68,13 +78,14 @@ func _run() -> void:
 	scope_card.pressed.emit()
 	assert(ui.item_detail_title.text.contains("스코프"), "Selecting a bag item must reveal its details outside the slot.")
 	assert((state.get("equipped_weapon_mods") as Array).has("scope_2x"), "One click on an owned attachment must equip it while weapon details are open.")
-	assert(int(state.call("get_mod_component_count", "scope_lens")) == 0, "Equipping must remove the attachment from the bag.")
+	assert(int(state.call("get_weapon_mod_count", "scope_2x")) == 0, "Equipping must remove the finished attachment from the bag.")
+	assert(int(state.call("get_mod_component_count", "scope_lens")) == 1, "Equipping must not consume raw crafting materials.")
 
 	ui._unequip_mod("scope_2x")
 	assert(not (state.get("equipped_weapon_mods") as Array).has("scope_2x"), "Clicking an equipped attachment must remove it.")
-	assert(int(state.call("get_mod_component_count", "scope_lens")) == 1, "Unequipping must return the attachment to the bag.")
+	assert(int(state.call("get_weapon_mod_count", "scope_2x")) == 1, "Unequipping must return the finished attachment to the bag.")
 	ui._unequip_mod("scope_2x")
-	assert(int(state.call("get_mod_component_count", "scope_lens")) == 1, "Repeated unequip events must not duplicate components.")
+	assert(int(state.call("get_weapon_mod_count", "scope_2x")) == 1, "Repeated unequip events must not duplicate attachments.")
 
 	state.call("add_equipment", "scav_vest", 1)
 	ui._refresh_contents()
