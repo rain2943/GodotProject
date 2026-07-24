@@ -7,6 +7,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var game_state := root.get_node("GameState")
+	game_state.set("persistence_enabled", false)
 	game_state.call("reset_run")
 	game_state.set("scrap", 500)
 	game_state.set("canned_food", 20)

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bj68mkmomxbn8"
-path="res://.godot/imported/shelter_workbench_wall_front_v2.png-6c368b73a364cdad17e633f2b5ff1e59.ctex"
+uid="uid://ydfoj4m4ndqp"
+path="res://.godot/imported/scratcher_bank_isometric_v4.png-692b8be3a373d9c7b324299702e762d5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/interiors/modules/shelter_workbench_wall_front_v2.png"
-dest_files=["res://.godot/imported/shelter_workbench_wall_front_v2.png-6c368b73a364cdad17e633f2b5ff1e59.ctex"]
+source_file="res://assets/interiors/modules/scratcher_bank_isometric_v4.png"
+dest_files=["res://.godot/imported/scratcher_bank_isometric_v4.png-692b8be3a373d9c7b324299702e762d5.ctex"]
 
 [params]
 

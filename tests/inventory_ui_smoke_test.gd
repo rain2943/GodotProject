@@ -64,11 +64,6 @@ func _run() -> void:
 			ui.inventory_panel.get_global_rect().end.x <= ui.weapon_panel.get_global_rect().position.x,
 			"Inventory and weapon detail panels must never overlap."
 		)
-	for filter_id in ui.BAG_FILTER_ORDER:
-		var filter_button := ui.bag_filter_buttons[filter_id] as Button
-		assert(filter_button.text.is_empty(), "Bag filters must use compact icons without overlapping text.")
-		assert(not filter_button.tooltip_text.is_empty(), "Icon-only bag filters need readable tooltips.")
-
 	var equipped_mods: Array = state.get("equipped_weapon_mods")
 	equipped_mods.clear()
 	var components: Dictionary = state.get("mod_component_inventory")

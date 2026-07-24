@@ -57,28 +57,33 @@ func _open_ui() -> void:
 	modal.add_child(dim)
 	var safe_margin := MarginContainer.new()
 	safe_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	safe_margin.add_theme_constant_override("margin_left", 22)
-	safe_margin.add_theme_constant_override("margin_top", 22)
-	safe_margin.add_theme_constant_override("margin_right", 22)
-	safe_margin.add_theme_constant_override("margin_bottom", 22)
+	var viewport_size := get_viewport().get_visible_rect().size
+	var outer_margin := 10 if viewport_size.y < 640.0 else 22
+	safe_margin.add_theme_constant_override("margin_left", outer_margin)
+	safe_margin.add_theme_constant_override("margin_top", outer_margin)
+	safe_margin.add_theme_constant_override("margin_right", outer_margin)
+	safe_margin.add_theme_constant_override("margin_bottom", outer_margin)
 	modal.add_child(safe_margin)
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	safe_margin.add_child(center)
 	var panel := PanelContainer.new()
 	panel.name = "CatnipScraperPanel"
-	var viewport_size := get_viewport().get_visible_rect().size
-	panel.custom_minimum_size = Vector2(minf(860.0, viewport_size.x - 44.0), minf(560.0, viewport_size.y - 44.0))
+	panel.custom_minimum_size = Vector2(
+		minf(940.0, viewport_size.x - outer_margin * 2.0),
+		minf(610.0, viewport_size.y - outer_margin * 2.0)
+	)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	panel.clip_contents = true
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.015, 0.025, 0.019, 0.97), Color("#6fa66d")))
 	center.add_child(panel)
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_top", 20)
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_bottom", 22)
+	var inner_margin := 12 if viewport_size.y < 640.0 else 20
+	margin.add_theme_constant_override("margin_left", inner_margin)
+	margin.add_theme_constant_override("margin_top", inner_margin)
+	margin.add_theme_constant_override("margin_right", inner_margin)
+	margin.add_theme_constant_override("margin_bottom", inner_margin)
 	panel.add_child(margin)
 	var panel_scroll := ScrollContainer.new()
 	panel_scroll.name = "CatnipScraperScroll"
@@ -88,7 +93,8 @@ func _open_ui() -> void:
 	margin.add_child(panel_scroll)
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.add_theme_constant_override("separation", 12)
+	content.custom_minimum_size.x = maxf(300.0, panel.custom_minimum_size.x - inner_margin * 2.0 - 12.0)
+	content.add_theme_constant_override("separation", 10 if viewport_size.y < 640.0 else 14)
 	panel_scroll.add_child(content)
 	_rebuild_ui()
 
@@ -109,17 +115,22 @@ func _rebuild_ui() -> void:
 	close.custom_minimum_size = Vector2(76, 38)
 	close.pressed.connect(func(): ui_layer.queue_free())
 	header.add_child(close)
-	var compact := get_viewport().get_visible_rect().size.x < 940.0 or get_viewport().get_visible_rect().size.y < 600.0
-	var summary := HFlowContainer.new()
+	var viewport_size := get_viewport().get_visible_rect().size
+	var narrow := viewport_size.x < 760.0
+	var compact := viewport_size.x < 1040.0 or viewport_size.y < 680.0
+	var summary := GridContainer.new()
 	summary.name = "CatnipScraperSummary"
-	summary.add_theme_constant_override("separation", 10)
+	summary.columns = 1 if narrow else (2 if compact else 4)
+	summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
 	content.add_child(summary)
-	summary.add_child(_summary_card("시설", "Lv.%d · Tier %d" % [GameState.catnip_scraper_level, GameState.shelter_tier]))
-	summary.add_child(_summary_card("배치", "%d / %d명" % [GameState.get_active_catnip_workers(), GameState.get_catnip_worker_slots()]))
-	summary.add_child(_summary_card("시간당 생산", "%.2f" % GameState.get_catnip_per_hour()))
-	summary.add_child(_summary_card("보유 캣닢", "%.1f" % GameState.catnip))
+	summary.add_child(_summary_card("시설", "Lv.%d · Tier %d" % [GameState.catnip_scraper_level, GameState.shelter_tier], compact))
+	summary.add_child(_summary_card("배치", "%d / %d명" % [GameState.get_active_catnip_workers(), GameState.get_catnip_worker_slots()], compact))
+	summary.add_child(_summary_card("시간당 생산", "캣닢 %.2f" % GameState.get_catnip_per_hour(), compact))
+	summary.add_child(_summary_card("보유 자원", "캣닢 %.1f" % GameState.catnip, compact))
 
-	var body: BoxContainer = VBoxContainer.new() if compact else HBoxContainer.new()
+	var body: BoxContainer = VBoxContainer.new() if narrow else HBoxContainer.new()
 	body.name = "CatnipScraperBody"
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 16)
@@ -140,12 +151,12 @@ func _rebuild_ui() -> void:
 	resident_margin.add_child(resident_box)
 	resident_box.add_child(_label("주민 배치", 16, Color("#dfe8dc")))
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 220)
+	scroll.custom_minimum_size = Vector2(0, 152 if compact and not narrow else 220)
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	resident_box.add_child(scroll)
 	var grid := GridContainer.new()
-	grid.columns = 1 if compact else 2
+	grid.columns = 1 if narrow else 2
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", 9)
 	grid.add_theme_constant_override("v_separation", 9)
@@ -156,7 +167,7 @@ func _rebuild_ui() -> void:
 		grid.add_child(_label("구출한 주민이 없습니다.", 15, Color("#7d887f")))
 
 	var operations := PanelContainer.new()
-	operations.custom_minimum_size = Vector2(0 if compact else 246, 0)
+	operations.custom_minimum_size = Vector2(0 if narrow else (230 if compact else 246), 0)
 	operations.add_theme_stylebox_override("panel", _panel_style(Color(0.028, 0.041, 0.03, 0.94), Color("#50664f")))
 	body.add_child(operations)
 	var operations_margin := MarginContainer.new()
@@ -251,9 +262,9 @@ func _button(text: String, icon_name := "") -> Button:
 	return button
 
 
-func _summary_card(title: String, value: String) -> Control:
+func _summary_card(title: String, value: String, compact: bool) -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(180, 58)
+	panel.custom_minimum_size = Vector2(0, 52 if compact else 58)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.028, 0.043, 0.032, 0.92), Color("#425a49")))
 	var margin := MarginContainer.new()
@@ -266,16 +277,24 @@ func _summary_card(title: String, value: String) -> Control:
 	row.add_theme_constant_override("separation", 8)
 	margin.add_child(row)
 	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(32, 32)
+	var icon_size := 28 if compact else 32
+	icon.custom_minimum_size = Vector2(icon_size, icon_size)
 	icon.texture = UI_ICONS.get_icon(_summary_icon_name(title), 36, Color("#9ec99b"))
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	row.add_child(icon)
 	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 1)
 	row.add_child(box)
-	box.add_child(_label(title, 11, Color("#87998c")))
-	box.add_child(_label(value, 15, Color("#e0e9df")))
+	var title_label := _label(title, 10 if compact else 11, Color("#87998c"))
+	var value_label := _label(value, 13 if compact else 15, Color("#e0e9df"))
+	title_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	value_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	value_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	box.add_child(title_label)
+	box.add_child(value_label)
 	return panel
 
 

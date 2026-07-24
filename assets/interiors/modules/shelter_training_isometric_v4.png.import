@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dt8rocveig757"
-path="res://.godot/imported/shelter_workbench_isometric_v3.png-0acf2ff596a5447fc621a85773385e3f.ctex"
+uid="uid://cars5xcwc7oy1"
+path="res://.godot/imported/shelter_training_isometric_v4.png-738324be9cf7dded46236e515a35193c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/interiors/modules/shelter_workbench_isometric_v3.png"
-dest_files=["res://.godot/imported/shelter_workbench_isometric_v3.png-0acf2ff596a5447fc621a85773385e3f.ctex"]
+source_file="res://assets/interiors/modules/shelter_training_isometric_v4.png"
+dest_files=["res://.godot/imported/shelter_training_isometric_v4.png-738324be9cf7dded46236e515a35193c.ctex"]
 
 [params]
 

@@ -487,10 +487,6 @@ func _ready() -> void:
 		_deactivate_companion()
 	top_left_status_panel.visible = false
 	objective_panel.visible = false
-	objective_panel.offset_left = 18.0
-	objective_panel.offset_top = 18.0
-	objective_panel.offset_right = 408.0
-	objective_panel.offset_bottom = 104.0
 	objective_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	touch_stick.visible = DisplayServer.is_touchscreen_available()
 	_build_sprite_frames()
@@ -502,6 +498,8 @@ func _ready() -> void:
 	_setup_weather_effects()
 	_spawn_ammo_pickups()
 	_build_weapon_hud()
+	if not get_viewport().size_changed.is_connected(_apply_hud_layout):
+		get_viewport().size_changed.connect(_apply_hud_layout)
 	_build_gunshot_audio()
 	_build_roll_audio()
 	_build_bgm_audio()
@@ -537,6 +535,7 @@ func _ready() -> void:
 	_equip_ak47()
 	if not DisplayServer.is_touchscreen_available():
 		Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+	_apply_hud_layout()
 
 
 func activate_companion() -> void:
@@ -2286,6 +2285,233 @@ func _get_loot_glow_texture() -> ImageTexture:
 	return loot_glow_texture
 
 
+func _apply_hud_layout() -> void:
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
+		return
+
+	var touch_available := DisplayServer.is_touchscreen_available()
+	var ui_scale := clampf(minf(viewport_size.x / 1360.0, viewport_size.y / 780.0), 0.68, 1.3)
+	var top_margin := clampf(viewport_size.y * 0.018, 8.0, 26.0)
+	var bottom_margin := clampf(viewport_size.y * 0.018, 8.0, 26.0)
+	var side_margin := clampf(viewport_size.x * 0.02, 10.0, 26.0)
+	var safe_left_width := clampf(viewport_size.x * 0.33 * ui_scale, 205.0, 460.0)
+	var status_height := clampf(88.0 * ui_scale, 80.0, 108.0)
+	var objective_height := clampf(72.0 * ui_scale, 68.0, 94.0)
+	var hud_blocked := _is_inventory_open() or _is_tactical_map_open()
+
+	var health_bar := top_left_status_panel.get_node_or_null("Margin/VBox/Health")
+	var status_stats := top_left_status_panel.get_node_or_null("Margin/VBox/Stats")
+	if health_bar is ProgressBar:
+		(health_bar as ProgressBar).custom_minimum_size.x = maxf(182.0, safe_left_width - 56.0)
+	if status_stats is Label:
+		(status_stats as Label).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
+	top_left_status_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	top_left_status_panel.offset_left = side_margin
+	top_left_status_panel.offset_top = top_margin
+	top_left_status_panel.offset_right = side_margin + safe_left_width
+	top_left_status_panel.offset_bottom = top_margin + status_height
+
+	objective_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	objective_panel.offset_left = side_margin
+	objective_panel.offset_top = top_left_status_panel.offset_bottom + 6.0
+	objective_panel.offset_right = side_margin + safe_left_width
+	objective_panel.offset_bottom = objective_panel.offset_top + objective_height
+
+	var top_right_panel := get_node_or_null("HUD/TopRight") as VBoxContainer
+	if top_right_panel != null:
+		var status_width := clampf(minf(viewport_size.x * 0.28, 360.0), 180.0, 360.0)
+		top_right_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		top_right_panel.offset_left = -side_margin - status_width
+		top_right_panel.offset_top = top_margin
+		top_right_panel.offset_right = -side_margin
+		top_right_panel.offset_bottom = top_margin + 88.0
+
+	if touch_stick:
+		var stick_size := clampf(minf(viewport_size.x, viewport_size.y) * 0.20, 126.0, 220.0)
+		touch_stick.visible = touch_available
+		if touch_available:
+			touch_stick.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+			touch_stick.offset_left = side_margin
+			touch_stick.offset_top = -stick_size - clampf(6.0 * ui_scale, 6.0, 14.0)
+			touch_stick.offset_right = side_margin + stick_size
+			touch_stick.offset_bottom = -bottom_margin
+			touch_stick.set_size(Vector2(stick_size, stick_size))
+			var ring := touch_stick.get_node_or_null("Ring") as ColorRect
+			var knob := touch_stick.get_node_or_null("Knob") as ColorRect
+			if ring:
+				ring.set_anchors_preset(Control.PRESET_FULL_RECT)
+				ring.anchor_right = 1.0
+				ring.anchor_bottom = 1.0
+			if knob:
+				var knob_size := maxf(42.0, stick_size * 0.22)
+				knob.size = Vector2(knob_size, knob_size)
+				var knob_offset := Vector2(stick_size - knob_size, stick_size - knob_size) * 0.5
+				knob.offset_left = knob_offset.x
+				knob.offset_top = knob_offset.y
+				knob.offset_right = knob_offset.x + knob_size
+				knob.offset_bottom = knob_offset.y + knob_size
+
+	if pickup_panel:
+		pickup_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		var panel_w := clampf(viewport_size.x * 0.52, 300.0, 380.0)
+		var panel_h := clampf(72.0 * ui_scale, 68.0, 86.0)
+		pickup_panel.offset_left = -panel_w * 0.5
+		pickup_panel.offset_right = panel_w * 0.5
+		pickup_panel.offset_bottom = -maxf(bottom_margin + 118.0, viewport_size.y * 0.18)
+		pickup_panel.offset_top = pickup_panel.offset_bottom - panel_h
+		var pickup_button := pickup_panel.get_node_or_null("VBoxContainer/Button") as Button
+		var pickup_progress_bar := pickup_panel.get_node_or_null("VBoxContainer/ProgressBar") as ProgressBar
+		if pickup_button != null:
+			pickup_button.custom_minimum_size = Vector2(maxf(250.0, panel_w - 24.0), 40.0)
+		if pickup_progress_bar != null:
+			pickup_progress_bar.custom_minimum_size = Vector2(maxf(250.0, panel_w - 24.0), 8.0)
+
+	if ammo_prompt_panel:
+		ammo_prompt_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		var ammo_panel_w := clampf(viewport_size.x * 0.52, 300.0, 380.0)
+		var ammo_panel_h := clampf(64.0 * ui_scale, 60.0, 76.0)
+		ammo_prompt_panel.offset_left = -ammo_panel_w * 0.5
+		ammo_prompt_panel.offset_right = ammo_panel_w * 0.5
+		ammo_prompt_panel.offset_bottom = -maxf(bottom_margin + 128.0, viewport_size.y * 0.18)
+		ammo_prompt_panel.offset_top = ammo_prompt_panel.offset_bottom - ammo_panel_h
+
+	if field_interaction_panel:
+		field_interaction_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		var field_panel_w := clampf(viewport_size.x * 0.64, 330.0, 470.0)
+		var field_panel_h := clampf(92.0 * ui_scale, 82.0, 102.0)
+		field_interaction_panel.offset_left = -field_panel_w * 0.5
+		field_interaction_panel.offset_right = field_panel_w * 0.5
+		field_interaction_panel.offset_bottom = -maxf(bottom_margin + 154.0, viewport_size.y * 0.24)
+		field_interaction_panel.offset_top = field_interaction_panel.offset_bottom - field_panel_h
+		var interaction_button := field_interaction_panel.get_node_or_null("VBoxContainer/Button") as Button
+		var interaction_progress := field_interaction_panel.get_node_or_null("VBoxContainer/ProgressBar") as ProgressBar
+		if interaction_button != null:
+			interaction_button.custom_minimum_size = Vector2(maxf(300.0, field_panel_w - 30.0), 48.0)
+		if interaction_progress != null:
+			interaction_progress.custom_minimum_size = Vector2(maxf(300.0, field_panel_w - 30.0), 8.0)
+
+	if fatigue_panel:
+		var fatigue_w := minf(300.0, maxf(230.0, viewport_size.x * 0.22))
+		fatigue_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		fatigue_panel.offset_left = side_margin
+		fatigue_panel.offset_top = objective_panel.offset_bottom + 8.0 if top_left_status_panel.visible else top_margin
+		fatigue_panel.offset_right = side_margin + fatigue_w
+		fatigue_panel.offset_bottom = fatigue_panel.offset_top + 72.0
+
+	if equipment_panel:
+		var eq_width := minf(360.0, maxf(250.0, viewport_size.x * 0.28))
+		var eq_height := clampf(viewport_size.y * 0.21, 108.0, 190.0)
+		equipment_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		equipment_panel.offset_right = -side_margin
+		equipment_panel.offset_bottom = -bottom_margin
+		equipment_panel.offset_left = -side_margin - eq_width
+		equipment_panel.offset_top = -bottom_margin - eq_height
+		equipment_panel.visible = not hud_blocked
+
+	var action_button_size := clampf(minf(viewport_size.y * 0.12, 108.0), 72.0, 102.0)
+	var action_base := -side_margin
+	var action_gap := clampf(11.0 * ui_scale, 8.0, 15.0)
+	var hide_action := hud_blocked
+	if fire_button:
+		fire_button.visible = touch_available and not hide_action
+		fire_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		fire_button.offset_bottom = -bottom_margin
+		fire_button.offset_top = -bottom_margin - action_button_size
+		fire_button.offset_right = action_base
+		fire_button.offset_left = action_base - action_button_size
+		fire_button.custom_minimum_size = Vector2(action_button_size, action_button_size)
+	if melee_button:
+		melee_button.visible = touch_available and not hide_action
+		melee_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		melee_button.offset_bottom = -bottom_margin
+		melee_button.offset_top = -bottom_margin - action_button_size
+		melee_button.offset_right = action_base - action_button_size - action_gap
+		melee_button.offset_left = action_base - action_button_size * 2.0 - action_gap
+		melee_button.custom_minimum_size = Vector2(action_button_size, action_button_size)
+	if dash_button:
+		dash_button.visible = touch_available and not hide_action
+		dash_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		dash_button.offset_bottom = -bottom_margin
+		dash_button.offset_top = -bottom_margin - action_button_size
+		dash_button.offset_right = action_base - action_button_size * 2.0 - action_gap * 2.0
+		dash_button.offset_left = action_base - action_button_size * 3.0 - action_gap * 2.0
+		dash_button.custom_minimum_size = Vector2(action_button_size, action_button_size)
+
+	var utility_size := clampf(action_button_size * 0.84, 60.0, 92.0)
+	var utility_base_bottom := -bottom_margin - action_button_size - clampf(13.0 * ui_scale, 8.0, 16.0)
+	var utility_gap := clampf(10.0 * ui_scale, 6.0, 12.0)
+	if mobile_context_button:
+		mobile_context_button.visible = touch_available and not hud_blocked
+		mobile_context_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		mobile_context_button.offset_right = -side_margin
+		mobile_context_button.offset_left = mobile_context_button.offset_right - utility_size
+		mobile_context_button.offset_bottom = utility_base_bottom
+		mobile_context_button.offset_top = utility_base_bottom - utility_size
+		mobile_context_button.custom_minimum_size = Vector2(utility_size, utility_size)
+	if mobile_reload_button:
+		mobile_reload_button.visible = touch_available and not hud_blocked
+		mobile_reload_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		mobile_reload_button.offset_right = mobile_context_button.offset_left - utility_gap if mobile_context_button else -side_margin - utility_size - utility_gap
+		mobile_reload_button.offset_left = mobile_reload_button.offset_right - utility_size
+		mobile_reload_button.offset_bottom = utility_base_bottom
+		mobile_reload_button.offset_top = utility_base_bottom - utility_size
+		mobile_reload_button.custom_minimum_size = Vector2(utility_size, utility_size)
+	if mobile_flashlight_button:
+		mobile_flashlight_button.visible = touch_available and not hud_blocked
+		mobile_flashlight_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		mobile_flashlight_button.offset_right = (mobile_reload_button.offset_left - utility_gap if mobile_reload_button else -side_margin - utility_size * 2.0) if mobile_reload_button else -side_margin - utility_size * 2.0
+		mobile_flashlight_button.offset_left = mobile_flashlight_button.offset_right - utility_size
+		mobile_flashlight_button.offset_bottom = utility_base_bottom
+		mobile_flashlight_button.offset_top = utility_base_bottom - utility_size
+		mobile_flashlight_button.custom_minimum_size = Vector2(utility_size, utility_size)
+	if mobile_map_button:
+		mobile_map_button.visible = touch_available and not hud_blocked
+		mobile_map_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		mobile_map_button.offset_right = mobile_flashlight_button.offset_left - utility_gap if mobile_flashlight_button else -side_margin - utility_size * 3.0
+		mobile_map_button.offset_left = mobile_map_button.offset_right - utility_size
+		mobile_map_button.offset_bottom = utility_base_bottom
+		mobile_map_button.offset_top = utility_base_bottom - utility_size
+		mobile_map_button.custom_minimum_size = Vector2(utility_size, utility_size)
+	if mobile_medkit_button:
+		mobile_medkit_button.visible = touch_available and not hud_blocked
+		mobile_medkit_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		var med_size_w := clampf(side_margin + 64.0, 58.0, 84.0)
+		mobile_medkit_button.offset_left = side_margin
+		mobile_medkit_button.offset_right = side_margin + med_size_w
+		mobile_medkit_button.offset_bottom = -bottom_margin
+		mobile_medkit_button.offset_top = -bottom_margin - med_size_w
+		mobile_medkit_button.custom_minimum_size = Vector2(med_size_w, med_size_w)
+
+	if ammo_notice:
+		ammo_notice.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		var notice_w := minf(viewport_size.x * 0.62, 500.0)
+		var notice_h := 54.0
+		ammo_notice.offset_left = -notice_w * 0.5
+		ammo_notice.offset_right = notice_w * 0.5
+		ammo_notice.offset_bottom = -maxf(266.0, viewport_size.y - (viewport_size.y * 0.68))
+		ammo_notice.offset_top = ammo_notice.offset_bottom - notice_h
+
+	if game_over_label:
+		var over_w := minf(viewport_size.x * 0.8, 700.0)
+		var over_h := minf(viewport_size.y * 0.25, 220.0)
+		game_over_label.set_anchors_preset(Control.PRESET_CENTER)
+		game_over_label.offset_left = -over_w * 0.5
+		game_over_label.offset_right = over_w * 0.5
+		game_over_label.offset_top = -over_h * 0.5
+		game_over_label.offset_bottom = over_h * 0.5
+
+	if extraction_result_panel:
+		var panel_w := clampf(minf(viewport_size.x * 0.94, 920.0), 520.0, 1000.0)
+		var panel_h := clampf(minf(viewport_size.y * 0.86, 600.0), 360.0, 620.0)
+		extraction_result_panel.set_anchors_preset(Control.PRESET_CENTER)
+		extraction_result_panel.offset_left = -panel_w * 0.5
+		extraction_result_panel.offset_right = panel_w * 0.5
+		extraction_result_panel.offset_top = -panel_h * 0.5
+		extraction_result_panel.offset_bottom = panel_h * 0.5
+
+
 func _build_weapon_hud() -> void:
 	var font := load("res://assets/fonts/Pretendard-Regular.otf") as Font
 	var touch_enabled := DisplayServer.is_touchscreen_available()
@@ -3333,6 +3559,7 @@ func _on_inventory_open_state_changed(is_open: bool) -> void:
 		touch_vector = Vector2.ZERO
 		if mobile_flashlight_button:
 			mobile_flashlight_button.set_pressed_no_signal(false)
+	_apply_hud_layout()
 	_update_combat_overlay_visibility()
 
 

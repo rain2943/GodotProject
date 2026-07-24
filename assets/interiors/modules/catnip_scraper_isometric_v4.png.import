@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://7i5ejlcf0i5k"
-path="res://.godot/imported/shelter_training_wall_front_v2.png-358757f30d1177f13e26c7d5358c42d9.ctex"
+uid="uid://c8j4ym6fm73yn"
+path="res://.godot/imported/catnip_scraper_isometric_v4.png-c00ca4e060c26ba049e336e8ff67c05d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/interiors/modules/shelter_training_wall_front_v2.png"
-dest_files=["res://.godot/imported/shelter_training_wall_front_v2.png-358757f30d1177f13e26c7d5358c42d9.ctex"]
+source_file="res://assets/interiors/modules/catnip_scraper_isometric_v4.png"
+dest_files=["res://.godot/imported/catnip_scraper_isometric_v4.png-c00ca4e060c26ba049e336e8ff67c05d.ctex"]
 
 [params]
 

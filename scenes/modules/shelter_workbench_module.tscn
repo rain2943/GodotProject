@@ -1,7 +1,7 @@
 [gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/shelter_workbench_module.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/interiors/modules/shelter_workbench_isometric_v3.png" id="2_texture"]
+[ext_resource type="Texture2D" path="res://assets/interiors/modules/shelter_workbench_isometric_v4.png" id="2_texture"]
 
 [sub_resource type="BoxShape3D" id="BoxShape_workbench"]
 size = Vector3(5.85, 1.25, 1.55)
@@ -29,7 +29,7 @@ position = Vector3(0, 0.5, 0.62)
 shape = SubResource("BoxShape_workbench")
 
 [node name="WorkbenchSprite" type="Sprite3D" parent="."]
-position = Vector3(0, 1.715, 0.02)
+position = Vector3(0, 1.68, 0.02)
 texture = ExtResource("2_texture")
 pixel_size = 0.00335
 billboard = 1

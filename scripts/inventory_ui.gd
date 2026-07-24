@@ -205,10 +205,10 @@ func _build_open_button() -> void:
 	open_button.z_as_relative = false
 	open_button.z_index = 4001
 	open_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	open_button.offset_left = -118
-	open_button.offset_top = 112
-	open_button.offset_right = -22
-	open_button.offset_bottom = 154
+	open_button.offset_left = -1
+	open_button.offset_top = 0
+	open_button.offset_right = 1
+	open_button.offset_bottom = 0
 	_apply_button_font(open_button, 14)
 	open_button.add_theme_stylebox_override("normal", _panel_style(Color(0.02, 0.027, 0.025, 0.94), Color("#8ab7a0"), 6))
 	open_button.add_theme_stylebox_override("hover", _panel_style(Color(0.06, 0.075, 0.068, 0.98), Color("#d9c579"), 6))
@@ -1380,25 +1380,82 @@ func _equipment_button(slot_name: String, texture: Texture2D, active: bool, call
 func _apply_responsive_layout() -> void:
 	if inventory_panel == null or weapon_panel == null or shell == null:
 		return
+
 	var viewport_size := get_viewport_rect().size
 	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
 		return
-	responsive_compact = viewport_size.x < 1080.0
-	var safe_width := maxf(300.0, viewport_size.x - 32.0)
-	var safe_height := maxf(360.0, viewport_size.y - 32.0)
-	var panel_width := minf(480.0, safe_width if responsive_compact else (safe_width - 12.0) * 0.5)
-	var panel_height := minf(620.0, safe_height)
-	inventory_panel.custom_minimum_size = Vector2(panel_width, panel_height)
-	weapon_panel.custom_minimum_size = Vector2(panel_width, panel_height)
+
+	var ui_scale := clampf(minf(viewport_size.x / 1360.0, viewport_size.y / 780.0), 0.65, 1.25)
+	responsive_compact = viewport_size.x < 1100.0
+
+	if open_button:
+		var open_margin := clampf(viewport_size.x * 0.02, 8.0, 18.0)
+		var open_w := clampf(minf(118.0 * ui_scale, viewport_size.x * 0.11), 78.0, 118.0)
+		var open_h := clampf(minf(46.0 * ui_scale, viewport_size.y * 0.08), 32.0, 48.0)
+		open_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		open_button.offset_left = -open_margin - open_w
+		open_button.offset_top = open_margin + clampf(94.0 * ui_scale, 68.0, 106.0)
+		open_button.offset_right = -open_margin
+		open_button.offset_bottom = open_button.offset_top + open_h
+		open_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER if responsive_compact else HORIZONTAL_ALIGNMENT_LEFT
+		open_button.text = "가방"
+		open_button.add_theme_font_size_override("font_size", 14 if viewport_size.x >= 760 else 11)
+
+	var safe_width := clampf(viewport_size.x - 24.0, 320.0, 1600.0)
+	var safe_height := clampf(viewport_size.y - 26.0, 360.0, 1200.0)
+	var panel_width := clampf(460.0 * ui_scale, 320.0, 540.0)
+	if responsive_compact:
+		panel_width = clampf(minf(500.0, safe_width - 20.0), 300.0, 520.0)
+
+	var panel_height := clampf(safe_height * 0.90, 390.0, 730.0)
+	var panel_margin := clampf(minf(16.0, viewport_size.x * 0.020), 8.0, 16.0)
 	var showing_weapon := weapon_detail_open and has_weapon_state
+	if modal:
+		modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		inventory_panel.custom_minimum_size = Vector2(panel_width, panel_height)
+		weapon_panel.custom_minimum_size = Vector2(panel_width, panel_height)
+		var visible_panel_count := 2 if showing_weapon and not responsive_compact else 1
+		var shell_width := panel_width * visible_panel_count
+		if visible_panel_count > 1:
+			shell_width += 10.0
+		shell.custom_minimum_size = Vector2(minf(shell_width, minf(1040.0, safe_width - panel_margin * 2.0)), panel_height)
+		modal.position = Vector2.ZERO
+
+	shell.alignment = BoxContainer.ALIGNMENT_CENTER
+	shell.add_theme_constant_override("separation", 10 if not responsive_compact else 0)
+
 	inventory_panel.visible = not (responsive_compact and showing_weapon)
 	weapon_panel.visible = showing_weapon
+
+	if inventory_panel.visible and inventory_panel.custom_minimum_size.x < 300.0:
+		inventory_panel.custom_minimum_size.x = 300.0
+	if weapon_panel.visible and weapon_panel.custom_minimum_size.x < 300.0:
+		weapon_panel.custom_minimum_size.x = 300.0
+	if inventory_panel:
+		var content := inventory_panel.get_node_or_null("MarginContainer") as Control
+		if content:
+			content.add_theme_constant_override("margin_left", 12 if not responsive_compact else 10)
+			content.add_theme_constant_override("margin_top", 10 if not responsive_compact else 8)
+			content.add_theme_constant_override("margin_right", 12 if not responsive_compact else 10)
+			content.add_theme_constant_override("margin_bottom", 10 if not responsive_compact else 8)
+
 	if bag_grid:
-		bag_grid.columns = 5 if panel_width >= 450.0 else (4 if panel_width >= 370.0 else 3)
+		var slot_min := 82.0
+		var gap := 6.0
+		bag_grid.columns = 5
+		if panel_width < (slot_min * 5.0 + gap * 4.0):
+			bag_grid.columns = 4
+		if panel_width < (slot_min * 4.0 + gap * 3.0):
+			bag_grid.columns = 3
+		if panel_width < (slot_min * 3.0 + gap * 2.0):
+			bag_grid.columns = 2
 	if equipped_grid:
-		equipped_grid.columns = 2
+		equipped_grid.columns = 2 if panel_width >= 290.0 else 1
+		equipped_grid.custom_minimum_size = Vector2(0, 0)
+		equipped_grid.add_theme_constant_override("h_separation", 6)
+		equipped_grid.add_theme_constant_override("v_separation", 6)
 	if mod_slot_grid:
-		mod_slot_grid.columns = 2 if panel_width >= 430.0 else 1
+		mod_slot_grid.columns = 2 if panel_width >= 420.0 else 1
 		for child in mod_slot_grid.get_children():
 			if child is Control:
 				(child as Control).custom_minimum_size.x = 0.0 if mod_slot_grid.columns == 1 else 216.0
